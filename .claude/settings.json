@@ -3,9 +3,5 @@
     "allow": [
       "Bash(/d/NUS/project/NUS-SOC/web/.venv/Scripts/pip install *)"
     ]
-  },
-  "env": {
-    "CLAUDE_CODE_USE_BEDROCK": "1",
-    "AWS_REGION": "us-east-1"
   }
 }
