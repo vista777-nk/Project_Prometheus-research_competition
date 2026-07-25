@@ -221,4 +221,4 @@ roslaunch lab_server server.launch
 
 ---
 
-*版本: v1.0 · 日期: 2026-07-25 · 与 ICD.md 配套*
+*版本: v4.0 · 日期: 2026-07-25 · 作者: DeepSeek (经 ChatGPT 、 混元3 、 豆包审阅后重构) ; 与 ICD.md 配套*
