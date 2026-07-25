@@ -1,11 +1,12 @@
 # 空地联合具身智能研究平台 — 总索引
 
-> 本文档是项目入口。详细内容已拆分为三个专题文件。
+> 本文档是项目入口。详细内容已拆分为四个专题文件。
 
 ## 📖 必读文件
 
 | 文件 | 内容 | 更新频率 |
 |------|------|:---:|
+| [**RESEARCH_PHILOSOPHY.md**](./RESEARCH_PHILOSOPHY.md) | 设计哲学与科研宪法（五条不可违反的原则 + ADR 规范） | 🟢 极少 |
 | [**PLATFORM.md**](./PLATFORM.md) | 平台架构（分层、包结构、通信、部署） | 🟢 很少 |
 | [**ROADMAP.md**](./ROADMAP.md) | 研究路线（EQA → 竞赛 → World Model → 毕设） | 🔴 经常 |
 | [**ICD.md**](./ICD.md) | 接口控制文档（Observation / Mission / WorldState / Capability） | 🟡 稳定 |
@@ -64,4 +65,4 @@ bash src/e2e_test.sh
 
 ---
 
-*版本: v5.0 · 日期: 2026-07-25 · 作者: DeepSeek (经 ChatGPT 、 混元3 、 豆包 、 执行端subagent集群审阅后重构)*
+*版本: v6.0 · 日期: 2026-07-25 · 作者: DeepSeek (经 ChatGPT 、 混元3 、 豆包 、 执行端subagent集群审阅后重构)*

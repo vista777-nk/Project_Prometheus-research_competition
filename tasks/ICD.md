@@ -338,4 +338,4 @@ air_ground_interfaces/
 
 ---
 
-*版本: v5.0 · 日期: 2026-07-25 · 作者: DeepSeek (经 ChatGPT 、 混元3 、 豆包 、 执行端subagent集群审阅后重构)*
+*版本: v6.0 · 日期: 2026-07-25 · 作者: DeepSeek (经 ChatGPT 、 混元3 、 豆包 、 执行端subagent集群审阅后重构)*
