@@ -104,12 +104,14 @@ check "Odometry (/car/odom)" \
 # ── Phase 4: Preprocessing Pipeline ─────────────────────────
 echo ""
 echo "--- Phase 4: Edge Preprocessing ---"
-check "Drone sensor fusion (/drone/sensor_fusion)" \
-    "timeout 5 rostopic echo /drone/sensor_fusion -n 1 2>/dev/null | grep -q source_id"
-check "Car sensor fusion (/car/sensor_fusion)" \
-    "timeout 5 rostopic echo /car/sensor_fusion -n 1 2>/dev/null | grep -q source_id"
-check "Chassis state (/car/chassis_state)" \
-    "timeout 5 rostopic echo /car/chassis_state -n 1 2>/dev/null | grep -q chassis_type"
+check "Drone observation (/drone/observation)" \
+    "timeout 5 rostopic echo /drone/observation -n 1 2>/dev/null | grep -q robot_id"
+check "Drone state (/drone/state)" \
+    "timeout 5 rostopic echo /drone/state -n 1 2>/dev/null | grep -q robot_id"
+check "Car observation (/car/observation)" \
+    "timeout 5 rostopic echo /car/observation -n 1 2>/dev/null | grep -q robot_id"
+check "Car state (/car/state)" \
+    "timeout 5 rostopic echo /car/state -n 1 2>/dev/null | grep -q robot_id"
 
 # ── Phase 5: Communication Bridge ───────────────────────────
 echo ""
@@ -128,10 +130,12 @@ check "Edge-server bridge running" \
 # ── Phase 6: Server Data Reception ──────────────────────────
 echo ""
 echo "--- Phase 6: Server Reception ---"
-# The edge_server_bridge connects to TCP server.
-# Check that server nodes are running and receiving.
 check "TCP server running" \
     "rosnode list 2>/dev/null | grep -q tcp_server"
+check "World Model running" \
+    "rosnode list 2>/dev/null | grep -q world_model"
+check "WorldState published (/server/world_state)" \
+    "timeout 5 rostopic echo /server/world_state -n 1 2>/dev/null | grep -q agents"
 check "SLAM node running" \
     "rosnode list 2>/dev/null | grep -q slam_node"
 check "EQA engine running" \
@@ -148,8 +152,8 @@ echo "  Sending EQA query..."
 rostopic pub -1 /server/eqa/query std_msgs/String "data: 'Find the nearest obstacle'" 2>/dev/null
 sleep 2
 
-# 7.2 Verify coordinator dispatched command
-check "Coordinator processed EQA query" \
+# 7.2 Verify coordinator dispatched command (via cmd_vel as placeholder)
+check "Coordinator processed EQA query → car cmd_vel" \
     "timeout 3 rostopic echo /car/cmd_vel -n 1 2>/dev/null | grep -q linear"
 
 # ── Phase 8: Chassis Swap Test ──────────────────────────────
@@ -225,8 +229,9 @@ sleep 20  # Wait for everything to boot
 
 # Bare minimum checks
 echo "--- Quick Smoke ---"
-rostopic echo /car/sensor_fusion -n 1 2>/dev/null | grep -q source_id && echo "[OK] Car fusion" || echo "[FAIL] Car fusion"
+rostopic echo /car/observation -n 1 2>/dev/null | grep -q robot_id && echo "[OK] Car observation" || echo "[FAIL] Car observation"
 rostopic echo /drone/heartbeat -n 1 2>/dev/null | grep -q data && echo "[OK] Drone heartbeat" || echo "[FAIL] Drone heartbeat"
+rostopic echo /server/world_state -n 1 2>/dev/null | grep -q agents && echo "[OK] WorldState" || echo "[FAIL] WorldState"
 rosnode list 2>/dev/null | grep -q coordinator && echo "[OK] Coordinator" || echo "[FAIL] Coordinator"
 
 kill $PID 2>/dev/null

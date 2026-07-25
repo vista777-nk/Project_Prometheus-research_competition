@@ -11,36 +11,36 @@
 
 ---
 
-## 7.1 无人机边缘预处理器
+## 7.1 无人机边缘预处理器（→ Observation + RobotState）
 
 **文件：`~/air_ground_sim_ws/src/drone_bringup/scripts/drone_preprocessor.py`**
 
 ```python
 #!/usr/bin/env python3
 """
-Drone Edge Preprocessor.
+Drone Edge Preprocessor — publishes ICD Observation + RobotState.
 
 Runs on drone's Raspberry Pi 5 (simulated).
-Aggregates: depth camera, GPS, IMU → SensorFusion message.
-Publishes to /drone/sensor_fusion for the bridge to forward to server.
+Subscribes: depth camera, GPS local pose, IMU, MAVROS state.
+Publishes: /drone/observation (Observation), /drone/state (RobotState).
 """
 import rospy
-import numpy as np
-from air_ground_interfaces.msg import SensorFusion
-from sensor_msgs.msg import Image, Imu, NavSatFix, PointCloud2
+from air_ground_interfaces.msg import Observation, RobotState
+from sensor_msgs.msg import Image, Imu, NavSatFix
 from geometry_msgs.msg import PoseStamped
-import sensor_msgs.point_cloud2 as pc2
+from mavros_msgs.msg import State
 
 
 class DronePreprocessor:
     def __init__(self):
         rospy.init_node("drone_preprocessor")
 
-        # Latest data cache
-        self.latest_depth = None     # depth image
-        self.latest_rgb = None       # RGB image
+        # Data cache
+        self.latest_depth = None
+        self.latest_rgb = None
         self.latest_imu = None
         self.latest_gps_pose = None
+        self.latest_mavros_state = None
 
         # Subscribers
         rospy.Subscriber("/drone/depth_camera/depth/image_raw", Image,
@@ -50,48 +50,54 @@ class DronePreprocessor:
         rospy.Subscriber("/mavros/imu/data", Imu, self._cb_imu, queue_size=5)
         rospy.Subscriber("/drone/gps/local_pose", PoseStamped,
                          self._cb_gps, queue_size=5)
+        rospy.Subscriber("/mavros/state", State, self._cb_state, queue_size=5)
 
-        # Publisher
-        self.fusion_pub = rospy.Publisher("/drone/sensor_fusion", SensorFusion, queue_size=5)
+        # Publishers (ICD-compliant)
+        self.obs_pub = rospy.Publisher("/drone/observation", Observation, queue_size=5)
+        self.state_pub = rospy.Publisher("/drone/state", RobotState, queue_size=5)
 
         # Periodic publish (10Hz)
-        rospy.Timer(rospy.Duration(0.1), self._publish_fusion)
+        rospy.Timer(rospy.Duration(0.1), self._publish)
 
-        rospy.loginfo("[Drone Preprocessor] Ready (10Hz fusion output)")
+        rospy.loginfo("[Drone Preprocessor] Ready → /drone/observation + /drone/state")
 
     def _cb_depth(self, msg): self.latest_depth = msg
     def _cb_rgb(self, msg):   self.latest_rgb = msg
     def _cb_imu(self, msg):   self.latest_imu = msg
     def _cb_gps(self, msg):   self.latest_gps_pose = msg
+    def _cb_state(self, msg): self.latest_mavros_state = msg
 
-    def _publish_fusion(self, event):
-        msg = SensorFusion()
-        msg.header.stamp = rospy.Time.now()
-        msg.header.frame_id = "map"
-        msg.source_id = "drone"
-
-        # IMU
-        if self.latest_imu:
-            msg.imu = self.latest_imu
-
-        # Images (depth + RGB, compressed if available)
-        images = []
+    def _publish(self, event):
+        # ── Observation ──
+        obs = Observation()
+        obs.header.stamp = rospy.Time.now()
+        obs.header.frame_id = "map"
+        obs.robot_id = "drone"
+        modalities = []
         if self.latest_depth:
-            images.append(self.latest_depth)
+            obs.depth = self.latest_depth
+            modalities.append("depth")
         if self.latest_rgb:
-            images.append(self.latest_rgb)
-        msg.images = images
+            modalities.append("rgb")
+        if self.latest_imu:
+            obs.angular_velocity = self.latest_imu.angular_velocity
+            obs.linear_acceleration = self.latest_imu.linear_acceleration
+            modalities.append("imu")
+        obs.modalities = modalities
+        self.obs_pub.publish(obs)
 
-        # GPS pose
+        # ── RobotState ──
+        state = RobotState()
+        state.header.stamp = rospy.Time.now()
+        state.header.frame_id = "map"
+        state.robot_id = "drone"
         if self.latest_gps_pose:
-            msg.pose = self.latest_gps_pose.pose
-            gps_point = type('', (), {})()
-            gps_point.x = self.latest_gps_pose.pose.position.x
-            gps_point.y = self.latest_gps_pose.pose.position.y
-            gps_point.z = self.latest_gps_pose.pose.position.z
-            msg.gps = [gps_point]
-
-        self.fusion_pub.publish(msg)
+            state.pose = self.latest_gps_pose.pose
+        state.chassis_type = "none"
+        state.battery_voltage = 11.1  # simulated
+        state.is_armed = (self.latest_mavros_state and self.latest_mavros_state.armed)
+        state.is_connected = True
+        self.state_pub.publish(state)
 
 
 if __name__ == "__main__":
@@ -103,25 +109,24 @@ if __name__ == "__main__":
 chmod +x ~/air_ground_sim_ws/src/drone_bringup/scripts/drone_preprocessor.py
 ```
 
-## 7.2 车机边缘预处理器
+## 7.2 车机边缘预处理器（→ Observation + RobotState）
 
 **文件：`~/air_ground_sim_ws/src/car_bringup/scripts/car_preprocessor.py`**
 
 ```python
 #!/usr/bin/env python3
 """
-Car Edge Preprocessor.
+Car Edge Preprocessor — publishes ICD Observation + RobotState.
 
 Runs on car's Raspberry Pi 5 (simulated).
-Aggregates: OpenMV camera, 2D LiDAR, 4× ultrasonic, IMU, odometry
-→ SensorFusion message. Publishes to /car/sensor_fusion.
+Subscribes: OpenMV camera, 2D LiDAR, 4× ultrasonic, IMU, odometry.
+Publishes: /car/observation (Observation), /car/state (RobotState).
 """
 import rospy
-import numpy as np
-from air_ground_interfaces.msg import SensorFusion, ChassisState
-from sensor_msgs.msg import Image, LaserScan, Imu, JointState
+import subprocess
+from air_ground_interfaces.msg import Observation, RobotState
+from sensor_msgs.msg import Image, LaserScan, Imu
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Pose
 
 
 class CarPreprocessor:
@@ -129,39 +134,35 @@ class CarPreprocessor:
         rospy.init_node("car_preprocessor")
 
         # Data cache
-        self.latest = {
-            "image": None,    # OpenMV RGB
-            "scan": None,     # 2D LiDAR
-            "imu": None,
-            "odom": None,
-            "ultrasonic": {},
-        }
+        self.latest_image = None
+        self.latest_scan = None
+        self.latest_imu = None
+        self.latest_odom = None
+        self.latest_ultrasonic = {}
         self.chassis_type = "unknown"
 
         # Subscribers
-        rospy.Subscriber("/car/openmv/image_raw", Image, self._cb("image"), queue_size=3)
-        rospy.Subscriber("/car/scan", LaserScan, self._cb("scan"), queue_size=5)
-        rospy.Subscriber("/car/imu/data", Imu, self._cb("imu"), queue_size=5)
-        rospy.Subscriber("/car/odom", Odometry, self._cb("odom"), queue_size=5)
+        rospy.Subscriber("/car/openmv/image_raw", Image, self._cb_image, queue_size=3)
+        rospy.Subscriber("/car/scan", LaserScan, self._cb_scan, queue_size=5)
+        rospy.Subscriber("/car/imu/data", Imu, self._cb_imu, queue_size=5)
+        rospy.Subscriber("/car/odom", Odometry, self._cb_odom, queue_size=5)
         for d in ["front", "rear", "left", "right"]:
             rospy.Subscriber(f"/car/ultrasonic/{d}", LaserScan,
                              self._cb_ultrasonic(d), queue_size=5)
 
-        # Publisher
-        self.fusion_pub = rospy.Publisher("/car/sensor_fusion", SensorFusion, queue_size=5)
-        self.chassis_pub = rospy.Publisher("/car/chassis_state", ChassisState, queue_size=5)
+        # Publishers (ICD-compliant)
+        self.obs_pub = rospy.Publisher("/car/observation", Observation, queue_size=5)
+        self.state_pub = rospy.Publisher("/car/state", RobotState, queue_size=5)
 
         # Detect chassis type
         self._detect_chassis()
 
         # Periodic publish (10Hz)
-        rospy.Timer(rospy.Duration(0.1), self._publish_fusion)
+        rospy.Timer(rospy.Duration(0.1), self._publish)
 
-        rospy.loginfo(f"[Car Preprocessor] Ready (chassis={self.chassis_type})")
+        rospy.loginfo(f"[Car Preprocessor] Ready (chassis={self.chassis_type}) → /car/observation + /car/state")
 
     def _detect_chassis(self):
-        """Detect current chassis by checking which wheel joints exist."""
-        import subprocess
         try:
             topics = subprocess.check_output(["rostopic", "list"], text=True)
             if "/car/front_left_wheel_controller/command" in topics:
@@ -171,53 +172,56 @@ class CarPreprocessor:
         except:
             self.chassis_type = "unknown"
 
-    def _cb(self, key):
-        return lambda msg: self.latest.__setitem__(key, msg)
+    def _cb_image(self, msg): self.latest_image = msg
+    def _cb_scan(self, msg):  self.latest_scan = msg
+    def _cb_imu(self, msg):   self.latest_imu = msg
+    def _cb_odom(self, msg):  self.latest_odom = msg
 
     def _cb_ultrasonic(self, direction):
-        return lambda msg: self.latest["ultrasonic"].__setitem__(direction, msg)
+        return lambda msg: self.latest_ultrasonic.__setitem__(direction, msg)
 
-    def _publish_fusion(self, event):
-        msg = SensorFusion()
-        msg.header.stamp = rospy.Time.now()
-        msg.header.frame_id = "base_link"
-        msg.source_id = "car"
+    def _publish(self, event):
+        # ── Observation ──
+        obs = Observation()
+        obs.header.stamp = rospy.Time.now()
+        obs.header.frame_id = "base_link"
+        obs.robot_id = "car"
+        modalities = []
 
-        # Images (OpenMV)
-        if self.latest["image"]:
-            msg.images = [self.latest["image"]]
+        if self.latest_scan:
+            obs.lidar_ranges = list(self.latest_scan.ranges[::4])  # downsample 4:1
+            obs.lidar_angle_min = self.latest_scan.angle_min
+            obs.lidar_angle_increment = self.latest_scan.angle_increment * 4
+            modalities.append("lidar_2d")
 
-        # LiDAR scan
-        if self.latest["scan"]:
-            msg.laser = self.latest["scan"]
+        if self.latest_imu:
+            obs.angular_velocity = self.latest_imu.angular_velocity
+            obs.linear_acceleration = self.latest_imu.linear_acceleration
+            modalities.append("imu")
 
-        # IMU
-        if self.latest["imu"]:
-            msg.imu = self.latest["imu"]
-
-        # Odometry → pose
-        if self.latest["odom"]:
-            msg.pose = self.latest["odom"].pose.pose
-
-        # Ultrasonic as float array [front, rear, left, right]
         ultrasonic_distances = [0.0, 0.0, 0.0, 0.0]
         for i, d in enumerate(["front", "rear", "left", "right"]):
-            if d in self.latest["ultrasonic"] and self.latest["ultrasonic"][d]:
-                s = self.latest["ultrasonic"][d]
+            if d in self.latest_ultrasonic and self.latest_ultrasonic[d]:
+                s = self.latest_ultrasonic[d]
                 ultrasonic_distances[i] = s.ranges[0] if s.ranges else 4.0
-        msg.ultrasonic = ultrasonic_distances
+        obs.ultrasonic_ranges = ultrasonic_distances
+        modalities.append("ultrasonic")
 
-        self.fusion_pub.publish(msg)
+        obs.modalities = modalities
+        self.obs_pub.publish(obs)
 
-        # Also publish chassis state
-        cs = ChassisState()
-        cs.header.stamp = rospy.Time.now()
-        cs.chassis_type = self.chassis_type
-        cs.is_connected = True
-        cs.battery_voltage = 11.1  # simulated 3S
-        cs.motor_currents = [0.0, 0.0, 0.0, 0.0]
-        cs.encoder_ticks = [0.0, 0.0, 0.0, 0.0]
-        self.chassis_pub.publish(cs)
+        # ── RobotState ──
+        state = RobotState()
+        state.header.stamp = rospy.Time.now()
+        state.header.frame_id = "base_link"
+        state.robot_id = "car"
+        if self.latest_odom:
+            state.pose = self.latest_odom.pose.pose
+            state.velocity = self.latest_odom.twist.twist
+        state.chassis_type = self.chassis_type
+        state.battery_voltage = 11.1  # simulated
+        state.is_connected = True
+        self.state_pub.publish(state)
 
 
 if __name__ == "__main__":
@@ -229,18 +233,18 @@ if __name__ == "__main__":
 chmod +x ~/air_ground_sim_ws/src/car_bringup/scripts/car_preprocessor.py
 ```
 
-## 7.3 实验室服务器 — TCP 接收器
+## 7.3 实验室服务器 — TCP 接收器（→ Observation / RobotState）
 
 **文件：`~/air_ground_sim_ws/src/lab_server/scripts/tcp_receiver.py`**
 
 ```python
 #!/usr/bin/env python3
 """
-Lab Server TCP Receiver.
+Lab Server TCP Receiver — JSON → ICD Observation + RobotState.
 
 Listens for TCP connections from edge nodes (drone/car).
-Receives JSON-serialized SensorFusion data → publishes to ROS topics.
-Accepts client commands → sends ServerCommand JSON back.
+Receives JSON-serialized data → reconstructs Observation + RobotState
+→ publishes to /server/<robot>/observation and /server/<robot>/state.
 """
 import rospy
 import socket
@@ -249,10 +253,8 @@ import struct
 import threading
 import yaml
 import os
-from air_ground_interfaces.msg import SensorFusion, ServerCommand
-from geometry_msgs.msg import Pose
-from sensor_msgs.msg import Imu, LaserScan
-import numpy as np
+from air_ground_interfaces.msg import Observation, RobotState
+from geometry_msgs.msg import Vector3, Pose, Twist
 
 
 class TCPServer:
@@ -267,9 +269,11 @@ class TCPServer:
         self.host = "0.0.0.0"
         self.port = cfg["server_port"]
 
-        # Publishers (deserialize edge data → ROS)
-        self.pub_drone_fusion = rospy.Publisher("/server/drone/fusion", SensorFusion, queue_size=10)
-        self.pub_car_fusion = rospy.Publisher("/server/car/fusion", SensorFusion, queue_size=10)
+        # Publishers: ICD-compliant topics → WorldModel subscribes here
+        self.pub_drone_obs = rospy.Publisher("/server/drone/observation", Observation, queue_size=10)
+        self.pub_drone_state = rospy.Publisher("/server/drone/state", RobotState, queue_size=10)
+        self.pub_car_obs = rospy.Publisher("/server/car/observation", Observation, queue_size=10)
+        self.pub_car_state = rospy.Publisher("/server/car/state", RobotState, queue_size=10)
 
         # Server socket
         self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -278,13 +282,13 @@ class TCPServer:
         self.server_sock.listen(2)
         self.server_sock.settimeout(1.0)
 
-        self.clients = {}  # addr → socket
+        self.clients = {}
         self.running = True
 
         self.accept_thread = threading.Thread(target=self._accept_loop, daemon=True)
         self.accept_thread.start()
 
-        rospy.loginfo(f"[TCP Server] Listening on {self.host}:{self.port}")
+        rospy.loginfo(f"[TCP Server] Listening on {self.host}:{self.port} → /server/<robot>/observation + /server/<robot>/state")
 
     def _accept_loop(self):
         while self.running and not rospy.is_shutdown():
@@ -292,20 +296,17 @@ class TCPServer:
                 client_sock, addr = self.server_sock.accept()
                 rospy.loginfo(f"[TCP Server] Client connected: {addr}")
                 self.clients[addr] = client_sock
-                t = threading.Thread(target=self._client_handler, args=(client_sock, addr),
-                                     daemon=True)
+                t = threading.Thread(target=self._client_handler, args=(client_sock, addr), daemon=True)
                 t.start()
             except socket.timeout:
                 continue
             except Exception as e:
                 rospy.logwarn(f"[TCP Server] Accept error: {e}")
 
-    def _client_handler(self, sock: socket.socket, addr):
-        """Handle one edge client."""
+    def _client_handler(self, sock, addr):
         sock.settimeout(1.0)
         while self.running and not rospy.is_shutdown():
             try:
-                # Read 4-byte length header
                 header = sock.recv(4)
                 if len(header) < 4:
                     break
@@ -317,7 +318,7 @@ class TCPServer:
                         break
                     data += chunk
                 if data:
-                    self._process_edge_data(json.loads(data), sock, addr)
+                    self._process_edge_data(json.loads(data))
             except socket.timeout:
                 continue
             except Exception as e:
@@ -326,52 +327,68 @@ class TCPServer:
         rospy.loginfo(f"[TCP Server] Client disconnected: {addr}")
         self.clients.pop(addr, None)
 
-    def _process_edge_data(self, data: dict, sock: socket.socket, addr):
-        """Convert JSON edge data to SensorFusion ROS message."""
+    def _process_edge_data(self, data: dict):
+        """Convert JSON edge data to ICD Observation + RobotState."""
         source = data.get("source", "unknown")
-        msg = SensorFusion()
-        msg.header.stamp = rospy.Time.from_sec(data.get("timestamp", 0))
-        msg.header.frame_id = "map"
-        msg.source_id = source
+        now = rospy.Time.from_sec(data.get("timestamp", rospy.Time.now().to_sec()))
 
-        # Pose
-        if "pose" in data:
-            p = data["pose"]
-            msg.pose = Pose()
-            msg.pose.position.x = p["x"]; msg.pose.position.y = p["y"]; msg.pose.position.z = p["z"]
-            msg.pose.orientation.w = p["qw"]; msg.pose.orientation.x = p["qx"]
-            msg.pose.orientation.y = p["qy"]; msg.pose.orientation.z = p["qz"]
+        # ── Observation ──
+        obs = Observation()
+        obs.header.stamp = now
+        obs.header.frame_id = "map"
+        obs.robot_id = source
+        modalities = []
 
-        # IMU
         if "imu" in data:
             i = data["imu"]
-            msg.imu = Imu()
-            msg.imu.angular_velocity.x = i["wx"]
-            msg.imu.angular_velocity.y = i["wy"]
-            msg.imu.angular_velocity.z = i["wz"]
-            msg.imu.linear_acceleration.x = i["ax"]
-            msg.imu.linear_acceleration.y = i["ay"]
-            msg.imu.linear_acceleration.z = i["az"]
+            obs.angular_velocity = Vector3(i.get("wx", 0), i.get("wy", 0), i.get("wz", 0))
+            obs.linear_acceleration = Vector3(i.get("ax", 0), i.get("ay", 0), i.get("az", 0))
+            modalities.append("imu")
 
-        # Scan
         if "scan" in data:
             s = data["scan"]
-            msg.laser = LaserScan()
-            msg.laser.angle_min = s["angle_min"]
-            msg.laser.angle_increment = s["angle_increment"]
-            msg.laser.ranges = [float(r) if r > 0 else float('inf') for r in s["ranges"]]
+            obs.lidar_ranges = [float(r) if r > 0 else float('inf') for r in s.get("ranges", [])]
+            obs.lidar_angle_min = s.get("angle_min", 0)
+            obs.lidar_angle_increment = s.get("angle_increment", 0)
+            modalities.append("lidar_2d")
 
-        # Ultrasonic
         if "ultrasonic" in data:
             u = data["ultrasonic"]
-            msg.ultrasonic = [u.get("front", 0), u.get("rear", 0),
-                              u.get("left", 0), u.get("right", 0)]
+            obs.ultrasonic_ranges = [u.get("front", 0), u.get("rear", 0),
+                                      u.get("left", 0), u.get("right", 0)]
+            modalities.append("ultrasonic")
 
-        # Publish to source-specific topic
+        obs.modalities = modalities
+
+        # ── RobotState ──
+        state = RobotState()
+        state.header.stamp = now
+        state.header.frame_id = "map"
+        state.robot_id = source
+
+        if "pose" in data:
+            p = data["pose"]
+            state.pose = Pose()
+            state.pose.position.x = p["x"]; state.pose.position.y = p["y"]; state.pose.position.z = p.get("z", 0)
+            state.pose.orientation.w = p.get("qw", 1); state.pose.orientation.x = p.get("qx", 0)
+            state.pose.orientation.y = p.get("qy", 0); state.pose.orientation.z = p.get("qz", 0)
+
+        if "twist" in data:
+            t = data["twist"]
+            state.velocity = Twist()
+            state.velocity.linear.x = t.get("vx", 0)
+            state.velocity.angular.z = t.get("vz", 0)
+
+        state.battery_voltage = data.get("battery_voltage", 11.1)
+        state.is_connected = True
+
+        # Publish to robot-specific topics
         if source == "drone":
-            self.pub_drone_fusion.publish(msg)
+            self.pub_drone_obs.publish(obs)
+            self.pub_drone_state.publish(state)
         elif source == "car":
-            self.pub_car_fusion.publish(msg)
+            self.pub_car_obs.publish(obs)
+            self.pub_car_state.publish(state)
 
     def shutdown(self):
         self.running = False
@@ -500,9 +517,13 @@ class WorldModel:
     def _handle_query(self, req):
         """ASK: 同步查询 WorldState."""
         resp = QueryWorldStateResponse()
-        # Placeholder: just return latest world state
-        resp.found = True
-        # In real impl: filter by query_type (e.g., "nearest_landmark")
+        with self._lock:
+            resp.result = WorldState()
+            resp.result.header.stamp = rospy.Time.now()
+            resp.result.header.frame_id = "map"
+            resp.result.agents = list(self._latest_states.values())
+            resp.result.landmarks = list(self._landmarks)
+            resp.found = True
         return resp
 
 
@@ -553,8 +574,7 @@ class SLAMPlaceholder:
         # 订阅: RobotState (里程计)
         rospy.Subscriber("/server/car/state", RobotState, self.car_state_cb, queue_size=5)
 
-        # 发布: 更新后的 World State (map + pose)
-        self.map_pub = rospy.Publisher("/server/world_state/map", OccupancyGrid, queue_size=1, latch=True)
+        # 发布: 更新后的 World State (map + pose)        self.world_update_pub = rospy.Publisher("/server/world_state/update", WorldState, queue_size=5)        self.map_pub = rospy.Publisher("/server/world_state/map", OccupancyGrid, queue_size=1, latch=True)
         self.car_pose_pub = rospy.Publisher("/server/world_state/car_pose",
                                             PoseWithCovarianceStamped, queue_size=5)
 
@@ -568,13 +588,21 @@ class SLAMPlaceholder:
 
     def car_cb(self, msg: Observation):
         self.car_msg_count += 1
-        # TODO: Feed LiDAR + odom → SLAM backend
-        # TODO: TELL WorldModel: /server/world_state 的 map 和 agent pose
+        # TODO: Feed LiDAR + odom → SLAM backend (gmapping / slam_toolbox / Cartographer)
+        # Placeholder: TELL WorldModel with a minimal update each frame
+        update = WorldState()
+        update.header.stamp = rospy.Time.now()
+        update.header.frame_id = "map"
+        self.world_update_pub.publish(update)
 
     def drone_cb(self, msg: Observation):
         self.drone_msg_count += 1
         # TODO: Fuse aerial depth for global map refinement
-        # TODO: TELL WorldModel: 无人机俯瞰视角的全局地图更新
+        # Placeholder: TELL WorldModel with drone observation
+        update = WorldState()
+        update.header.stamp = rospy.Time.now()
+        update.header.frame_id = "map"
+        self.world_update_pub.publish(update)
 
     def car_state_cb(self, msg: RobotState):
         pass  # TODO: Use for odometry prior in SLAM
@@ -835,13 +863,19 @@ roslaunch lab_server server.launch &
 S_PID=$!
 sleep 3
 
-# 1. Check drone preprocessor
-echo "--- Checking /drone/sensor_fusion ---"
-rostopic echo /drone/sensor_fusion -n 1 2>/dev/null | grep -q "source_id" && echo "[PASS] Drone fusion" || echo "[WARN]"
+# 1. Check drone preprocessor (now publishes Observation + RobotState)
+echo "--- Checking /drone/observation ---"
+rostopic echo /drone/observation -n 1 2>/dev/null | grep -q "robot_id" && echo "[PASS] Drone observation" || echo "[WARN]"
+
+echo "--- Checking /drone/state ---"
+rostopic echo /drone/state -n 1 2>/dev/null | grep -q "robot_id" && echo "[PASS] Drone state" || echo "[WARN]"
 
 # 2. Check car preprocessor
-echo "--- Checking /car/sensor_fusion ---"
-rostopic echo /car/sensor_fusion -n 1 2>/dev/null | grep -q "source_id" && echo "[PASS] Car fusion" || echo "[WARN]"
+echo "--- Checking /car/observation ---"
+rostopic echo /car/observation -n 1 2>/dev/null | grep -q "robot_id" && echo "[PASS] Car observation" || echo "[WARN]"
+
+echo "--- Checking /car/state ---"
+rostopic echo /car/state -n 1 2>/dev/null | grep -q "robot_id" && echo "[PASS] Car state" || echo "[WARN]"
 
 # 3. Check server nodes running
 echo "--- Checking server nodes ---"

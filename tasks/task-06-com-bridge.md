@@ -130,16 +130,22 @@ class DroneCarBridge:
 
         # ROS subscribers (car commands → drone MAVLink)
         self.sub_cmd = rospy.Subscriber("/car/to_drone/cmd", String, self.cmd_callback)
-        self.sub_drone_setpoint = rospy.Publisher("/mavros/setpoint_position/local",
-                                                   PoseStamped, queue_size=5)
+
+        # For drone pose, reuse existing gps_converter output instead of raw MAVLink parse
+        rospy.Subscriber("/drone/gps/local_pose", PoseStamped, self._drone_pose_cb, queue_size=5)
+        self._drone_pose = None
 
         # RX thread
         self.running = True
         self.rx_thread = threading.Thread(target=self._rx_loop, daemon=True)
         self.rx_thread.start()
 
-        rospy.loginfo(f"[DroneCarBridge] Listening on UDP:{self.car_port}, "
-                      f"forwarding to drone at {self.drone_addr}")
+        rospy.loginfo(f"[DroneCarBridge] Listening on UDP:{self.car_port}")
+
+    def _drone_pose_cb(self, msg: PoseStamped):
+        """Receive properly converted ENU pose from gps_converter (not raw MAVLink lat/lon)."""
+        self._drone_pose = msg
+        self.pub_drone_pose.publish(msg)
 
     def _rx_loop(self):
         """Receive MAVLink packets from drone."""
@@ -173,17 +179,11 @@ class DroneCarBridge:
                     custom_mode = struct.unpack("<I", payload[2:6])[0]
                     self.pub_drone_state.publish(String(f"mode:{custom_mode}"))
 
-            elif msg_id == self.MAVLINK_MSG_ID_GLOBAL_POSITION_INT and len(payload) >= 28:
-                # lat, lon, alt, relative_alt, vx, vy, vz, hdg
-                lat, lon, alt, rel_alt, vx, vy, vz, hdg = struct.unpack("<iiiiHHHH", payload[:20])
-                pose = PoseStamped()
-                pose.header.stamp = rospy.Time.now()
-                pose.header.frame_id = "map"
-                # Simple conversion: 1e-7 deg scaling
-                pose.pose.position.x = lat * 1e-7
-                pose.pose.position.y = lon * 1e-7
-                pose.pose.position.z = alt * 1e-3
-                self.pub_drone_pose.publish(pose)
+            elif msg_id == self.MAVLINK_MSG_ID_GLOBAL_POSITION_INT:
+                # NOTE: Raw MAVLink lat/lon (degrees*1e7) is not a valid ENU pose.
+                # Use /drone/gps/local_pose (from gps_converter.py, HOME-offset ENU) instead.
+                # This handler only logs that the drone is alive.
+                rospy.logdebug("[DroneCarBridge] GPS raw received (ignored; using /drone/gps/local_pose)")
 
     def cmd_callback(self, msg: String):
         """Forward car commands to drone via MAVLink."""
@@ -282,7 +282,7 @@ class EdgeServerBridge:
         rospy.Subscriber("/car/odom", Odometry, self._cb("odom"), queue_size=5)
         rospy.Subscriber("/car/imu/data", Imu, self._cb("imu"), queue_size=5)
         rospy.Subscriber("/car/scan", LaserScan, self._cb("scan"), queue_size=5)
-        rospy.Subscriber("/car/openmv/image_raw/compressed", None, self._cb("image"), queue_size=2)
+        rospy.Subscriber("/car/openmv/image_raw", Image, self._cb("image"), queue_size=2)
         for d in ["front", "rear", "left", "right"]:
             rospy.Subscriber(f"/car/ultrasonic/{d}", LaserScan,
                              self._cb_ultrasonic(d), queue_size=5)

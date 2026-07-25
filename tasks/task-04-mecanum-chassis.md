@@ -214,16 +214,14 @@ car:
   <arg name="y" default="0.0"/>
   <arg name="z" default="0.1"/>
 
-  <!-- Gazebo（可复用已运行的 Gazebo 实例，通过 group ns 隔离） -->
-  <group ns="car">
-    <include file="$(find gazebo_ros)/launch/empty_world.launch">
-      <arg name="world_name" value="$(arg world)"/>
-      <arg name="gui" value="$(arg gui)"/>
-      <arg name="headless" value="$(arg headless)"/>
-      <arg name="paused" value="false"/>
-      <arg name="use_sim_time" value="true"/>
-    </include>
-  </group>
+  <!-- Gazebo（共享全局 gzserver，不包裹 group ns） -->
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(arg world)"/>
+    <arg name="gui" value="$(arg gui)"/>
+    <arg name="headless" value="$(arg headless)"/>
+    <arg name="paused" value="false"/>
+    <arg name="use_sim_time" value="true"/>
+  </include>
 
   <!-- 加载麦轮 URDF -->
   <param name="robot_description"
@@ -362,15 +360,32 @@ class ChassisSwapper:
         return resp
 
     def _reload_controllers(self, chassis_type):
-        """Reload ros_control configuration for the new chassis."""
+        """Load controller params and spawn all controllers for the new chassis."""
+        import subprocess
         config_file = os.path.join(
             os.path.expanduser("~"),
             "air_ground_sim_ws/src/car_bringup/config",
             f"{chassis_type}_chassis_control.yaml"
         )
+        # Load params into /car namespace
         subprocess.call(["rosparam", "load", config_file, "/car"])
         rospy.loginfo(f"Loaded controller config: {config_file}")
-        # Note: in production, use controller_manager/switch_controller service
+
+        # Spawn controllers via controller_manager
+        if chassis_type == "mecanum":
+            controllers = ["joint_state_controller", "front_left_wheel_controller",
+                          "front_right_wheel_controller", "rear_left_wheel_controller",
+                          "rear_right_wheel_controller"]
+        else:
+            controllers = ["joint_state_controller", "diff_drive_controller"]
+
+        for ctrl in controllers:
+            subprocess.call(["rosservice", "call", f"/car/controller_manager/load_controller",
+                           f"name: '{ctrl}'"], stderr=subprocess.DEVNULL)
+            subprocess.call(["rosservice", "call", f"/car/controller_manager/switch_controller",
+                           f"start_controllers: ['{ctrl}']", "stop_controllers: []",
+                           "strictness: 2"], stderr=subprocess.DEVNULL)
+        rospy.loginfo(f"Spawned {len(controllers)} controllers for {chassis_type} chassis")
 
 
 if __name__ == "__main__":

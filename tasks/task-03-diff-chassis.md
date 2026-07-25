@@ -168,7 +168,7 @@
     <parent link="base_link"/>
     <child link="right_wheel"/>
     <origin xyz="0 -0.09 0.033" rpy="1.5708 0 0"/>
-    <axis xyz="0 0 -1"/>
+    <axis xyz="0 0 1"/>
   </joint>
 
   <!-- ============ 前万向轮（caster） ============ -->

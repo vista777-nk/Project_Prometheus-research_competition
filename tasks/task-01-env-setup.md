@@ -96,14 +96,24 @@ project(air_ground_interfaces)
 
 find_package(catkin REQUIRED COMPONENTS
   message_generation
+  actionlib_msgs
   std_msgs
   geometry_msgs
   sensor_msgs
   nav_msgs
 )
 
+# ── ICD 稳定接口 ──
 add_message_files(
   FILES
+  Observation.msg
+  RobotState.msg
+  WorldState.msg
+  SemanticLandmark.msg
+  Mission.msg
+  MissionStatus.msg
+  Capability.msg
+  # 旧别名（过渡兼容，下个版本删除）
   SensorFusion.msg
   ServerCommand.msg
   ChassisState.msg
@@ -112,10 +122,17 @@ add_message_files(
 add_service_files(
   FILES
   SwapChassis.srv
+  QueryWorldState.srv
+)
+
+add_action_files(
+  FILES
+  Navigate.action
 )
 
 generate_messages(
   DEPENDENCIES
+  actionlib_msgs
   std_msgs
   geometry_msgs
   sensor_msgs
@@ -125,12 +142,161 @@ generate_messages(
 catkin_package(
   CATKIN_DEPENDS
   message_runtime
+  actionlib_msgs
   std_msgs
   geometry_msgs
   sensor_msgs
   nav_msgs
 )
 ```
+
+---
+
+### ICD 新消息定义（task-07 依赖）
+
+**文件：`air_ground_interfaces/msg/Observation.msg`**
+```
+# Edge → Server: multimodal observation snapshot (ICD §二.1)
+Header header
+string robot_id            # "drone" | "car"
+string[] modalities        # present modalities: ["rgb","depth","lidar_2d","ultrasonic","imu"]
+
+# Images (optional — only when modality listed)
+sensor_msgs/CompressedImage rgb
+sensor_msgs/Image depth
+
+# LiDAR (optional, downsampled)
+float32[] lidar_ranges
+float32 lidar_angle_min
+float32 lidar_angle_increment
+
+# Ultrasonic (optional)
+float32[] ultrasonic_ranges
+
+# IMU (optional)
+geometry_msgs/Vector3 angular_velocity
+geometry_msgs/Vector3 linear_acceleration
+```
+
+**文件：`air_ground_interfaces/msg/RobotState.msg`**
+```
+# Edge → Server: robot self-state snapshot (ICD §二.2)
+Header header
+string robot_id
+
+geometry_msgs/Pose pose
+geometry_msgs/Twist velocity
+
+string mode                 # "idle" | "navigating" | "exploring" | "emergency"
+string chassis_type         # "diff" | "mecanum" | "none"
+
+float32 battery_voltage
+bool is_armed
+bool is_connected
+```
+
+**文件：`air_ground_interfaces/msg/WorldState.msg`**
+```
+# Server internal: global world state maintained by WorldModel (ICD §二.3)
+Header header
+
+RobotState[] agents
+nav_msgs/OccupancyGrid map_2d
+geometry_msgs/Pose[] dynamic_obstacles
+SemanticLandmark[] landmarks
+
+time last_update_perception
+time last_update_planning
+```
+
+**文件：`air_ground_interfaces/msg/SemanticLandmark.msg`**
+```
+# Semantic landmark for EQA queries (ICD §二.4)
+string landmark_id
+string semantic_label        # "red_ball", "door", "table", "charging_station"
+geometry_msgs/Pose pose
+float32 confidence           # 0.0 ~ 1.0
+time last_observed
+```
+
+**文件：`air_ground_interfaces/msg/Mission.msg`**
+```
+# Server → Edge: high-level task (WHAT, not HOW) (ICD §三.1)
+Header header
+string mission_id            # UUID
+string robot_id
+
+string type                  # "navigate" | "search" | "inspect" | "return_home" | "follow"
+geometry_msgs/Pose target_pose
+string target_landmark_id
+float32 search_radius
+int32 priority               # 0=lowest, 255=highest
+
+string query_text            # EQA query (if applicable)
+string query_id
+```
+
+**文件：`air_ground_interfaces/msg/MissionStatus.msg`**
+```
+# Edge → Server: mission execution status (ICD §三.2)
+Header header
+string mission_id
+string status                # "accepted" | "executing" | "completed" | "failed" | "aborted"
+string failure_reason
+float32 progress             # 0.0 ~ 1.0
+```
+
+**文件：`air_ground_interfaces/msg/Capability.msg`**
+```
+# Edge → Server: robot capability self-description (ICD §三.3)
+Header header
+string robot_id
+
+string locomotion_type       # "aerial" | "ground_wheeled"
+float32 max_speed
+float32 max_endurance
+
+string[] sensor_modalities
+float32 sensor_range
+
+string compute_tier          # "edge_low" | "edge_mid" | "edge_high" | "server"
+float32 max_payload_kg
+bool has_gripper
+```
+
+---
+
+### 新增服务定义
+
+**文件：`air_ground_interfaces/srv/QueryWorldState.srv`**
+```
+# ASK WorldModel: synchronous query (ICD §四.2)
+string query_type            # "nearest_landmark" | "path_to" | "visibility_from"
+string[] args
+---
+WorldState result
+bool found
+```
+
+---
+
+### 新增 Action 定义
+
+**文件：`air_ground_interfaces/action/Navigate.action`**
+```
+# Long-running navigation task (ICD §六)
+geometry_msgs/Pose target_pose
+float32 target_speed
+---
+float32 progress             # 0.0 ~ 1.0
+geometry_msgs/Pose current_pose
+---
+# (empty — cancellation not needed for placeholder)
+```
+
+---
+
+### 旧消息（别名兼容，下个版本删除）
 
 **文件：`air_ground_interfaces/msg/SensorFusion.msg`**
 ```
