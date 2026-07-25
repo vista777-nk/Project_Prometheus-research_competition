@@ -1,4 +1,4 @@
-# Task-06: 空地通信桥（MAVLink + TCP�?
+# Task-06: 空地通信桥（MAVLink + TCP）
 
 ## 前置条件
 
@@ -7,23 +7,23 @@
 
 ## 目标
 
-建立三条通信链路�?
+建立三条通信链路：
 
 ```
-无人�?──MAVLink(UDP)──�?车机 ──TCP──�?服务�?
-   �?                      �?             �?
-   └────MAVLink(UDP)───────�?             �?
-                                          �?
-                                       车机 ◀──TCP── 服务�?
+无人机 ──MAVLink(UDP)──▶ 车机 ──TCP──▶ 服务器
+   ▲                       │              │
+   └────MAVLink(UDP)───────┘              │
+                                          ▼
+                                       车机 ◀──TCP── 服务器
 ```
 
-在仿真中所有通信�?`localhost`，通过不同端口区分�?
+在仿真中所有通信走 `localhost`，通过不同端口区分。
 
 ---
 
 ## 6.1 网络配置
 
-**文件：`~/air_ground_sim_ws/src/air_ground_com_bridge/config/network.yaml`**
+**文件：`~/air_ground_sim_ws/src/com_bridge/config/network.yaml`**
 
 ```yaml
 # Communication bridge network configuration
@@ -49,17 +49,17 @@ throttle:
   enable: true
   max_bandwidth_bytes_per_sec: 24000   # 3DR SiK 典型带宽 ~24KB/s
   image_quality: 50                    # JPEG compression 1-100
-  max_image_freq: 2                    # Hz (图像最大发送频�?
+  max_image_freq: 2                    # Hz (图像最大发送频率)
 ```
 
-## 6.2 无人机↔�?MAVLink �?
+## 6.2 无人机↔车 MAVLink 桥
 
-**文件：`~/air_ground_sim_ws/src/air_ground_com_bridge/scripts/drone_car_bridge.py`**
+**文件：`~/air_ground_sim_ws/src/com_bridge/scripts/drone_car_bridge.py`**
 
 ```python
 #!/usr/bin/env python3
 """
-MAVLink Bridge: Drone �?Car over simulated 3DR radio (UDP).
+MAVLink Bridge: Drone ↔ Car over simulated 3DR radio (UDP).
 
 This node runs on the car edge and:
 1. Listens for MAVLink heartbeat/telemetry from drone via UDP
@@ -103,7 +103,7 @@ class DroneCarBridge:
 
         # Load config
         config_path = rospy.get_param("~config_path",
-            os.path.expanduser("~/air_ground_sim_ws/src/air_ground_com_bridge/config/network.yaml"))
+            os.path.expanduser("~/air_ground_sim_ws/src/com_bridge/config/network.yaml"))
         with open(config_path) as f:
             self.config = yaml.safe_load(f)
 
@@ -123,12 +123,12 @@ class DroneCarBridge:
         self.bytes_sent_window = 0.0
         self.window_start = time.time()
 
-        # ROS publishers (drone telemetry �?ROS)
+        # ROS publishers (drone telemetry → ROS)
         self.pub_drone_pose = rospy.Publisher("/drone/pose", PoseStamped, queue_size=5)
         self.pub_drone_heartbeat = rospy.Publisher("/drone/heartbeat", Bool, queue_size=5)
         self.pub_drone_state = rospy.Publisher("/drone/state", String, queue_size=5)
 
-        # ROS subscribers (car commands �?drone MAVLink)
+        # ROS subscribers (car commands → drone MAVLink)
         self.sub_cmd = rospy.Subscriber("/car/to_drone/cmd", String, self.cmd_callback)
 
         # For drone pose, reuse existing gps_converter output instead of raw MAVLink parse
@@ -223,12 +223,12 @@ if __name__ == "__main__":
 ```
 
 ```bash
-chmod +x ~/air_ground_sim_ws/src/air_ground_com_bridge/scripts/drone_car_bridge.py
+chmod +x ~/air_ground_sim_ws/src/com_bridge/scripts/drone_car_bridge.py
 ```
 
-## 6.3 边缘↔服务器 TCP �?
+## 6.3 边缘↔服务器 TCP 桥
 
-**文件：`~/air_ground_sim_ws/src/air_ground_com_bridge/scripts/edge_server_bridge.py`**
+**文件：`~/air_ground_sim_ws/src/com_bridge/scripts/edge_server_bridge.py`**
 
 ```python
 #!/usr/bin/env python3
@@ -236,8 +236,8 @@ chmod +x ~/air_ground_sim_ws/src/air_ground_com_bridge/scripts/drone_car_bridge.
 Edge-Server TCP Bridge.
 
 Runs on car edge node. Responsibilities:
-1. Collect sensor+state data �?serialize as JSON �?send to server via TCP
-2. Receive ServerCommand from server �?publish to local ROS topics
+1. Collect sensor+state data → serialize as JSON → send to server via TCP
+2. Receive ServerCommand from server → publish to local ROS topics
 """
 import rospy
 import socket
@@ -264,7 +264,7 @@ class EdgeServerBridge:
 
         # Load config
         config_path = rospy.get_param("~config_path",
-            os.path.expanduser("~/air_ground_sim_ws/src/air_ground_com_bridge/config/network.yaml"))
+            os.path.expanduser("~/air_ground_sim_ws/src/com_bridge/config/network.yaml"))
         with open(config_path) as f:
             cfg = yaml.safe_load(f)["edge_server_tcp"]
             self.network_cfg = yaml.safe_load(f)
@@ -360,7 +360,7 @@ class EdgeServerBridge:
         """Serialize latest sensor data to lightweight JSON dict."""
         out = {"timestamp": rospy.Time.now().to_sec(), "source": "car"}
 
-        # Odometry �?pose
+        # Odometry → pose
         if self.latest["odom"]:
             o = self.latest["odom"]
             out["pose"] = {
@@ -373,7 +373,7 @@ class EdgeServerBridge:
                 "vx": o.twist.twist.linear.x, "vz": o.twist.twist.angular.z
             }
 
-        # IMU �?orientation + angular velocity
+        # IMU → orientation + angular velocity
         if self.latest["imu"]:
             i = self.latest["imu"]
             out["imu"] = {
@@ -383,24 +383,24 @@ class EdgeServerBridge:
                 "az": i.linear_acceleration.z
             }
 
-        # LiDAR �?compressed range array (pick every 4th sample for bandwidth)
+        # LiDAR → compressed range array (pick every 4th sample for bandwidth)
         if self.latest["scan"]:
             s = self.latest["scan"]
             ranges = s.ranges[::4]  # downsample 4:1
-            # JSON 不支�?inf: �?-1.0 替代
+            # JSON 不支持 inf: 用 -1.0 替代
             out["scan"] = {
                 "angle_min": s.angle_min, "angle_increment": s.angle_increment * 4,
                 "ranges": [r if r > 0 and np.isfinite(r) else -1.0 for r in ranges]
             }
 
-        # OpenMV image �?base64 JPEG (throttled to bandwidth limits)
+        # OpenMV image → base64 JPEG (throttled to bandwidth limits)
         if self.latest["image"]:
             now = time.time()
             max_freq = self.throttle_cfg.get("max_image_freq", 2)
             if now - self.last_image_time >= 1.0 / max_freq:
                 self.last_image_time = now
                 try:
-                    # Convert ROS Image �?OpenCV �?JPEG �?base64
+                    # Convert ROS Image → OpenCV → JPEG → base64
                     cv_img = self.cv_bridge.imgmsg_to_cv2(self.latest["image"], "bgr8")
                     quality = self.throttle_cfg.get("image_quality", 50)
                     _, jpeg = cv2.imencode(".jpg", cv_img,
@@ -409,7 +409,7 @@ class EdgeServerBridge:
                 except Exception as e:
                     rospy.logwarn(f"[EdgeServerBridge] Image encode failed: {e}")
 
-        # Ultrasonic �?distances
+        # Ultrasonic → distances
         out["ultrasonic"] = {}
         for d, msg in self.latest["ultrasonic"].items():
             if msg and msg.ranges:
@@ -476,51 +476,51 @@ if __name__ == "__main__":
 ```
 
 ```bash
-chmod +x ~/air_ground_sim_ws/src/air_ground_com_bridge/scripts/edge_server_bridge.py
+chmod +x ~/air_ground_sim_ws/src/com_bridge/scripts/edge_server_bridge.py
 ```
 
 ## 6.4 Launch 文件
 
-**文件：`~/air_ground_sim_ws/src/air_ground_com_bridge/launch/air_ground_com_bridge.launch`**
+**文件：`~/air_ground_sim_ws/src/com_bridge/launch/com_bridge.launch`**
 
 ```xml
 <launch>
   <!-- MAVLink Drone↔Car Bridge -->
-  <node name="drone_car_bridge" pkg="air_ground_com_bridge" type="drone_car_bridge.py"
+  <node name="drone_car_bridge" pkg="com_bridge" type="drone_car_bridge.py"
         output="screen">
     <param name="config_path"
-           value="$(find air_ground_com_bridge)/config/network.yaml"/>
+           value="$(find com_bridge)/config/network.yaml"/>
   </node>
 
   <!-- Edge↔Server TCP Bridge -->
-  <node name="edge_server_bridge" pkg="air_ground_com_bridge" type="edge_server_bridge.py"
+  <node name="edge_server_bridge" pkg="com_bridge" type="edge_server_bridge.py"
         output="screen">
     <param name="config_path"
-           value="$(find air_ground_com_bridge)/config/network.yaml"/>
+           value="$(find com_bridge)/config/network.yaml"/>
   </node>
 </launch>
 ```
 
 ## 6.5 验证脚本
 
-**文件：`~/air_ground_sim_ws/src/air_ground_com_bridge/scripts/test_bridge.sh`**
+**文件：`~/air_ground_sim_ws/src/com_bridge/scripts/test_bridge.sh`**
 
 ```bash
 #!/bin/bash
 echo "=== Task-06 Communication Bridge Verification ==="
 
 # Start drone in background
-roslaunch air_ground_drone_bringup drone_sitl.launch headless:=true gui:=false &
+roslaunch drone_bringup drone_sitl.launch headless:=true gui:=false &
 DRONE_PID=$!
 sleep 12
 
 # Start car in background
-roslaunch air_ground_car_bringup car_diff.launch headless:=true gui:=false &
+roslaunch car_bringup car_diff.launch headless:=true gui:=false &
 CAR_PID=$!
 sleep 8
 
 # Start bridge
-roslaunch air_ground_com_bridge air_ground_com_bridge.launch &
+roslaunch com_bridge com_bridge.launch &
 BRIDGE_PID=$!
 sleep 5
 
@@ -542,11 +542,11 @@ wait 2>/dev/null
 echo "=== Done ==="
 ```
 
-## 6.6 更新 `air_ground_com_bridge/CMakeLists.txt`
+## 6.6 更新 `com_bridge/CMakeLists.txt`
 
 ```cmake
 cmake_minimum_required(VERSION 3.0.2)
-project(air_ground_com_bridge)
+project(com_bridge)
 find_package(catkin REQUIRED COMPONENTS
   roscpp rospy std_msgs geometry_msgs sensor_msgs nav_msgs
   air_ground_interfaces mavros
@@ -558,6 +558,6 @@ install(DIRECTORY launch config scripts
 
 ## 交付产物
 
-1. `drone_car_bridge.py` 可接收无人机 MAVLink 心跳并发�?`/drone/heartbeat`
-2. `edge_server_bridge.py` 可正常启动（连接服务器可能显�?retrying，这是预期的——服务器�?Task-07 实现�?
-3. `test_bridge.sh` 前两�?PASS，第三项至少确认 edge_server_bridge 节点在运�?
+1. `drone_car_bridge.py` 可接收无人机 MAVLink 心跳并发布 `/drone/heartbeat`
+2. `edge_server_bridge.py` 可正常启动（连接服务器可能显示 retrying，这是预期的——服务器在 Task-07 实现）
+3. `test_bridge.sh` 前两项 PASS，第三项至少确认 edge_server_bridge 节点在运行
