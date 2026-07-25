@@ -2,17 +2,17 @@
 
 ## 前置条件
 
-- Task-02~07 所有子模块可独立运�?
+- Task-02~07 所有子模块可独立运行
 
 ## 目标
 
-提供一键启动整个空地联合仿真系统的 Launch 文件和便�?Makefile�?
+提供一键启动整个空地联合仿真系统的 Launch 文件和便捷 Makefile）
 
 ---
 
-### 8.1 创建 air_ground_bringup 包（承载所有顶�?launch 文件�?
+### 8.1 创建 air_ground_bringup 包（承载所有顶）?launch 文件）?
 
-> P0-05 修复：launch 文件必须放在 catkin package 内，不能�?`src/` 根目录�?
+> P0-05 修复：launch 文件必须放在 catkin package 内，不能在 `src/` 根目录。
 
 ```bash
 cd ~/air_ground_sim_ws/src
@@ -20,7 +20,7 @@ catkin_create_pkg air_ground_bringup rospy std_msgs
 mkdir -p air_ground_bringup/launch
 ```
 
-**package.xml** 需额外依赖�?
+**package.xml** 需额外依赖）?
 ```xml
 <exec_depend>air_ground_drone_bringup</exec_depend>
 <exec_depend>air_ground_car_bringup</exec_depend>
@@ -28,7 +28,7 @@ mkdir -p air_ground_bringup/launch
 <exec_depend>air_ground_lab_server</exec_depend>
 ```
 
-### 8.2 总入�?Launch 文件
+### 8.2 总入口 Launch 文件
 
 **文件：`~/air_ground_sim_ws/src/air_ground_bringup/launch/air_ground_sim.launch`**
 
@@ -73,7 +73,7 @@ mkdir -p air_ground_bringup/launch
 </launch>
 ```
 
-### 8.3 按需分场�?Launch
+### 8.3 按需分场景 Launch
 
 **文件：`~/air_ground_sim_ws/src/air_ground_bringup/launch/drone_only.launch`**
 
@@ -275,7 +275,7 @@ chmod +x ~/air_ground_sim_ws/setup_all.sh
 
 ## 8.6 更新 `package.xml` 补全依赖
 
-确认所有包�?`package.xml` 都已包含所需 `<exec_depend>`�?
+确认所有包的 `package.xml` 都已包含所需 `<exec_depend>`。
 
 **`air_ground_com_bridge/package.xml`** 应包含：
 ```xml
@@ -292,7 +292,7 @@ chmod +x ~/air_ground_sim_ws/setup_all.sh
 
 ## 交付产物
 
-1. `make launch-full` 一键启动整个空地联合仿真系�?
+1. `make launch-full` 一键启动整个空地联合仿真系统
 2. `make test-all` 运行全部模块测试
-3. `make help` 列出所有可用命�?
-4. `setup_all.sh` 可在全新 Ubuntu 20.04 上一键完成环境搭�?
+3. `make help` 列出所有可用命令
+4. `setup_all.sh` 可在全新 Ubuntu 20.04 上一键完成环境搭建

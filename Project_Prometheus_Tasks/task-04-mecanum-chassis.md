@@ -1,14 +1,14 @@
-# Task-04: 麦轮底盘仿真 + 模块化底盘切�?
+# Task-04: 麦轮底盘仿真 + 模块化底盘切换
 
 ## 前置条件
 
-- Task-03 完成（差速底�?URDF 可用�?
+- Task-03 完成（差速底盘 URDF 可用）
 - Gazebo 11 可正常生成机器人模型
 
 ## 目标
 
-1. 创建四轮麦克纳姆底盘 URDF + 自定义运动学控制�?
-2. 实现 `swap_chassis` 服务，运行时可切换差�?麦轮底盘
+1. 创建四轮麦克纳姆底盘 URDF + 自定义运动学控制器
+2. 实现 `swap_chassis` 服务，运行时可切换差）?麦轮底盘
 
 ---
 
@@ -28,7 +28,7 @@
   <xacro:property name="wheel_x" value="0.10"/>
   <xacro:property name="wheel_y" value="0.09"/>
 
-  <!-- 麦轮通用�?-->
+  <!-- 麦轮通用宏-->
   <xacro:macro name="mecanum_wheel" params="name prefix x y yaw">
     <link name="${name}_wheel">
       <inertial>
@@ -72,7 +72,7 @@
 </robot>
 ```
 
-> ⚠️ **关键技术点**：麦轮的仿真难点在于辊子的横向滑动。Gazebo 无法原生模拟辊子，故�?`<surface><friction>` 中将 `mu2`（横向摩擦系数）设得极低，以此近似麦轮特性�?
+> ⚠️ **关键技术点**：麦轮的仿真难点在于辊子的横向滑动。Gazebo 无法原生模拟辊子，故在 `<surface><friction>` 中将 `mu2`（横向摩擦系数）设得极低，以，以此近似麦轮特性。
 
 ## 4.2 麦轮运动学控制器
 
@@ -103,13 +103,13 @@ class MecanumController:
     def __init__(self):
         rospy.init_node("mecanum_controller")
 
-        # 底盘几何参数（从 YAML 加载�?
+        # 底盘几何参数（从 YAML 加载）
         self.Lx = rospy.get_param("~wheel_base", 0.20) / 2.0    # m
         self.Ly = rospy.get_param("~track_width", 0.18) / 2.0   # m
         self.R = rospy.get_param("~wheel_radius", 0.033)         # m
         self.max_rpm = rospy.get_param("~max_rpm", 300.0)
 
-        # 四个轮子速度命令发布�?
+        # 四个轮子速度命令发布器
         wheel_names = ["front_left", "front_right", "rear_left", "rear_right"]
         self.pubs = {}
         for name in wheel_names:
@@ -137,7 +137,7 @@ class MecanumController:
         w_rl = (vx + vy - omega * (self.Lx + self.Ly)) / self.R
         w_rr = (vx - vy + omega * (self.Lx + self.Ly)) / self.R
 
-        # 限幅 (逐个 clamp，不能用 for 循环——循环变�?w 是局部副�?
+        # 限幅 (逐个 clamp，不能用 for 循环——循环变量 w 是局部副作用)
         max_w = self.max_rpm * 2 * math.pi / 60.0
         w_fl = max(-max_w, min(max_w, w_fl))
         w_fr = max(-max_w, min(max_w, w_fr))
@@ -202,7 +202,7 @@ car:
     joint: rear_right_wheel_joint
     pid: {p: 1.0, i: 0.1, d: 0.01}
 
-  # 云台舵机位置控制�?(pan/tilt)
+  # 云台舵机位置控制）?(pan/tilt)
   gimbal_pan_controller:
     type: position_controllers/JointPositionController
     joint: gimbal_pan_joint
@@ -226,7 +226,7 @@ car:
   <arg name="y" default="0.0"/>
   <arg name="z" default="0.1"/>
 
-  <!-- Gazebo（共享全局 gzserver，不包裹 group ns�?-->
+  <!-- Gazebo（共享全局 gzserver，不包裹 group ns）-->
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(arg world)"/>
     <arg name="gui" value="$(arg gui)"/>
@@ -244,14 +244,14 @@ car:
         args="-param robot_description -urdf -model mecanum_car
               -x $(arg x) -y $(arg y) -z $(arg z)" output="screen"/>
 
-  <!-- 加载控制�?-->
+  <!-- 加载控制器-->
   <rosparam file="$(find air_ground_car_bringup)/config/mecanum_chassis_control.yaml" command="load"/>
   <node name="controller_spawner" pkg="controller_manager" type="spawner"
         args="joint_state_controller front_left_wheel_controller front_right_wheel_controller
               rear_left_wheel_controller rear_right_wheel_controller
               gimbal_pan_controller gimbal_tilt_controller" output="screen"/>
 
-  <!-- 麦轮运动学转换节�?-->
+  <!-- 麦轮运动学转换节点-->
   <node name="mecanum_controller" pkg="air_ground_car_bringup" type="mecanum_controller.py" output="screen">
     <param name="wheel_base" value="0.20"/>
     <param name="track_width" value="0.18"/>
@@ -472,6 +472,6 @@ echo "=== Done ==="
 ## 交付产物
 
 1. `roslaunch air_ground_car_bringup car_mecanum.launch` 启动麦轮小车
-2. 发�?`vy != 0` �?`/car/cmd_vel`，小车能横向平移
-3. `rosservice call /car/swap_chassis "diff"` �?`"mecanum"` 可动态切换底�?
+2. 发）?`vy != 0` ）?`/car/cmd_vel`，小车能横向平移
+3. `rosservice call /car/swap_chassis "diff"` ）?`"mecanum"` 可动态切换底）?
 4. `test_mecanum.sh` 全部 PASS（或 [WARN] 可接受）
