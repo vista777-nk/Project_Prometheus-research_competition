@@ -1,0 +1,64 @@
+# .gitattributes — 防止 Git for Windows 编码过滤器破坏中文文本
+#
+# 本项目所有文本文件统一使用 UTF-8（无 BOM）编码。
+# Git for Windows 的 astextplain 过滤器会将 UTF-16LE 文件错误转换，
+# 导致中文损坏。以下规则强制 Git 将所有文本文件视为 UTF-8。
+
+# ── Markdown 文档（核心项目文档）──
+*.md            text working-tree-encoding=UTF-8
+
+# ── ROS 相关文本文件 ──
+*.launch        text working-tree-encoding=UTF-8
+*.urdf          text working-tree-encoding=UTF-8
+*.urdf.xacro    text working-tree-encoding=UTF-8
+*.xacro         text working-tree-encoding=UTF-8
+*.sdf           text working-tree-encoding=UTF-8
+*.sdf.jinja     text working-tree-encoding=UTF-8
+*.world         text working-tree-encoding=UTF-8
+*.msg           text working-tree-encoding=UTF-8
+*.srv           text working-tree-encoding=UTF-8
+*.action        text working-tree-encoding=UTF-8
+*.yaml          text working-tree-encoding=UTF-8
+*.yml           text working-tree-encoding=UTF-8
+*.xml           text working-tree-encoding=UTF-8
+*.cmake         text working-tree-encoding=UTF-8
+CMakeLists.txt  text working-tree-encoding=UTF-8
+*.cfg           text working-tree-encoding=UTF-8
+
+# ── 脚本文件 ──
+*.sh            text working-tree-encoding=UTF-8 eol=lf
+*.bash          text working-tree-encoding=UTF-8 eol=lf
+*.py            text working-tree-encoding=UTF-8
+*.cpp           text working-tree-encoding=UTF-8
+*.h             text working-tree-encoding=UTF-8
+*.hpp           text working-tree-encoding=UTF-8
+
+# ── 配置文件 ──
+.gitignore      text working-tree-encoding=UTF-8
+.gitattributes  text working-tree-encoding=UTF-8
+Makefile        text working-tree-encoding=UTF-8
+*.json          text working-tree-encoding=UTF-8
+*.toml          text working-tree-encoding=UTF-8
+*.ini           text working-tree-encoding=UTF-8
+*.conf          text working-tree-encoding=UTF-8
+
+# ── 二进制文件（不做编码转换）──
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.bmp           binary
+*.ico           binary
+*.pdf           binary
+*.stl           binary
+*.dae           binary
+*.obj           binary
+*.so            binary
+*.dll           binary
+*.a             binary
+*.o             binary
+*.bin           binary
+*.bag           binary
+*.db            binary
+*.sqlite        binary
+*.log           binary
