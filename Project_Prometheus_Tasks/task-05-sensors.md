@@ -2,21 +2,21 @@
 
 ## 前置条件
 
-- Task-03、04 完成（车机 URDF 存在）
+- Task-03�?4 完成（车�?URDF 存在�?
 - Gazebo 11 可用
 
 ## 目标
 
-将以下传感器集成到车机 URDF 中：
-1. **OpenMV 模拟**：RGB 相机 + 2-DOF 云台（模拟真实 OpenMV H7 Plus + 舵机云台）
-2. **2D 激光雷达：模拟入门级 RPLIDAR A1（360°，12m 量程）
-3. **4× 超声波传感器**：前后左右各一，模拟 HC-SR04
+将以下传感器集成到车�?URDF 中：
+1. **OpenMV 模拟** �?RGB 相机 + 2-DOF 云台（模拟真�?OpenMV H7 Plus + 舵机云台�?
+2. **2D 激光雷�?* �?模拟入门�?RPLIDAR A1�?60°�?2m 量程�?
+3. **4× 超声波传感器** �?前后左右各一，模�?HC-SR04
 
 ---
 
 ## 5.1 传感器支架 + 所有传感器的 URDF 宏
 
-**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/urdf/car_sensors.urdf.xacro`**
+**文件：`~/air_ground_sim_ws/src/car_bringup/urdf/car_sensors.urdf.xacro`**
 
 ```xml
 <?xml version="1.0"?>
@@ -77,7 +77,7 @@
   </xacro:macro>
 
   <!-- ============================================================ -->
-  <!-- Gazebo 相机插件（OpenMV 模拟）                            -->
+  <!-- Gazebo 相机插件（OpenMV 模拟�?                            -->
   <!-- ============================================================ -->
   <xacro:macro name="openmv_gazebo_plugin">
     <gazebo reference="openmv_camera_link">
@@ -114,7 +114,7 @@
   </xacro:macro>
 
   <!-- ============================================================ -->
-  <!-- 2D 激光雷达（RPLIDAR A1 模拟）                             -->
+  <!-- 2D 激光雷达（RPLIDAR A1 模拟�?                             -->
   <!-- ============================================================ -->
   <xacro:macro name="lidar_2d" params="parent_link">
     <link name="lidar_link">
@@ -144,7 +144,7 @@
         <ray>
           <scan>
             <horizontal>
-              <samples>360</samples>               <!-- 1° 分辨率）-->
+              <samples>360</samples>               <!-- 1° 分辨�?-->
               <resolution>1</resolution>
               <min_angle>-3.14159</min_angle>
               <max_angle>3.14159</max_angle>
@@ -152,7 +152,7 @@
           </scan>
           <range>
             <min>0.15</min>                        <!-- RPLIDAR A1 盲区 -->
-            <max>12.0</max>                        <!-- RPLIDAR A1 最大量程）-->
+            <max>12.0</max>                        <!-- RPLIDAR A1 最大量�?-->
             <resolution>0.01</resolution>
           </range>
           <noise>
@@ -193,7 +193,7 @@
         <ray>
           <scan>
             <horizontal>
-              <samples>1</samples>                 <!-- 单波束）-->
+              <samples>1</samples>                 <!-- 单波�?-->
               <resolution>1</resolution>
               <min_angle>0</min_angle>
               <max_angle>0</max_angle>
@@ -214,7 +214,7 @@
   </xacro:macro>
 
   <!-- ============================================================ -->
-  <!-- IMU (ICM42688 模拟)：直接使用 Gazebo IMU 插件             -->
+  <!-- IMU (ICM42688 模拟) �?直接使用 Gazebo IMU 插件             -->
   <!-- ============================================================ -->
   <xacro:macro name="imu_sensor" params="parent_link">
     <gazebo reference="${parent_link}">
@@ -222,7 +222,7 @@
         <update_rate>100</update_rate>
         <imu>
           <angular_velocity>
-            <x><noise type="gaussian" mean="0" stddev="0.0005"/></x> <!-- 低温度漂移）-->
+            <x><noise type="gaussian" mean="0" stddev="0.0005"/></x> <!-- 低温�?-->
             <y><noise type="gaussian" mean="0" stddev="0.0005"/></y>
             <z><noise type="gaussian" mean="0" stddev="0.0005"/></z>
           </angular_velocity>
@@ -245,23 +245,23 @@
 
 ## 5.2 更新 `diff_chassis.urdf.xacro` 引入传感器
 
-**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/urdf/diff_chassis.urdf.xacro`**
+**文件：`~/air_ground_sim_ws/src/car_bringup/urdf/diff_chassis.urdf.xacro`**
 
 在文件末尾 `</robot>` 之前追加：
 
 ```xml
-  <!-- ====== 引入传感器 ========= -->
+  <!-- ====== 引入传感�?====== -->
   <xacro:include filename="$(find air_ground_car_bringup)/urdf/car_sensors.urdf.xacro"/>
 
   <!-- OpenMV 云台相机 -->
   <xacro:openmv_gimbal parent_link="sensor_mount"/>
   <xacro:openmv_gazebo_plugin/>
 
-  <!-- 2D 激光雷达-->
+  <!-- 2D 激光雷�?-->
   <xacro:lidar_2d parent_link="sensor_mount"/>
   <xacro:lidar_gazebo_plugin/>
 
-  <!-- 4× 超声波-->
+  <!-- 4× 超声�?-->
   <xacro:ultrasonic_sensor name="front"  parent_link="base_link" x="0.125" y="0"     z="0.04" yaw="0"/>
   <xacro:ultrasonic_sensor name="rear"   parent_link="base_link" x="-0.125" y="0"     z="0.04" yaw="3.14159"/>
   <xacro:ultrasonic_sensor name="left"   parent_link="base_link" x="0"     y="0.10"  z="0.04" yaw="1.5708"/>
@@ -276,11 +276,11 @@
   <xacro:imu_sensor parent_link="base_link"/>
 ```
 
-**同样更新 `mecanum_chassis.urdf.xacro`，在 `</robot>` 前加入相同内容。
+**同样更新 `mecanum_chassis.urdf.xacro`**，在 `</robot>` 前加入相同内容�?
 
 ## 5.3 传感器参数配置 YAML
 
-**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/config/car_sensors.yaml`**
+**文件：`~/air_ground_sim_ws/src/car_bringup/config/car_sensors.yaml`**
 
 ```yaml
 # Car sensor configuration (mirrors real hardware specs)
@@ -322,11 +322,11 @@ imu:
   accel_noise: 0.001  # m/s²/√Hz
 ```
 
-## 5.4 传感器话题一。
+## 5.4 传感器话题一�?
 
 所有话题在 `/car` 命名空间下：
 
-| 传感器| 话题 | 消息类型 |
+| 传感�?| 话题 | 消息类型 |
 |--------|------|---------|
 | OpenMV RGB | `/car/openmv/image_raw` | `sensor_msgs/Image` |
 | 2D LiDAR | `/car/scan` | `sensor_msgs/LaserScan` |
@@ -335,11 +335,11 @@ imu:
 | 超声波左 | `/car/ultrasonic/left` | `sensor_msgs/LaserScan` |
 | 超声波右 | `/car/ultrasonic/right` | `sensor_msgs/LaserScan` |
 | IMU | `/car/imu/data` | `sensor_msgs/Imu` |
-| 里程计| `/car/odom` | `nav_msgs/Odometry` |
+| 里程�?| `/car/odom` | `nav_msgs/Odometry` |
 
 ## 5.5 云台控制脚本（模拟舵机）
 
-**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/scripts/gimbal_controller.py`**
+**文件：`~/air_ground_sim_ws/src/car_bringup/scripts/gimbal_controller.py`**
 
 ```python
 #!/usr/bin/env python3
@@ -356,7 +356,7 @@ class GimbalController:
     def __init__(self):
         rospy.init_node("gimbal_controller")
         # ros_control position_controllers/JointPositionController 期望的话题名:
-        #   /car/gimbal_pan_controller/command  (→ /car/gimbal_pan_joint/command)
+        #   /car/gimbal_pan_controller/command  (�?/car/gimbal_pan_joint/command)
         self.pan_pub = rospy.Publisher("/car/gimbal_pan_controller/command", Float64, queue_size=10)
         self.tilt_pub = rospy.Publisher("/car/gimbal_tilt_controller/command", Float64, queue_size=10)
 
@@ -382,18 +382,18 @@ if __name__ == "__main__":
 ```
 
 ```bash
-chmod +x ~/air_ground_sim_ws/src/air_ground_car_bringup/scripts/gimbal_controller.py
+chmod +x ~/air_ground_sim_ws/src/car_bringup/scripts/gimbal_controller.py
 ```
 
 ## 5.6 验证脚本
 
-**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/scripts/test_sensors.sh`**
+**文件：`~/air_ground_sim_ws/src/car_bringup/scripts/test_sensors.sh`**
 
 ```bash
 #!/bin/bash
 echo "=== Task-05 Car Sensors Verification ==="
 
-roslaunch air_ground_car_bringup car_diff.launch headless:=true gui:=false &
+roslaunch car_bringup car_diff.launch headless:=true gui:=false &
 CAR_PID=$!
 sleep 10
 
@@ -429,7 +429,7 @@ echo "=== Done ==="
 
 ## 交付产物
 
-1. `car_sensors.urdf.xacro` 可被 diff 和mecanum 底盘正确引用
-2. 启动后所有传感器话题有数。
-3. 云台可响应`/car/gimbal/*/command` 话题
+1. `car_sensors.urdf.xacro` 可被 diff �?mecanum 底盘正确引用
+2. 启动后所有传感器话题有数�?
+3. 云台可响�?`/car/gimbal/*/command` 话题
 4. `test_sensors.sh` 至少所有传感器都能检测到话题存在

@@ -6,13 +6,13 @@
 
 ## 目标
 
-提供一键启动整个空地联合仿真系统的 Launch 文件和便捷 Makefile）
+提供一键启动整个空地联合仿真系统的 Launch 文件和便�?Makefile�?
 
 ---
 
-### 8.1 创建 air_ground_bringup 包（承载所有顶层launch 文件。
+### 8.1 创建 air_ground_bringup 包（承载所有顶�?launch 文件�?
 
-> P0-05 修复：launch 文件必须放在 catkin package 内，不能在 `src/` 根目录。
+> P0-05 修复：launch 文件必须放在 catkin package 内，不能�?`src/` 根目录�?
 
 ```bash
 cd ~/air_ground_sim_ws/src
@@ -20,12 +20,12 @@ catkin_create_pkg air_ground_bringup rospy std_msgs
 mkdir -p air_ground_bringup/launch
 ```
 
-**package.xml** 需额外依赖。
+**package.xml** 需额外依赖�?
 ```xml
-<exec_depend>air_ground_drone_bringup</exec_depend>
-<exec_depend>air_ground_car_bringup</exec_depend>
-<exec_depend>air_ground_com_bridge</exec_depend>
-<exec_depend>air_ground_lab_server</exec_depend>
+<exec_depend>drone_bringup</exec_depend>
+<exec_depend>car_bringup</exec_depend>
+<exec_depend>com_bridge</exec_depend>
+<exec_depend>lab_server</exec_depend>
 ```
 
 ### 8.2 总入口 Launch 文件
@@ -47,28 +47,28 @@ mkdir -p air_ground_bringup/launch
   <arg name="car_y" default="0.0"/>
 
   <!-- ====== Phase 1: Drone ====== -->
-  <include file="$(find air_ground_drone_bringup)/launch/drone_sitl.launch">
+  <include file="$(find drone_bringup)/launch/drone_sitl.launch">
     <arg name="gui" value="$(arg gui)"/>
     <arg name="headless" value="$(arg headless)"/>
   </include>
 
-  <include file="$(find air_ground_drone_bringup)/launch/drone_edge.launch"/>
+  <include file="$(find drone_bringup)/launch/drone_edge.launch"/>
 
   <!-- ====== Phase 2: Car ====== -->
-  <include file="$(find air_ground_car_bringup)/launch/car_$(arg chassis).launch">
+  <include file="$(find car_bringup)/launch/car_$(arg chassis).launch">
     <arg name="gui" value="$(arg gui)"/>
     <arg name="headless" value="$(arg headless)"/>
     <arg name="x" value="$(arg car_x)"/>
     <arg name="y" value="$(arg car_y)"/>
   </include>
 
-  <include file="$(find air_ground_car_bringup)/launch/car_edge.launch"/>
+  <include file="$(find car_bringup)/launch/car_edge.launch"/>
 
   <!-- ====== Phase 3: Communication Bridge ====== -->
-  <include file="$(find air_ground_com_bridge)/launch/air_ground_com_bridge.launch"/>
+  <include file="$(find com_bridge)/launch/com_bridge.launch"/>
 
   <!-- ====== Phase 4: Lab Server ====== -->
-  <include file="$(find air_ground_lab_server)/launch/server.launch"/>
+  <include file="$(find lab_server)/launch/server.launch"/>
 
 </launch>
 ```
@@ -82,11 +82,11 @@ mkdir -p air_ground_bringup/launch
 <launch>
   <arg name="gui" default="false"/>
   <arg name="headless" default="true"/>
-  <include file="$(find air_ground_drone_bringup)/launch/drone_sitl.launch">
+  <include file="$(find drone_bringup)/launch/drone_sitl.launch">
     <arg name="gui" value="$(arg gui)"/>
     <arg name="headless" value="$(arg headless)"/>
   </include>
-  <include file="$(find air_ground_drone_bringup)/launch/drone_edge.launch"/>
+  <include file="$(find drone_bringup)/launch/drone_edge.launch"/>
 </launch>
 ```
 
@@ -98,11 +98,11 @@ mkdir -p air_ground_bringup/launch
   <arg name="chassis" default="diff"/>
   <arg name="gui" default="false"/>
   <arg name="headless" default="true"/>
-  <include file="$(find air_ground_car_bringup)/launch/car_$(arg chassis).launch">
+  <include file="$(find car_bringup)/launch/car_$(arg chassis).launch">
     <arg name="gui" value="$(arg gui)"/>
     <arg name="headless" value="$(arg headless)"/>
   </include>
-  <include file="$(find air_ground_car_bringup)/launch/car_edge.launch"/>
+  <include file="$(find car_bringup)/launch/car_edge.launch"/>
 </launch>
 ```
 
@@ -111,8 +111,8 @@ mkdir -p air_ground_bringup/launch
 ```xml
 <?xml version="1.0"?>
 <launch>
-  <include file="$(find air_ground_lab_server)/launch/server.launch"/>
-  <include file="$(find air_ground_com_bridge)/launch/air_ground_com_bridge.launch"/>
+  <include file="$(find lab_server)/launch/server.launch"/>
+  <include file="$(find com_bridge)/launch/com_bridge.launch"/>
 </launch>
 ```
 
@@ -136,22 +136,22 @@ clean:
 rebuild: clean build
 
 test-drone:
-	bash -c "source $(WS)/devel/setup.bash && bash $(WS)/src/air_ground_drone_bringup/scripts/test_drone.sh"
+	bash -c "source $(WS)/devel/setup.bash && bash $(WS)/src/drone_bringup/scripts/test_drone.sh"
 
 test-car:
-	bash -c "source $(WS)/devel/setup.bash && bash $(WS)/src/air_ground_car_bringup/scripts/test_diff.sh"
+	bash -c "source $(WS)/devel/setup.bash && bash $(WS)/src/car_bringup/scripts/test_diff.sh"
 
 test-mecanum:
-	bash -c "source $(WS)/devel/setup.bash && bash $(WS)/src/air_ground_car_bringup/scripts/test_mecanum.sh"
+	bash -c "source $(WS)/devel/setup.bash && bash $(WS)/src/car_bringup/scripts/test_mecanum.sh"
 
 test-sensors:
-	bash -c "source $(WS)/devel/setup.bash && bash $(WS)/src/air_ground_car_bringup/scripts/test_sensors.sh"
+	bash -c "source $(WS)/devel/setup.bash && bash $(WS)/src/car_bringup/scripts/test_sensors.sh"
 
 test-bridge:
-	bash -c "source $(WS)/devel/setup.bash && bash $(WS)/src/air_ground_com_bridge/scripts/test_bridge.sh"
+	bash -c "source $(WS)/devel/setup.bash && bash $(WS)/src/com_bridge/scripts/test_bridge.sh"
 
 test-server:
-	bash -c "source $(WS)/devel/setup.bash && bash $(WS)/src/air_ground_lab_server/scripts/test_server.sh"
+	bash -c "source $(WS)/devel/setup.bash && bash $(WS)/src/lab_server/scripts/test_server.sh"
 
 test-all:
 	bash -c "source $(WS)/devel/setup.bash && bash $(WS)/src/e2e_test.sh"
@@ -275,15 +275,15 @@ chmod +x ~/air_ground_sim_ws/setup_all.sh
 
 ## 8.6 更新 `package.xml` 补全依赖
 
-确认所有包的 `package.xml` 都已包含所需 `<exec_depend>`。
+确认所有包�?`package.xml` 都已包含所需 `<exec_depend>`�?
 
-**`air_ground_com_bridge/package.xml`** 应包含：
+**`com_bridge/package.xml`** 应包含：
 ```xml
 <exec_depend>mavros</exec_depend>
 <exec_depend>air_ground_interfaces</exec_depend>
 ```
 
-**`air_ground_lab_server/package.xml`** 应包含：
+**`lab_server/package.xml`** 应包含：
 ```xml
 <exec_depend>air_ground_interfaces</exec_depend>
 <exec_depend>nav_msgs</exec_depend>

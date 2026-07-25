@@ -144,11 +144,11 @@ research_compitition/                   # 仓库根目录 (Git root)
 ```
 ~/air_ground_sim_ws/          # ROS 工作空间 (在 Ubuntu 上)
 ├── src/
-│   ├── air_ground_interfaces/        # 自定义消息包 (Layer 3)
-│   ├── air_ground_drone_bringup/     # 无人机启动与配置 (Layer 1)
-│   ├── air_ground_car_bringup/       # 车机启动与配置 (Layer 1)
-│   ├── air_ground_com_bridge/        # 空地通信桥 (Layer 2)
-│   ├── air_ground_lab_server/        # 实验室服务器 (Layer 2~4)
+│   ├── air_ground_interfaces/   # 自定义消息包
+│   ├── drone_sitl/              # 无人机仿真
+│   ├── car_sim/                 # 车机仿真
+│   ├── com_bridge/              # 通信桥
+│   ├── edge_server/             # 边缘预处理 + 服务端
 │   └── ...
 ├── build/
 ├── devel/
@@ -185,10 +185,10 @@ air_ground_<功能>
 | Package | 层级 | 功能 |
 |---------|:---:|------|
 | `air_ground_interfaces` | Layer 3 | 自定义消息/服务定义 |
-| `air_ground_drone_bringup` | Layer 1 | 无人机启动与配置 |
-| `air_ground_car_bringup` | Layer 1 | 车机启动与配置 |
-| `air_ground_com_bridge` | Layer 2 | 空地/车服通信桥 |
-| `air_ground_lab_server` | Layer 2~4 | 边缘预处理 + 实验室服务端 |
+| `drone_sitl` | Layer 1 | 无人机仿真 |
+| `car_sim` | Layer 1 | 车机仿真 |
+| `com_bridge` | Layer 2 | 空地/车服通信桥 |
+| `edge_server` | Layer 2~3 | 边缘预处理 + 服务端 |
 | `air_ground_vlm` | Layer 4 | VLM 研究模块 |
 | `air_ground_slam` | Layer 4 | SLAM 研究模块 |
 | `air_ground_planner` | Layer 4 | Planner 研究模块 |
