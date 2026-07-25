@@ -89,7 +89,7 @@
 </robot>
 ```
 
-## 3.2 差速底盘宏（含左右驱动）?+ 万向轮）
+## 3.2 差速底盘宏（含左右驱动的+ 万向轮）
 
 **文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/urdf/diff_chassis.urdf.xacro`**
 
@@ -293,7 +293,7 @@ car:
   <!-- 加载 ros_control 配置 -->
   <rosparam file="$(find air_ground_car_bringup)/config/diff_chassis_control.yaml" command="load"/>
 
-  <!-- 启动控制）?-->
+  <!-- 启动控制的-->
   <node name="controller_spawner" pkg="controller_manager" type="spawner"
         args="joint_state_controller diff_drive_controller" output="screen"/>
 
@@ -308,14 +308,14 @@ car:
 **文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/config/chassis_params.yaml`**
 
 ```yaml
-# 底盘共通参）?
+# 底盘共通参。
 diff_chassis:
   type: "differential_drive"
   track_width: 0.18       # m, 轮距
   wheel_radius: 0.033     # m
   max_linear_speed: 1.0   # m/s
   max_angular_speed: 3.0  # rad/s
-  encoder_resolution: 11  # 520 电机编码）? 11 PPR × 减速比 (实际需 ×4 正交)
+  encoder_resolution: 11  # 520 电机编码的 11 PPR × 减速比 (实际需 ×4 正交)
 
 mecanum_chassis:
   type: "mecanum"
@@ -325,9 +325,9 @@ mecanum_chassis:
   max_linear_speed: 0.8
   max_angular_speed: 2.0
 
-# 底盘检测引脚（模拟 STM32 检测当前安装的底盘类型）?
+# 底盘检测引脚（模拟 STM32 检测当前安装的底盘类型。
 chassis_detect:
-  diff_pin: 1    # GPIO 拉高 = 差速底盘在）?
+  diff_pin: 1    # GPIO 拉高 = 差速底盘在。
   mecanum_pin: 0 # GPIO 拉高 = 麦轮底盘在位
 ```
 
@@ -376,14 +376,14 @@ install(DIRECTORY worlds/
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/worlds)
 ```
 
-并创建空世界）?
+并创建空世界。
 ```bash
 cp ~/air_ground_sim_ws/src/air_ground_drone_bringup/worlds/empty.world ~/air_ground_sim_ws/src/air_ground_car_bringup/worlds/empty.world
 ```
 
 ## 交付产物
 
-1. `roslaunch air_ground_car_bringup car_diff.launch` 能启动差速小）?
+1. `roslaunch air_ground_car_bringup car_diff.launch` 能启动差速小。
 2. `/car/cmd_vel` 可控制小车前进后退转弯
-3. `/car/odom` 发布里程计数）?
+3. `/car/odom` 发布里程计数。
 4. `test_diff.sh` 全部 PASS

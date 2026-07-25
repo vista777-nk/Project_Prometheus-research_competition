@@ -153,7 +153,7 @@ rostopic pub -1 /server/eqa/query std_msgs/String "data: 'Find the nearest obsta
 sleep 2
 
 # 7.2 Verify coordinator dispatched command (via cmd_vel as placeholder)
-check "Coordinator processed EQA query ）?car cmd_vel" \
+check "Coordinator processed EQA query → car cmd_vel" \
     "timeout 3 rostopic echo /car/cmd_vel -n 1 2>/dev/null | grep -q linear"
 
 # ── Phase 8: Chassis Swap Test ──────────────────────────────
@@ -220,7 +220,7 @@ chmod +x ~/air_ground_sim_ws/src/e2e_test.sh
 
 ```bash
 #!/bin/bash
-# Quick smoke test (30 seconds) ）?run before committing code.
+# Quick smoke test (30 seconds) — run before committing code.
 source ~/air_ground_sim_ws/devel/setup.bash
 
 roslaunch air_ground_sim.launch chassis:=diff gui:=false headless:=true &
@@ -244,13 +244,13 @@ chmod +x ~/air_ground_sim_ws/src/quick_smoke.sh
 
 ## 9.3 最终检查清单
 
-完成所）?9 ）?task 后，逐一确认。?
+完成所有9 的task 后，逐一确认。?
 
 | # | 检查项 | 命令 |
 |---|--------|------|
 | 1 | 工作空间编译无错误| `catkin build` |
 | 2 | 自定义消息可用| `rosmsg show air_ground_interfaces/SensorFusion` |
-| 3 | 无人机可启动 | `make launch-drone`（等 15s，`Ctrl+C`）?|
+| 3 | 无人机可启动 | `make launch-drone`（等 15s，`Ctrl+C`）|
 | 4 | 差速小车可启动 | `make launch-car` |
 | 5 | 麦轮小车可启动| `make launch-car-mecanum` |
 | 6 | 所有传感器话题有数据| `make test-sensors` |
@@ -273,4 +273,4 @@ chmod +x ~/air_ground_sim_ws/src/quick_smoke.sh
 
 1. `e2e_test.sh` 可验证整条数据链路（传感器→边缘→服务器→命令→执行）
 2. `quick_smoke.sh` 供日常开发快速验证
-3. 最终检查清单全）?）?
+3. 最终检查清单全。。

@@ -59,7 +59,7 @@ class DronePreprocessor:
         # Periodic publish (10Hz)
         rospy.Timer(rospy.Duration(0.1), self._publish)
 
-        rospy.loginfo("[Drone Preprocessor] Ready ）?/drone/observation + /drone/state")
+        rospy.loginfo("[Drone Preprocessor] Ready → /drone/observation + /drone/state")
 
     def _cb_depth(self, msg): self.latest_depth = msg
     def _cb_rgb(self, msg):   self.latest_rgb = msg
@@ -159,7 +159,7 @@ class CarPreprocessor:
         # Periodic publish (10Hz)
         rospy.Timer(rospy.Duration(0.1), self._publish)
 
-        rospy.loginfo(f"[Car Preprocessor] Ready (chassis={self.chassis_type}) ）?/car/observation + /car/state")
+        rospy.loginfo(f"[Car Preprocessor] Ready (chassis={self.chassis_type}) → /car/observation + /car/state")
 
     def _detect_chassis(self):
         try:
@@ -243,8 +243,8 @@ chmod +x ~/air_ground_sim_ws/src/air_ground_car_bringup/scripts/car_preprocessor
 Lab Server TCP Receiver → JSON → ICD Observation + RobotState.
 
 Listens for TCP connections from edge nodes (drone/car).
-Receives JSON-serialized data ）?reconstructs Observation + RobotState
-）?publishes to /server/<robot>/observation and /server/<robot>/state.
+Receives JSON-serialized data → reconstructs Observation + RobotState
+→ publishes to /server/<robot>/observation and /server/<robot>/state.
 """
 import rospy
 import socket
@@ -270,7 +270,7 @@ class TCPServer:
         self.host = "0.0.0.0"
         self.port = cfg["server_port"]
 
-        # Publishers: ICD-compliant topics ）?WorldModel subscribes here
+        # Publishers: ICD-compliant topics → WorldModel subscribes here
         self.pub_drone_obs = rospy.Publisher("/server/drone/observation", Observation, queue_size=10)
         self.pub_drone_state = rospy.Publisher("/server/drone/state", RobotState, queue_size=10)
         self.pub_car_obs = rospy.Publisher("/server/car/observation", Observation, queue_size=10)
@@ -289,7 +289,7 @@ class TCPServer:
         self.accept_thread = threading.Thread(target=self._accept_loop, daemon=True)
         self.accept_thread.start()
 
-        rospy.loginfo(f"[TCP Server] Listening on {self.host}:{self.port} ）?/server/<robot>/observation + /server/<robot>/state")
+        rospy.loginfo(f"[TCP Server] Listening on {self.host}:{self.port} → /server/<robot>/observation + /server/<robot>/state")
 
     def _accept_loop(self):
         while self.running and not rospy.is_shutdown():
@@ -312,7 +312,7 @@ class TCPServer:
                 if len(header) < 4:
                     break
                 length = struct.unpack("!I", header)[0]
-                # 安全上限: 拒绝 &gt; 10MB ）?payload (）?OOM)
+                # 安全上限: 拒绝 &gt; 10MB 触payload (）?OOM)
                 if length > 10 * 1024 * 1024:
                     rospy.logerr(f"[TCP Server] Oversized payload ({length} bytes), disconnecting")
                     break
@@ -352,7 +352,7 @@ class TCPServer:
 
         if "scan" in data:
             s = data["scan"]
-            # JSON 不支）?inf/NaN: ）?-1.0 作为 sentinel
+            # JSON 不支持inf/NaN: ）?-1.0 作为 sentinel
             def _sanitize(v):
                 return float(v) if v > 0 and math.isfinite(v) else -1.0
             obs.lidar_ranges = [_sanitize(r) for r in s.get("ranges", [])]
@@ -415,28 +415,28 @@ if __name__ == "__main__":
 chmod +x ~/air_ground_sim_ws/src/air_ground_lab_server/scripts/tcp_receiver.py
 ```
 
-## 7.4 World Model 节点（系统认知中心））?新增
+## 7.4 World Model 节点（系统认知中心）←新增
 
-> 根据 ChatGPT 审阅建议 #3: ）?Day 1 就将 World Model 定义为系统概念中心）? 
-> 一切节点要）?TELL、要）?ASK World Model）?
+> 根据 ChatGPT 审阅建议 #3: 的Day 1 就将 World Model 定义为系统概念中心的 
+> 一切节点要么TELL、要么ASK World Model。
 
 **文件：`~/air_ground_sim_ws/src/air_ground_lab_server/scripts/world_model.py`**
 
 ```python
 #!/usr/bin/env python3
 """
-World Model ）?系统认知中心 (Core of the Platform).
+World Model 的系统认知中心 (Core of the Platform).
 
-架构角色: Layer 4 的核）? 所有节点的信息交换都通过 World Model.
+架构角色: Layer 4 的核心 所有节点的信息交换都通过 World Model.
 - 接收 TELL: Observation, RobotState, SLAM 位姿, EQA 回答
-- 提供 ASK: WorldState (统一状态视）?, QueryWorldState 服务
-- 维护: 全局一致的世界状）?(map, agents, landmarks, dynamic obstacles)
+- 提供 ASK: WorldState (统一状态视图, QueryWorldState 服务
+- 维护: 全局一致的世界状态(map, agents, landmarks, dynamic obstacles)
 
 设计原则 (ICD §）?3):
   WorldState ）?World Model ）?*输出**.
-  决策节点）?ASK WorldState, 不直接读传感）?
+  决策节点么ASK WorldState, 不直接读传感。
 
-当前阶段: 占位. 聚合 Observation + RobotState ）?发布 WorldState.
+当前阶段: 占位. 聚合 Observation + RobotState 的发布 WorldState.
 """
 import rospy
 from air_ground_interfaces.msg import (
@@ -454,7 +454,7 @@ class WorldModel:
         rospy.init_node("world_model")
 
         # ── TELL 入口 ──
-        # ）?edge node 告诉 WorldModel 它们）?Observation ）?State
+        # ）?edge node 告诉 WorldModel 它们费Observation ）?State
         rospy.Subscriber("/server/drone/observation", Observation,
                          self._tell_obs("drone"), queue_size=5)
         rospy.Subscriber("/server/car/observation", Observation,
@@ -464,20 +464,20 @@ class WorldModel:
         rospy.Subscriber("/server/car/state", RobotState,
                          self._tell_state("car"), queue_size=5)
 
-        # SLAM 结果 ）?TELL WorldModel
+        # SLAM 结果 么TELL WorldModel
         # (）?task-07 占位阶段, SLAM node 也通过这个话题更新)
         rospy.Subscriber("/server/world_state/update", WorldState,
                          self._on_external_update, queue_size=5)
 
         # ── ASK 出口 ──
-        # 发布统一）?WorldState
+        # 发布统一向WorldState
         self.world_state_pub = rospy.Publisher("/server/world_state", WorldState, queue_size=5, latch=True)
 
         # QueryWorldState 服务 (同步查询)
         self.query_srv = rospy.Service("/server/query_world_state",
                                        QueryWorldState, self._handle_query)
 
-        # ── 内部状）?──
+        # ── 内部状。──
         self._lock = threading.Lock()
         self._latest_obs = {}      # robot_id ）?Observation
         self._latest_states = {}   # robot_id ）?RobotState
@@ -488,14 +488,14 @@ class WorldModel:
         rospy.loginfo("[WorldModel] Cognitive center ready. Awaiting TELLs from agents.")
 
     def _tell_obs(self, robot_id: str):
-        """TELL: agent 上报一）?Observation."""
+        """TELL: agent 上报一费Observation."""
         def callback(msg: Observation):
             with self._lock:
                 self._latest_obs[robot_id] = msg
         return callback
 
     def _tell_state(self, robot_id: str):
-        """TELL: agent 上报一）?RobotState."""
+        """TELL: agent 上报一将RobotState."""
         def callback(msg: RobotState):
             with self._lock:
                 self._latest_states[robot_id] = msg
@@ -512,7 +512,7 @@ class WorldModel:
 
     def _publish_world_state(self, event):
         """定期发布聚合后的 WorldState."""
-        # 初始化空结构）? 避免订阅方反序列化崩）?
+        # 初始化空结构的 避免订阅方反序列化崩。
         ws = WorldState()
         ws.header.stamp = rospy.Time.now()
         ws.header.frame_id = "map"
@@ -523,7 +523,7 @@ class WorldModel:
         ws.landmarks = []
 
         with self._lock:
-            # 聚合所）?agent 状）?
+            # 聚合所有agent 状。
             ws.agents = list(self._latest_states.values())
             ws.landmarks = list(self._landmarks)
 
@@ -553,20 +553,20 @@ chmod +x ~/air_ground_sim_ws/src/air_ground_lab_server/scripts/world_model.py
 
 ---
 
-## 7.5 SLAM 占位节点（→ World Model）?
+## 7.5 SLAM 占位节点（→ World Model。
 
 **文件：`~/air_ground_sim_ws/src/air_ground_lab_server/scripts/slam_node.py`**
 
 ```python
 #!/usr/bin/env python3
 """
-SLAM Node ）?定位与建）?(Placeholder ）?World Model 的数据源之一).
+SLAM Node 告定位与建图(Placeholder ）?World Model 的数据源之一).
 
-架构角色: 本节点属）?Layer 4 (Research). 它从 World Model 订阅
-Observation + RobotState, 计算）?TELL World Model 更新 map / pose.
+架构角色: 本节点属于Layer 4 (Research). 它从 World Model 订阅
+Observation + RobotState, 计算么TELL World Model 更新 map / pose.
 
 当前阶段: 占位运行, 仅统计数据流频率.
-后续: 接入 RTAB-Map / SLAM Toolbox 等真）?SLAM 算法.
+后续: 接入 RTAB-Map / SLAM Toolbox 等真实SLAM 算法.
 """
 import rospy
 from air_ground_interfaces.msg import Observation, RobotState, WorldState
@@ -576,8 +576,8 @@ from geometry_msgs.msg import PoseWithCovarianceStamped
 
 class SLAMPlaceholder:
     """
-    职责: 消费 Observation, 产出全局一致的位姿估计和地）?
-    TELL WorldModel: 每当）?scan/odom 到达, 更新 WorldState.map_2d ）?agent pose.
+    职责: 消费 Observation, 产出全局一致的位姿估计和地。
+    TELL WorldModel: 每当的scan/odom 到达, 更新 WorldState.map_2d ）?agent pose.
     """
 
     def __init__(self):
@@ -586,7 +586,7 @@ class SLAMPlaceholder:
         # 订阅: Observation (）?World Model ）?tcp_receiver 提供)
         rospy.Subscriber("/server/car/observation", Observation, self.car_cb, queue_size=5)
         rospy.Subscriber("/server/drone/observation", Observation, self.drone_cb, queue_size=5)
-        # 订阅: RobotState (里程）?
+        # 订阅: RobotState (里程。
         rospy.Subscriber("/server/car/state", RobotState, self.car_state_cb, queue_size=5)
 
         # 发布: 更新后的 World State (TELL WorldModel)
@@ -641,7 +641,7 @@ if __name__ == "__main__":
 chmod +x ~/air_ground_sim_ws/src/air_ground_lab_server/scripts/slam_node.py
 ```
 
-## 7.6 EQA 引擎占位节点（← World Model ）?Coordinator）?
+## 7.6 EQA 引擎占位节点（← World Model ）?Coordinator。
 
 **文件：`~/air_ground_sim_ws/src/air_ground_lab_server/scripts/eqa_engine.py`**
 
@@ -650,15 +650,15 @@ chmod +x ~/air_ground_sim_ws/src/air_ground_lab_server/scripts/slam_node.py
 """
 Embodied Question Answering (EQA) Engine (Placeholder ）?research core).
 
-架构角色: 本节点属）?Layer 4 (Research).
-1. ASK WorldModel: 当前有什）?landmark? 地图状态如）?
-2. 调用 VLM (LLaVA / InternVL) 进行多模态推）?
+架构角色: 本节点属于Layer 4 (Research).
+1. ASK WorldModel: 当前有什的landmark? 地图状态如。
+2. 调用 VLM (LLaVA / InternVL) 进行多模态推。
 3. TELL Coordinator: 下发探索/回答计划 (Mission).
 
-约束 (ICD §）?: EQA Engine 只消）?Observation/RobotState/WorldState 抽象接口,
-   永远）?import mavros / sensor_msgs/LaserScan / gazebo_msgs.
+约束 (ICD §）?: EQA Engine 只消费Observation/RobotState/WorldState 抽象接口,
+   永远的import mavros / sensor_msgs/LaserScan / gazebo_msgs.
 
-当前阶段: 占位运行. 收到查询 ）?日志记录 ）?下发 explore 占位 Mission.
+当前阶段: 占位运行. 收到查询 →日志记录 →下发 explore 占位 Mission.
 """
 import rospy
 from std_msgs.msg import String
@@ -685,17 +685,17 @@ class EQAEngine:
     def query_cb(self, msg: String):
         rospy.loginfo(f"[EQA] Received query: '{msg.data}'")
         # TODO Step 1: ASK WorldModel ('QueryWorldState' service)
-        #   ）?获取当前已知 landmark、agent pose、地）?
+        #   →获取当前已知 landmark、agent pose、地。
 
         # TODO Step 2: VLM reasoning
-        #   ）?输入: query_text + WorldState + RGB images
-        #   ）?输出: 回答 ）?下一探索 Mission
+        #   →输入: query_text + WorldState + RGB images
+        #   →输出: 回答 或下一探索 Mission
 
         # TODO Step 3: TELL Coordinator
-        #   ）?如果回答已确）? publish answer
-        #   ）?如果需继续探索: publish Mission(type="search"/"inspect")
+        #   →如果回答已确认 publish answer
+        #   →如果需继续探索: publish Mission(type="search"/"inspect")
 
-        # 占位: 下发一）?explore Mission
+        # 占位: 下发一个explore Mission
         mission = Mission()
         mission.header.stamp = rospy.Time.now()
         mission.mission_id = f"eqa_{rospy.Time.now().to_nsec()}"
@@ -716,24 +716,24 @@ if __name__ == "__main__":
 chmod +x ~/air_ground_sim_ws/src/air_ground_lab_server/scripts/eqa_engine.py
 ```
 
-## 7.7 空地协同策略占位节点（← EQA/Planner ）?Edge）?
+## 7.7 空地协同策略占位节点（← EQA/Planner ）?Edge。
 
 **文件：`~/air_ground_sim_ws/src/air_ground_lab_server/scripts/coordinator.py`**
 
 ```python
 #!/usr/bin/env python3
 """
-Air-Ground Coordinator (Placeholder ）?空地协同调度中心).
+Air-Ground Coordinator (Placeholder 的空地协同调度中心).
 
-架构角色: 本节点属）?Layer 4 (Research).
-1. ASK WorldModel: 获取最）?WorldState (用于决策).
+架构角色: 本节点属于Layer 4 (Research).
+1. ASK WorldModel: 获取最向WorldState (用于决策).
 2. 接收 EQA Engine / Planner ）?Mission 指令.
-3. TELL Edge: ）?Mission 翻译为具体执行指）?(位置/航点) 下发给车机或无人）?
+3. TELL Edge: ）?Mission 翻译为具体执行指令(位置/航点) 下发给车机或无人。
 
 约束 (ICD): Coordinator 不关心底层是 PX4 还是 STM32,
-   只面对统一）?Mission 接口.
+   只面对统一个Mission 接口.
 
-当前阶段: 占位运行. 收到 Mission ）?下发简）?cmd_vel / takeoff setpoint.
+当前阶段: 占位运行. 收到 Mission 的下发简→ cmd_vel / takeoff setpoint.
 """
 import rospy
 from air_ground_interfaces.msg import Mission, RobotState, WorldState
@@ -742,7 +742,7 @@ from geometry_msgs.msg import PoseStamped, Twist
 
 class Coordinator:
     """
-    流程: Mission ）?拆解为子任务 ）?）?agent capability 分发.
+    流程: Mission 的拆解为子任务 。的agent capability 分发.
     """
 
     def __init__(self):
@@ -758,7 +758,7 @@ class Coordinator:
         self.drone_setpoint_pub = rospy.Publisher("/mavros/setpoint_position/local", PoseStamped, queue_size=5)
         self.car_cmd_pub = rospy.Publisher("/car/diff_drive_controller/cmd_vel", Twist, queue_size=5)
 
-        # 内部状）?
+        # 内部状。
         self.world_state = None
 
         rospy.loginfo("[Coordinator] Placeholder ready. ASK WorldModel ）?TELL Edge.")
@@ -769,7 +769,7 @@ class Coordinator:
 
     def mission_cb(self, msg: Mission):
         """
-        收到 Mission ）?根据 agent capability + WorldState 决策.
+        收到 Mission 的根据 agent capability + WorldState 决策.
         TELL Edge: 下发具体指令.
         """
         rospy.loginfo(f"[Coordinator] Mission received: id={msg.mission_id}, "
@@ -783,7 +783,7 @@ class Coordinator:
             rospy.loginfo("[Coordinator] ）?TELL car: explore (fwd 0.2m/s)")
 
         elif msg.type == "takeoff" and msg.robot_id == "drone":
-            # Placeholder: 无人机起）?5m
+            # Placeholder: 无人机起的5m
             sp = PoseStamped()
             sp.header.stamp = rospy.Time.now()
             sp.header.frame_id = "map"
@@ -811,7 +811,7 @@ chmod +x ~/air_ground_sim_ws/src/air_ground_lab_server/scripts/coordinator.py
 
 ```xml
 <launch>
-  <!-- 边缘预处理器: 传感）?）?Observation + RobotState -->
+  <!-- 边缘预处理器: 传感。费Observation + RobotState -->
   <node name="drone_preprocessor" pkg="air_ground_drone_bringup" type="drone_preprocessor.py"
         output="screen"/>
   <node name="gps_converter" pkg="air_ground_drone_bringup" type="gps_converter.py"
@@ -823,7 +823,7 @@ chmod +x ~/air_ground_sim_ws/src/air_ground_lab_server/scripts/coordinator.py
 
 ```xml
 <launch>
-  <!-- 边缘预处理器: 传感）?）?Observation + RobotState -->
+  <!-- 边缘预处理器: 传感。费Observation + RobotState -->
   <node name="car_preprocessor" pkg="air_ground_car_bringup" type="car_preprocessor.py"
         output="screen"/>
   <node name="gimbal_controller" pkg="air_ground_car_bringup" type="gimbal_controller.py"
@@ -841,10 +841,10 @@ chmod +x ~/air_ground_sim_ws/src/air_ground_lab_server/scripts/coordinator.py
   <node name="tcp_server" pkg="air_ground_lab_server" type="tcp_receiver.py" output="screen"/>
 
   <!-- Layer 4: World Model (认知中心) -->
-  <!-- 所有其他节）?ASK/TELL WorldModel，不直接读传感器 -->
+  <!-- 所有其他节么ASK/TELL WorldModel，不直接读传感器 -->
   <node name="world_model" pkg="air_ground_lab_server" type="world_model.py" output="screen"/>
 
-  <!-- Layer 4: 研究模块 (只依）?WorldState + Mission 接口) -->
+  <!-- Layer 4: 研究模块 (只依向WorldState + Mission 接口) -->
   <node name="slam_node" pkg="air_ground_lab_server" type="slam_node.py" output="screen"/>
   <node name="eqa_engine" pkg="air_ground_lab_server" type="eqa_engine.py" output="screen"/>
   <node name="coordinator" pkg="air_ground_lab_server" type="coordinator.py" output="screen"/>
@@ -914,9 +914,9 @@ echo "=== Done ==="
 
 ## 交付产物
 
-1. 无人机和车机）?`sensor_fusion` 话题均有数据）?
+1. 无人机和车机的`sensor_fusion` 话题均有数据。
 2. TCP 服务器正常启动并监听 9090 端口
-3. **World Model (`world_model`) 节点运行**，发）?`/server/world_state`
-4. 所）?5 个服务器节点都在运行（`rosnode list` 确认）：tcp_server, world_model, slam_node, eqa_engine, coordinator
-5. 发）?EQA query 能触）?Mission ）?Coordinator 响应）?
+3. **World Model (`world_model`) 节点运行**，发布`/server/world_state`
+4. 所有5 个服务器节点都在运行（`rosnode list` 确认）：tcp_server, world_model, slam_node, eqa_engine, coordinator
+5. 发布EQA query 能触发Mission ）?Coordinator 响应。
 6. `test_server.sh` 全部 PASS

@@ -11,13 +11,13 @@
 
 ```
 无人机 ──MAVLink(UDP)──→ 车机 ──TCP──→ 服务器
-   ）?                      ）?             ）?
-   └────MAVLink(UDP)───────）?             ）?
-                                          ）?
+   的                                    。
+   └────MAVLink(UDP)───────）?             。
+                                          。
                                        车机 ◀──TCP── 服务器
 ```
 
-在仿真中所有通信在 `localhost`，通过不同端口区分）?
+在仿真中所有通信在 `localhost`，通过不同端口区分。
 
 ---
 
@@ -387,7 +387,7 @@ class EdgeServerBridge:
         if self.latest["scan"]:
             s = self.latest["scan"]
             ranges = s.ranges[::4]  # downsample 4:1
-            # JSON 不支）?inf: ）?-1.0 替代
+            # JSON 不支持inf: ）?-1.0 替代
             out["scan"] = {
                 "angle_min": s.angle_min, "angle_increment": s.angle_increment * 4,
                 "ranges": [r if r > 0 and np.isfinite(r) else -1.0 for r in ranges]
@@ -558,6 +558,6 @@ install(DIRECTORY launch config scripts
 
 ## 交付产物
 
-1. `drone_car_bridge.py` 可接收无人机 MAVLink 心跳并发）?`/drone/heartbeat`
-2. `edge_server_bridge.py` 可正常启动（连接服务器可能显）?retrying，这是预期的——服务器）?Task-07 实现）?
-3. `test_bridge.sh` 前两）?PASS，第三项至少确认 edge_server_bridge 节点在运）?
+1. `drone_car_bridge.py` 可接收无人机 MAVLink 心跳并发布`/drone/heartbeat`
+2. `edge_server_bridge.py` 可正常启动（连接服务器可能显示retrying，这是预期的——服务器与Task-07 实现。
+3. `test_bridge.sh` 前两的PASS，第三项至少确认 edge_server_bridge 节点在运。

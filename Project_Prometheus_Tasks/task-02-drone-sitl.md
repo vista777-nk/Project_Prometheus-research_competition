@@ -7,7 +7,7 @@
 
 ## 目标
 
-在 Gazebo 11 中启动一架搭载深度相机、GPS ）?IMU 的无人机，通过 MAVROS 与 ROS 通信，可用 `rostopic` 查看传感器数据）?
+在 Gazebo 11 中启动一架搭载深度相机、GPS 、IMU 的无人机，通过 MAVROS 与 ROS 通信，可用 `rostopic` 查看传感器数据。
 
 ---
 
@@ -22,7 +22,7 @@ cd PX4-Autopilot
 # 运行 Ubuntu 安装脚本（安装交叉编译工具链等）
 bash ./Tools/setup/ubuntu.sh
 
-# 重启后继续（某些 udev 规则需重启生效）?
+# 重启后继续（某些 udev 规则需重启生效。
 # 如果你选择跳过重启，执行：
 sudo usermod -a -G dialout $USER
 ```
@@ -38,8 +38,8 @@ make px4_sitl_default gazebo-classic
 
 ## 2.3 创建无人机 Gazebo 模型（搭载深度相机）
 
-PX4 原生 Iris 模型已有 IMU/GPS/气压计（通过 Gazebo-PX4 桥接发布）?MAVROS））?
-我们只需扩展一个深度相）?sensor，直接嵌入到机体）?`base_link` 中，无需独立静态模型）?
+PX4 原生 Iris 模型已有 IMU/GPS/气压计（通过 Gazebo-PX4 桥接发布到MAVROS）。
+我们只需扩展一个深度相机sensor，直接嵌入到机体的`base_link` 中，无需独立静态模型。
 
 **文件：`~/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/iris_depth_camera/iris_depth_camera.sdf.jinja`**
 
@@ -53,8 +53,8 @@ PX4 原生 Iris 模型已有 IMU/GPS/气压计（通过 Gazebo-PX4 桥接发布�
 
     <!--
       深度相机插件 (Intel RealSense D435i 模拟)
-      直接附加在机）?base_link 上，前向安装，向下倾斜 45°）
-      （sensor 标签必须位于 iris_base 中已）?link 的 scope 内，
+      直接附加在机的base_link 上，前向安装，向下倾斜 45°）
+      （sensor 标签必须位于 iris_base 中已的link 的 scope 内，
       此处通过 joint 方式嵌入：为相机创建轻量 link，再用 fixed joint 刚性绑定到 base_link）
     -->
     <link name="depth_camera_link">
@@ -111,9 +111,9 @@ PX4 原生 Iris 模型已有 IMU/GPS/气压计（通过 Gazebo-PX4 桥接发布�
 </sdf>
 ```
 
-删除独立模型创建步骤（不再需要））?
+删除独立模型创建步骤（不再需要）。
 ```bash
-# 不再需）?~/.gazebo/models/depth_camera/ ）?~/.gazebo/models/gps/
+# 不再需的~/.gazebo/models/depth_camera/  ~/.gazebo/models/gps/
 # 传感器已嵌入 iris_depth_camera.sdf.jinja
 ```
 
@@ -319,28 +319,28 @@ echo "=== Done ==="
 
 ## 2.11 更新 `air_ground_drone_bringup/CMakeLists.txt`
 
-（无需额外修改——不再安装独立的 worlds/ 目录）?
+（无需额外修改——不再安装独立的 worlds/ 目录。
 
 ## 交付产物
 
-1. `roslaunch air_ground_drone_bringup drone_sitl.launch` 能无 GUI 启动无人机仿）?
+1. `roslaunch air_ground_drone_bringup drone_sitl.launch` 能无 GUI 启动无人机仿。
 2. `/mavros/state` topic 显示 `connected: True`
 3. 深度相机、GPS、IMU 话题均有数据发布
 4. `test_drone.sh` 全部 PASS
 
-## 轻量化提）?
+## 轻量化提。
 
-- 华为轻薄本无独显：Gazebo 务必）?`headless:=true` 启动，物理计算照常但无渲）?
-- 深度相机分辨率设）?320×240/15Hz，否）?Gazebo 渲染管线（即）?headless）也会在传感器线程吃）?CPU
-- PX4 SITL 默认跑在 `nice -20`，如需进一步降）?CPU，编）?`mavros_posix_sitl.launch` ）?PX4 进程）?`nice` ）?
+- 华为轻薄本无独显：Gazebo 务必的`headless:=true` 启动，物理计算照常但无渲。
+- 深度相机分辨率设为320×240/15Hz，否个Gazebo 渲染管线（即用headless）也会在传感器线程吃满CPU
+- PX4 SITL 默认跑在 `nice -20`，如需进一步降满CPU，编码`mavros_posix_sitl.launch` ）?PX4 进程计`nice` 。
 
-## 进阶（v2 计划）：）?Gazebo 共享世界
+## 进阶（v2 计划）：个Gazebo 共享世界
 
-当前 task-02 ）?task-03 各自启动独立 Gazebo 实例，这在单机开发时会导致双 gzserver 资源浪费）?
-**计划）?task-08 集成阶段**改为统一方案）?
+当前 task-02 ）?task-03 各自启动独立 Gazebo 实例，这在单机开发时会导致双 gzserver 资源浪费。
+**计划与task-08 集成阶段**改为统一方案。
 
-1. 先启动一）?Gazebo（通过 `air_ground_car_bringup` 或独）?launch）?
-2. 在这个世界内 spawn 无人机模型（通过 `gazebo_ros/spawn_model`，不依赖 PX4 自带 launch ）?gzserver）?
+1. 先启动一个Gazebo（通过 `air_ground_car_bringup` 或独层launch。
+2. 在这个世界内 spawn 无人机模型（通过 `gazebo_ros/spawn_model`，不依赖 PX4 自带 launch ）?gzserver。
 3. 共用同一坐标系，为后续空地协同仿真打基础
 
-此改动不影响 task-02/03 的独立开发和测试。待 task-02~07 全部跑通后，在 task-08 总装时实施）?
+此改动不影响 task-02/03 的独立开发和测试。待 task-02~07 全部跑通后，在 task-08 总装时实施。

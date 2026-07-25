@@ -8,7 +8,7 @@
 ## 目标
 
 1. 创建四轮麦克纳姆底盘 URDF + 自定义运动学控制器
-2. 实现 `swap_chassis` 服务，运行时可切换差）?麦轮底盘
+2. 实现 `swap_chassis` 服务，运行时可切换差速麦轮底盘
 
 ---
 
@@ -202,7 +202,7 @@ car:
     joint: rear_right_wheel_joint
     pid: {p: 1.0, i: 0.1, d: 0.01}
 
-  # 云台舵机位置控制）?(pan/tilt)
+  # 云台舵机位置控制的(pan/tilt)
   gimbal_pan_controller:
     type: position_controllers/JointPositionController
     joint: gimbal_pan_joint
@@ -472,6 +472,6 @@ echo "=== Done ==="
 ## 交付产物
 
 1. `roslaunch air_ground_car_bringup car_mecanum.launch` 启动麦轮小车
-2. 发）?`vy != 0` ）?`/car/cmd_vel`，小车能横向平移
-3. `rosservice call /car/swap_chassis "diff"` ）?`"mecanum"` 可动态切换底）?
+2. 发布`vy != 0` 到`/car/cmd_vel`，小车能横向平移
+3. `rosservice call /car/swap_chassis "diff"` ）?`"mecanum"` 可动态切换底。
 4. `test_mecanum.sh` 全部 PASS（或 [WARN] 可接受）

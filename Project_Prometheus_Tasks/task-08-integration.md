@@ -10,7 +10,7 @@
 
 ---
 
-### 8.1 创建 air_ground_bringup 包（承载所有顶）?launch 文件）?
+### 8.1 创建 air_ground_bringup 包（承载所有顶层launch 文件。
 
 > P0-05 修复：launch 文件必须放在 catkin package 内，不能在 `src/` 根目录。
 
@@ -20,7 +20,7 @@ catkin_create_pkg air_ground_bringup rospy std_msgs
 mkdir -p air_ground_bringup/launch
 ```
 
-**package.xml** 需额外依赖）?
+**package.xml** 需额外依赖。
 ```xml
 <exec_depend>air_ground_drone_bringup</exec_depend>
 <exec_depend>air_ground_car_bringup</exec_depend>

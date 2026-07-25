@@ -322,11 +322,11 @@ imu:
   accel_noise: 0.001  # m/s²/√Hz
 ```
 
-## 5.4 传感器话题一）?
+## 5.4 传感器话题一。
 
 所有话题在 `/car` 命名空间下：
 
-| 传感）?| 话题 | 消息类型 |
+| 传感器| 话题 | 消息类型 |
 |--------|------|---------|
 | OpenMV RGB | `/car/openmv/image_raw` | `sensor_msgs/Image` |
 | 2D LiDAR | `/car/scan` | `sensor_msgs/LaserScan` |
@@ -335,7 +335,7 @@ imu:
 | 超声波左 | `/car/ultrasonic/left` | `sensor_msgs/LaserScan` |
 | 超声波右 | `/car/ultrasonic/right` | `sensor_msgs/LaserScan` |
 | IMU | `/car/imu/data` | `sensor_msgs/Imu` |
-| 里程）?| `/car/odom` | `nav_msgs/Odometry` |
+| 里程计| `/car/odom` | `nav_msgs/Odometry` |
 
 ## 5.5 云台控制脚本（模拟舵机）
 
@@ -356,7 +356,7 @@ class GimbalController:
     def __init__(self):
         rospy.init_node("gimbal_controller")
         # ros_control position_controllers/JointPositionController 期望的话题名:
-        #   /car/gimbal_pan_controller/command  (）?/car/gimbal_pan_joint/command)
+        #   /car/gimbal_pan_controller/command  (→ /car/gimbal_pan_joint/command)
         self.pan_pub = rospy.Publisher("/car/gimbal_pan_controller/command", Float64, queue_size=10)
         self.tilt_pub = rospy.Publisher("/car/gimbal_tilt_controller/command", Float64, queue_size=10)
 
@@ -429,7 +429,7 @@ echo "=== Done ==="
 
 ## 交付产物
 
-1. `car_sensors.urdf.xacro` 可被 diff ）?mecanum 底盘正确引用
-2. 启动后所有传感器话题有数）?
-3. 云台可响）?`/car/gimbal/*/command` 话题
+1. `car_sensors.urdf.xacro` 可被 diff 和mecanum 底盘正确引用
+2. 启动后所有传感器话题有数。
+3. 云台可响应`/car/gimbal/*/command` 话题
 4. `test_sensors.sh` 至少所有传感器都能检测到话题存在
