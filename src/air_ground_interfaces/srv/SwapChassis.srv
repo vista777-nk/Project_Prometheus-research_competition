@@ -1,0 +1,5 @@
+# Request a chassis swap (ICD 4.1)
+string target_chassis
+---
+bool success
+string message

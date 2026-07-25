@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>air_ground_com_bridge</name>
+  <version>0.1.0</version>
+  <description>Protocol bridges for MAVLink, ROS topics, and edge-server TCP transport.</description>
+
+  <maintainer email="user@example.com">Project Prometheus Maintainers</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>air_ground_interfaces</depend>
+  <depend>cv_bridge</depend>
+  <depend>geometry_msgs</depend>
+  <depend>mavros</depend>
+  <depend>mavros_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>roscpp</depend>
+  <depend>rospy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+
+  <export/>
+</package>

@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>air_ground_drone_bringup</name>
+  <version>0.1.0</version>
+  <description>PX4 SITL, sensor, and edge-node bringup for the aerial robot.</description>
+
+  <maintainer email="user@example.com">Project Prometheus Maintainers</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>air_ground_interfaces</depend>
+  <depend>geometry_msgs</depend>
+  <depend>mavros_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>roscpp</depend>
+  <depend>rospy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+
+  <exec_depend>depth_image_proc</exec_depend>
+  <exec_depend>mavros</exec_depend>
+  <exec_depend>nodelet</exec_depend>
+
+  <export/>
+</package>
