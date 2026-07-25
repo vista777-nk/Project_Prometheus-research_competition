@@ -73,7 +73,7 @@ sleep 5  # Extra settling time
 echo ""
 echo "--- Phase 2: Model Spawn ---"
 check "Drone (PX4) spawned" \
-    "rosservice call /gazebo/get_model_state '{model_name: \"iris_depth_camera\"}' 2>/dev/null | grep -q success"
+    "rosservice call /gazebo/get_model_state '{model_name: \"iris\"}' 2>/dev/null | grep -q success || rosservice call /gazebo/get_model_state '{model_name: \"iris_depth_camera\"}' 2>/dev/null | grep -q success"
 check "Car (diff) spawned" \
     "rosservice call /gazebo/get_model_state '{model_name: \"diff_car\"}' 2>/dev/null | grep -q success"
 

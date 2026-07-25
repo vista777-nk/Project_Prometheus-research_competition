@@ -32,7 +32,7 @@
 drone_car_mavlink:
   protocol: "udp"
   drone_ip: "127.0.0.1"
-  drone_port: 14550         # MAVLink 默认
+  drone_port: 14550         # PX4 默认 MAVLink 端口 (SITL: udp_gcs_port_local)
   car_ip: "127.0.0.1"
   car_port: 14551
   heartbeat_interval: 1.0   # seconds
@@ -250,6 +250,9 @@ import os
 import zlib
 from air_ground_interfaces.msg import SensorFusion, ServerCommand
 from sensor_msgs.msg import Image, LaserScan, Imu
+import base64
+import cv2
+from cv_bridge import CvBridge
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped
 import numpy as np
@@ -264,9 +267,14 @@ class EdgeServerBridge:
             os.path.expanduser("~/air_ground_sim_ws/src/com_bridge/config/network.yaml"))
         with open(config_path) as f:
             cfg = yaml.safe_load(f)["edge_server_tcp"]
+            self.network_cfg = yaml.safe_load(f)
 
         self.server_addr = (cfg["server_ip"], cfg["server_port"])
         self.reconnect_interval = cfg.get("reconnect_interval", 3.0)
+        self.throttle_cfg = self.network_cfg.get("throttle", {})
+
+        # CV bridge for image compression
+        self.cv_bridge = CvBridge()
 
         # Latest sensor data cache
         self.latest = {
@@ -277,6 +285,7 @@ class EdgeServerBridge:
             "ultrasonic": {},
             "drone_pose": None,
         }
+        self.last_image_time = 0.0  # throttle image encoding
 
         # Subscribers (car sensors)
         rospy.Subscriber("/car/odom", Odometry, self._cb("odom"), queue_size=5)
@@ -378,10 +387,27 @@ class EdgeServerBridge:
         if self.latest["scan"]:
             s = self.latest["scan"]
             ranges = s.ranges[::4]  # downsample 4:1
+            # JSON 不支持 inf: 用 -1.0 替代
             out["scan"] = {
                 "angle_min": s.angle_min, "angle_increment": s.angle_increment * 4,
-                "ranges": [r if not np.isinf(r) else -1.0 for r in ranges]
+                "ranges": [r if r > 0 and np.isfinite(r) else -1.0 for r in ranges]
             }
+
+        # OpenMV image → base64 JPEG (throttled to bandwidth limits)
+        if self.latest["image"]:
+            now = time.time()
+            max_freq = self.throttle_cfg.get("max_image_freq", 2)
+            if now - self.last_image_time >= 1.0 / max_freq:
+                self.last_image_time = now
+                try:
+                    # Convert ROS Image → OpenCV → JPEG → base64
+                    cv_img = self.cv_bridge.imgmsg_to_cv2(self.latest["image"], "bgr8")
+                    quality = self.throttle_cfg.get("image_quality", 50)
+                    _, jpeg = cv2.imencode(".jpg", cv_img,
+                                           [cv2.IMWRITE_JPEG_QUALITY, quality])
+                    out["image_jpeg_b64"] = base64.b64encode(jpeg.tobytes()).decode()
+                except Exception as e:
+                    rospy.logwarn(f"[EdgeServerBridge] Image encode failed: {e}")
 
         # Ultrasonic → distances
         out["ultrasonic"] = {}

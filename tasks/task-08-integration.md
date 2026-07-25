@@ -10,11 +10,27 @@
 
 ---
 
-## 8.1 总入口 Launch 文件
+### 8.1 创建 air_ground_bringup 包（承载所有顶层 launch 文件）
 
-**文件：`~/air_ground_sim_ws/src/air_ground_sim.launch`**
+> P0-05 修复：launch 文件必须放在 catkin package 内，不能放 `src/` 根目录。
 
-（在工作空间 src 根目录下，作为总入口）
+```bash
+cd ~/air_ground_sim_ws/src
+catkin_create_pkg air_ground_bringup rospy std_msgs
+mkdir -p air_ground_bringup/launch
+```
+
+**package.xml** 需额外依赖：
+```xml
+<exec_depend>drone_bringup</exec_depend>
+<exec_depend>car_bringup</exec_depend>
+<exec_depend>com_bridge</exec_depend>
+<exec_depend>lab_server</exec_depend>
+```
+
+### 8.2 总入口 Launch 文件
+
+**文件：`~/air_ground_sim_ws/src/air_ground_bringup/launch/air_ground_sim.launch`**
 
 ```xml
 <?xml version="1.0"?>
@@ -57,9 +73,9 @@
 </launch>
 ```
 
-## 8.2 按需分场景 Launch
+### 8.3 按需分场景 Launch
 
-**文件：`~/air_ground_sim_ws/src/drone_only.launch`**
+**文件：`~/air_ground_sim_ws/src/air_ground_bringup/launch/drone_only.launch`**
 
 ```xml
 <?xml version="1.0"?>
@@ -74,7 +90,7 @@
 </launch>
 ```
 
-**文件：`~/air_ground_sim_ws/src/car_only.launch`**
+**文件：`~/air_ground_sim_ws/src/air_ground_bringup/launch/car_only.launch`**
 
 ```xml
 <?xml version="1.0"?>
@@ -90,7 +106,7 @@
 </launch>
 ```
 
-**文件：`~/air_ground_sim_ws/src/server_only.launch`**
+**文件：`~/air_ground_sim_ws/src/air_ground_bringup/launch/server_only.launch`**
 
 ```xml
 <?xml version="1.0"?>
@@ -105,15 +121,11 @@
 **文件：`~/air_ground_sim_ws/Makefile`**
 
 ```makefile
-# Air-Ground Simulation Makefile
-# Usage: make <target>
-
-WS = $(HOME)/air_ground_sim_ws
-SOURCE = source $(WS)/devel/setup.bash
-
+# Makefile targets: use bash -c to source workspace in each shell
 .PHONY: build clean test-drone test-car test-bridge test-all launch-drone launch-car launch-full help
 
-# ── Build ────────────────────────────────────────────
+WS = $(HOME)/air_ground_sim_ws
+
 build:
 	cd $(WS) && catkin build
 	@echo "Build complete. Run: source $(WS)/devel/setup.bash"
@@ -123,91 +135,69 @@ clean:
 
 rebuild: clean build
 
-# ── Test targets ──────────────────────────────────────
 test-drone:
-	$(SOURCE) && bash $(WS)/src/drone_bringup/scripts/test_drone.sh
+	bash -c "source $(WS)/devel/setup.bash && bash $(WS)/src/drone_bringup/scripts/test_drone.sh"
 
 test-car:
-	$(SOURCE) && bash $(WS)/src/car_bringup/scripts/test_diff.sh
+	bash -c "source $(WS)/devel/setup.bash && bash $(WS)/src/car_bringup/scripts/test_diff.sh"
 
 test-mecanum:
-	$(SOURCE) && bash $(WS)/src/car_bringup/scripts/test_mecanum.sh
+	bash -c "source $(WS)/devel/setup.bash && bash $(WS)/src/car_bringup/scripts/test_mecanum.sh"
 
 test-sensors:
-	$(SOURCE) && bash $(WS)/src/car_bringup/scripts/test_sensors.sh
+	bash -c "source $(WS)/devel/setup.bash && bash $(WS)/src/car_bringup/scripts/test_sensors.sh"
 
 test-bridge:
-	$(SOURCE) && bash $(WS)/src/com_bridge/scripts/test_bridge.sh
+	bash -c "source $(WS)/devel/setup.bash && bash $(WS)/src/com_bridge/scripts/test_bridge.sh"
 
 test-server:
-	$(SOURCE) && bash $(WS)/src/lab_server/scripts/test_server.sh
+	bash -c "source $(WS)/devel/setup.bash && bash $(WS)/src/lab_server/scripts/test_server.sh"
 
-test-all: test-drone test-car test-sensors test-bridge test-server
-	@echo "All tests complete."
+test-all:
+	bash -c "source $(WS)/devel/setup.bash && bash $(WS)/src/e2e_test.sh"
 
-# ── Launch targets ────────────────────────────────────
 launch-drone:
-	$(SOURCE) && roslaunch drone_only.launch gui:=false headless:=true
+	bash -c "source $(WS)/devel/setup.bash && roslaunch air_ground_bringup drone_only.launch gui:=false headless:=true"
 
 launch-car:
-	$(SOURCE) && roslaunch car_only.launch chassis:=diff gui:=false headless:=true
+	bash -c "source $(WS)/devel/setup.bash && roslaunch air_ground_bringup car_only.launch chassis:=diff gui:=false headless:=true"
 
 launch-car-mecanum:
-	$(SOURCE) && roslaunch car_only.launch chassis:=mecanum gui:=false headless:=true
+	bash -c "source $(WS)/devel/setup.bash && roslaunch air_ground_bringup car_only.launch chassis:=mecanum gui:=false headless:=true"
 
 launch-full:
-	$(SOURCE) && roslaunch air_ground_sim.launch chassis:=diff gui:=false headless:=true
+	bash -c "source $(WS)/devel/setup.bash && roslaunch air_ground_bringup air_ground_sim.launch chassis:=diff gui:=false headless:=true"
 
 launch-full-mecanum:
-	$(SOURCE) && roslaunch air_ground_sim.launch chassis:=mecanum gui:=false headless:=true
+	bash -c "source $(WS)/devel/setup.bash && roslaunch air_ground_bringup air_ground_sim.launch chassis:=mecanum gui:=false headless:=true"
 
-# ── Kill all simulation processes ─────────────────────
 kill:
-	-pkill -f "px4" 2>/dev/null
-	-pkill -f "gzserver" 2>/dev/null
-	-pkill -f "gzclient" 2>/dev/null
-	-pkill -f "roslaunch" 2>/dev/null
-	-pkill -f "rosmaster" 2>/dev/null
+	-pkill -f "px4" 2>/dev/null || true
+	-pkill -f "gzserver" 2>/dev/null || true
+	-pkill -f "gzclient" 2>/dev/null || true
+	-pkill -f "roslaunch" 2>/dev/null || true
+	-pkill -f "rosmaster" 2>/dev/null || true
 	@echo "All simulation processes killed."
 
-# ── Status ────────────────────────────────────────────
 status:
 	@echo "=== ROS Master ==="
-	@pgrep -f "rosmaster" >/dev/null && echo "  Running" || echo "  Not running"
+	@pgrep -f "rosmaster" >/dev/null 2>&1 && echo "  Running" || echo "  Not running"
 	@echo "=== Gazebo ==="
-	@pgrep -f "gzserver" >/dev/null && echo "  gzserver: Running" || echo "  gzserver: Not running"
+	@pgrep -f "gzserver" >/dev/null 2>&1 && echo "  gzserver: Running" || echo "  gzserver: Not running"
 	@echo "=== PX4 SITL ==="
-	@pgrep -f "px4" >/dev/null && echo "  PX4: Running" || echo "  PX4: Not running"
+	@pgrep -f "px4" >/dev/null 2>&1 && echo "  PX4: Running" || echo "  PX4: Not running"
 	@echo "=== Active ROS Nodes ==="
-	@$(SOURCE) && rosnode list 2>/dev/null || echo "  (rosmaster not running)"
+	@bash -c "source $(WS)/devel/setup.bash && rosnode list 2>/dev/null" || echo "  (rosmaster not running)"
 
-# ── Help ──────────────────────────────────────────────
 help:
 	@echo "Air-Ground Simulation Makefile"
 	@echo ""
-	@echo "Build:"
-	@echo "  make build          Build all packages"
-	@echo "  make clean          Clean build artifacts"
-	@echo ""
-	@echo "Test:"
-	@echo "  make test-drone     Test drone SITL"
-	@echo "  make test-car       Test diff chassis"
-	@echo "  make test-mecanum   Test mecanum chassis"
-	@echo "  make test-sensors   Test car sensors"
-	@echo "  make test-bridge    Test communication bridge"
-	@echo "  make test-server    Test server nodes"
-	@echo "  make test-all       Run all tests"
-	@echo ""
-	@echo "Launch:"
-	@echo "  make launch-drone           Drone only"
-	@echo "  make launch-car             Diff car only"
-	@echo "  make launch-car-mecanum     Mecanum car only"
-	@echo "  make launch-full            Full system (diff chassis)"
-	@echo "  make launch-full-mecanum    Full system (mecanum chassis)"
-	@echo ""
-	@echo "Utilities:"
-	@echo "  make kill           Kill all simulation processes"
-	@echo "  make status         Show simulation status"
+	@echo "  make build              Build all packages"
+	@echo "  make clean              Clean build artifacts"
+	@echo "  make test-<name>        Run specific test"
+	@echo "  make launch-<name>      Launch specific config"
+	@echo "  make kill               Kill all simulation processes"
+	@echo "  make status             Show simulation status"
 ```
 
 ## 8.4 `.gitignore`

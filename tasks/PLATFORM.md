@@ -209,16 +209,88 @@ roslaunch lab_server server.launch
 
 ---
 
-## 八、给贡献者的规范
+## 九、TF 树管理
 
-1. **代码风格**：Python 3.8+，PEP 8；ROS 节点用 `rospy`
-2. **注释语言**：英文变量名 + 中文模块 docstring
-3. **容错**：传感器断连时 `rospy.logwarn`，不 crash
-4. **轻量化**：仿真传感器频率 ≤ 30Hz，默认 headless
-5. **可配置**：所有参数从 `config/*.yaml` 读取
-6. **分层铁律**：Layer 4 不得 import `mavros` / `sensor_msgs/LaserScan` / `gazebo_msgs`
-7. **测试**：每个 package 含 `test_*.sh`；E2E 用 `e2e_test.sh`
+> （P3-01 补全）
+
+跨机器人的坐标系是实机部署的核心挑战。必须定义统一的 TF 树，避免"仿真能跑，实机崩"。
+
+### 标准 TF 层级
+
+```
+map                    ← 全局固定坐标系 (GPS/地标融合)
+  └── odom             ← 里程计漂移补偿
+        └── base_link  ← 机器人本体
+              ├── sensor_mount
+              │     ├── lidar_link
+              │     ├── gimbal_pan_link → gimbal_tilt_link → openmv_camera_link
+              │     └── ultrasonic_*_link
+              └── depth_camera_link  ← 无人机深度相机
+```
+
+### 多机器人约定
+
+- 每台机器人有独立的 `odom` frame（prefixed: `drone/odom`, `car/odom`）
+- 所有机器人共享一个全局 `map` frame
+- `map` 的原点和方向由以下之一确定：
+  - 仿真：Gazebo 原点
+  - 实机：RTK-GPS 基准站 或 AprilTag 地面标记
+
+### 实机部署的 TF 发布
+
+| 节点 | 发布的 transform |
+|------|-----------------|
+| MAVROS (无人机) | `map → drone/odom → drone/base_link` |
+| robot_localization (车机) | `map → car/odom → car/base_link` |
+| AprilTag 检测 (服务器) | 校正 `drone/base_link → map` 漂移 |
 
 ---
 
-*版本: v4.0 · 日期: 2026-07-25 · 作者: DeepSeek (经 ChatGPT 、 混元3 、 豆包审阅后重构) ; 与 ICD.md 配套*
+## 十、时钟同步方案
+
+> （P3-02 补全）
+
+仿真中所有节点共享同一 ROS 主机，`sim_time` 自动同步。**实机上三台设备（无人机树莓派、车机树莓派、实验室服务器）各有时钟**，不同步会导致 TF 查询失败。
+
+### 建议方案
+
+| 环境 | 方案 | 精度 |
+|------|------|:---:|
+| 仿真 | `use_sim_time:=true`（rosmaster 统一管理） | 毫秒 |
+| 实机局域网 | chrony（NTP），车机作为 NTP server，无人机/服务器 sync | 毫秒 |
+| 实机户外 | PTP（IEEE 1588），需要硬件时间戳支持 | 微秒 |
+
+### 验证方法
+
+```bash
+# 检查各机器与服务器的时钟偏差
+ssh drone-pi  "chronyc tracking | grep 'System time'"
+ssh car-pi    "chronyc tracking | grep 'System time'"
+# 偏差应 < 10ms
+```
+
+---
+
+## 十一、已知架构债务
+
+> （P2-07 记录）本清单来自 2026-07-25 subagent 集群执行前审阅，记录已知但暂不修复的架构问题。
+
+| # | 问题 | 状态 | 计划修复 |
+|---|------|:---:|---------|
+| AD-01 | 双 Gazebo 部署（资源翻倍 + 服务冲突） | ⚠️ | Task-08 实施时改为单世界 |
+| AD-02 | 仿真-实机 MAVLink 桥断层（P1-11） | ⚠️ | 实机部署阶段重写 `drone_car_bridge` |
+| AD-03 | EQA/VLM 图像带宽矛盾：3DR 24KB/s vs JPEG 10KB+ | ⚠️ | ROADMAP 已记录；VLM 必须走 WiFi/4G |
+| AD-04 | TCP JSON 传输不适合生产环境图像流 | ⚠️ | v2 迁移到 ROS2/DDS 或 ZeroMQ |
+| AD-05 | Coordinator 既做决策又做翻译（违反分层） | ⚠️ | 引入 Edge 端 `mission_executor` 节点 |
+| AD-06 | World Model 可能成为单点性能瓶颈 | ⚠️ | 高频数据走 topic bus，低频查询走 service |
+| AD-07 | World State 暂无 TF 广播 (只发布 topic 不发布 transform) | ⚠️ | 与 §九 TF 树一起规划 |
+| AD-08 | 麦轮 low-friction 近似：Gazebo 不仿真辊子物理 | ℹ️ 设计取舍 | 仿真仅验证控制逻辑；横向运动精度以实机为准 |
+| AD-09 | 底盘检测逻辑依赖 `rostopic list` 探测 (P2-06) | ℹ️ | 仿真可用；实机改用硬件引脚（MSPM0 GPIO）检测 |
+| AD-10 | PX4 SITL airframe ID 4032 尚未在 PX4 官方固件注册 | ℹ️ | 仅影响实机固件烧录，仿真不影响 |
+| AD-11 | `setup_all.sh` 中 PX4 编译参数需在目标机上验证 | ℹ️ | 首次安装时验证；若失败，改用手动步骤 |
+| AD-12 | GPS HOME 坐标硬编码 (P3-06) | ℹ️ | 实机部署时从启动脚本参数读取 |
+| AD-13 | 缺少 CI/CD、性能监控、代码风格强制 | ℹ️ | 项目稳定后引入 |
+
+---
+
+*版本: v5.0 · 日期: 2026-07-25 · 作者: DeepSeek (经 ChatGPT、混元3、豆包、执行端subagent集群审阅后重构) · 与 ICD.md 配套*

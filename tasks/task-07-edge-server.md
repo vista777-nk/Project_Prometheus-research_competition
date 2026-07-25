@@ -198,7 +198,8 @@ class CarPreprocessor:
             obs.linear_acceleration = self.latest_imu.linear_acceleration
             modalities.append("imu")
 
-        ultrasonic_distances = [0.0, 0.0, 0.0, 0.0]
+        # 超声波默认值 4.0m (max range)，表示无遮挡。不能用 0.0 否则避障会认为四面是墙。
+        ultrasonic_distances = [4.0, 4.0, 4.0, 4.0]
         for i, d in enumerate(["front", "rear", "left", "right"]):
             if d in self.latest_ultrasonic and self.latest_ultrasonic[d]:
                 s = self.latest_ultrasonic[d]
@@ -254,6 +255,7 @@ import yaml
 import os
 from air_ground_interfaces.msg import Observation, RobotState
 from geometry_msgs.msg import Vector3, Pose, Twist
+import math
 
 
 class TCPServer:
@@ -310,6 +312,10 @@ class TCPServer:
                 if len(header) < 4:
                     break
                 length = struct.unpack("!I", header)[0]
+                # 安全上限: 拒绝 &gt; 10MB 的 payload (防 OOM)
+                if length > 10 * 1024 * 1024:
+                    rospy.logerr(f"[TCP Server] Oversized payload ({length} bytes), disconnecting")
+                    break
                 data = b""
                 while len(data) < length:
                     chunk = sock.recv(length - len(data))
@@ -346,7 +352,10 @@ class TCPServer:
 
         if "scan" in data:
             s = data["scan"]
-            obs.lidar_ranges = [float(r) if r > 0 else float('inf') for r in s.get("ranges", [])]
+            # JSON 不支持 inf/NaN: 用 -1.0 作为 sentinel
+            def _sanitize(v):
+                return float(v) if v > 0 and math.isfinite(v) else -1.0
+            obs.lidar_ranges = [_sanitize(r) for r in s.get("ranges", [])]
             obs.lidar_angle_min = s.get("angle_min", 0)
             obs.lidar_angle_increment = s.get("angle_increment", 0)
             modalities.append("lidar_2d")
@@ -434,6 +443,7 @@ from air_ground_interfaces.msg import (
     Observation, RobotState, WorldState, SemanticLandmark
 )
 from air_ground_interfaces.srv import QueryWorldState, QueryWorldStateResponse
+from nav_msgs.msg import OccupancyGrid
 import threading
 
 
@@ -559,7 +569,7 @@ Observation + RobotState, 计算后 TELL World Model 更新 map / pose.
 后续: 接入 RTAB-Map / SLAM Toolbox 等真实 SLAM 算法.
 """
 import rospy
-from air_ground_interfaces.msg import Observation, RobotState
+from air_ground_interfaces.msg import Observation, RobotState, WorldState
 from nav_msgs.msg import OccupancyGrid, Odometry
 from geometry_msgs.msg import PoseWithCovarianceStamped
 
@@ -744,9 +754,9 @@ class Coordinator:
         # 接收 Mission (from EQA / Planner / external)
         rospy.Subscriber("/server/eqa/mission", Mission, self.mission_cb, queue_size=5)
 
-        # TELL Edge: 下发执行指令
-        self.drone_setpoint_pub = rospy.Publisher("/drone/mission_setpoint", PoseStamped, queue_size=5)
-        self.car_cmd_pub = rospy.Publisher("/car/cmd_vel", Twist, queue_size=5)
+        # TELL Edge: 下发执行指令 (使用 MAVROS / ros_control 期望的话题名)
+        self.drone_setpoint_pub = rospy.Publisher("/mavros/setpoint_position/local", PoseStamped, queue_size=5)
+        self.car_cmd_pub = rospy.Publisher("/car/diff_drive_controller/cmd_vel", Twist, queue_size=5)
 
         # 内部状态
         self.world_state = None

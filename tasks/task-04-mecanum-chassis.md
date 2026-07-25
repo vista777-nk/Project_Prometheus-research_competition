@@ -137,10 +137,12 @@ class MecanumController:
         w_rl = (vx + vy - omega * (self.Lx + self.Ly)) / self.R
         w_rr = (vx - vy + omega * (self.Lx + self.Ly)) / self.R
 
-        # 限幅
+        # 限幅 (逐个 clamp，不能用 for 循环——循环变量 w 是局部副本)
         max_w = self.max_rpm * 2 * math.pi / 60.0
-        for w in [w_fl, w_fr, w_rl, w_rr]:
-            w = max(-max_w, min(max_w, w))
+        w_fl = max(-max_w, min(max_w, w_fl))
+        w_fr = max(-max_w, min(max_w, w_fr))
+        w_rl = max(-max_w, min(max_w, w_rl))
+        w_rr = max(-max_w, min(max_w, w_rr))
 
         self.last_cmd_time = rospy.Time.now()
 
@@ -341,6 +343,8 @@ class ChassisSwapper:
                     rospy.loginfo(f"Deleted {model_name}")
                 except:
                     pass
+            # Give Gazebo time to fully remove the model (delete_model is async)
+            rospy.sleep(0.5)
 
             # 3-4. Generate and spawn new URDF
             urdf_path = os.path.join(

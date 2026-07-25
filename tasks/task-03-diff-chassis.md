@@ -171,10 +171,12 @@
       </geometry>
     </collision>
   </link>
-  <joint name="front_caster_joint" type="fixed">
+  <!-- 前万向轮: continuous joint 绕 Z 自转，yaw 旋转错开 90° 形成被动轮 -->
+  <joint name="front_caster_joint" type="continuous">
     <parent link="base_link"/>
     <child link="front_caster"/>
-    <origin xyz="0.11 0 0.012" rpy="0 0 0"/>
+    <origin xyz="0.11 0 0.012" rpy="0 1.5708 0"/>
+    <axis xyz="0 0 1"/>
   </joint>
 
   <!-- ============ 后万向轮 ============ -->
@@ -195,10 +197,11 @@
       </geometry>
     </collision>
   </link>
-  <joint name="rear_caster_joint" type="fixed">
+  <joint name="rear_caster_joint" type="continuous">
     <parent link="base_link"/>
     <child link="rear_caster"/>
-    <origin xyz="-0.11 0 0.012" rpy="0 0 0"/>
+    <origin xyz="-0.11 0 0.012" rpy="0 1.5708 0"/>
+    <axis xyz="0 0 1"/>
   </joint>
 
 </robot>
@@ -282,6 +285,10 @@ car:
   <node name="spawn_car" pkg="gazebo_ros" type="spawn_model"
         args="-param robot_description -urdf -model diff_car
               -x $(arg x) -y $(arg y) -z $(arg z)" output="screen"/>
+
+  <!-- 等 Gazebo 完全加载模型（约 2s）再启动控制器 -->
+  <node pkg="rostopic" type="rostopic" name="wait_for_robot"
+        args="echo /car/joint_states -n 1" output="log"/>
 
   <!-- 加载 ros_control 配置 -->
   <rosparam file="$(find car_bringup)/config/diff_chassis_control.yaml" command="load"/>

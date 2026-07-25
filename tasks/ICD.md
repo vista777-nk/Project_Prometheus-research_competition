@@ -158,7 +158,7 @@ string mission_id            # UUID
 string robot_id              # 目标机器人
 
 # 任务类型
-string type                  # "navigate" | "search" | "inspect" | "return_home" | "follow"
+string type                  # "navigate" | "search" | "inspect" | "return_home" | "follow" | "explore" | "takeoff" | "land"
 
 # 任务参数 (按 type 解释)
 geometry_msgs/Pose target_pose        # navigate/search 的目标
@@ -338,4 +338,4 @@ air_ground_interfaces/
 
 ---
 
-*版本: v4.0 · 日期: 2026-07-25 · 作者: DeepSeek (经 ChatGPT 、 混元3 、 豆包审阅后重构)*
+*版本: v5.0 · 日期: 2026-07-25 · 作者: DeepSeek (经 ChatGPT 、 混元3 、 豆包 、 执行端subagent集群审阅后重构)*

@@ -355,8 +355,10 @@ from sensor_msgs.msg import JointState
 class GimbalController:
     def __init__(self):
         rospy.init_node("gimbal_controller")
-        self.pan_pub = rospy.Publisher("/car/gimbal_pan_joint/command", Float64, queue_size=10)
-        self.tilt_pub = rospy.Publisher("/car/gimbal_tilt_joint/command", Float64, queue_size=10)
+        # ros_control position_controllers/JointPositionController 期望的话题名:
+        #   /car/gimbal_pan_controller/command  (非 /car/gimbal_pan_joint/command)
+        self.pan_pub = rospy.Publisher("/car/gimbal_pan_controller/command", Float64, queue_size=10)
+        self.tilt_pub = rospy.Publisher("/car/gimbal_tilt_controller/command", Float64, queue_size=10)
 
         self.sub_pan = rospy.Subscriber("/car/gimbal/pan/command", Float64, self.pan_cb)
         self.sub_tilt = rospy.Subscriber("/car/gimbal/tilt/command", Float64, self.tilt_cb)
