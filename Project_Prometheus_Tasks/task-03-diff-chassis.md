@@ -7,7 +7,7 @@
 
 ## 目标
 
-�?Gazebo 中创建电赛规格的差速驱动小车模型（两轮差�?+ 编码�?+ 520 电机模拟），使用 `ros_control` 驱动，支�?`/cmd_vel` 控制�?
+在 Gazebo 中创建电赛规格的差速驱动小车模型（两轮差速 + 编码器 + 520 电机模拟），使用 `ros_control` 驱动，支持 `/cmd_vel` 控制。
 
 ---
 
@@ -20,7 +20,7 @@
 <robot name="car_base" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
   <!-- 车体常量 -->
-  <xacro:property name="body_length" value="0.25"/>    <!-- 25cm，电赛规�?-->
+  <xacro:property name="body_length" value="0.25"/>    <!-- 25cm，电赛规格 -->
   <xacro:property name="body_width" value="0.20"/>
   <xacro:property name="body_height" value="0.08"/>
   <xacro:property name="wheel_radius" value="0.033"/>   <!-- 520 电机标准轮径 ~65mm -->
@@ -57,7 +57,7 @@
     </collision>
   </link>
 
-  <!-- ============ 传感器安装支架（车体上方 5cm�?============ -->
+  <!-- ============ 传感器安装支架（车体上方 5cm） ============ -->
   <link name="sensor_mount">
     <inertial>
       <mass value="0.1"/>
@@ -84,12 +84,12 @@
     </plugin>
   </gazebo>
 
-  <!-- 差速驱�? �?ros_control �?diff_drive_controller 统一管理 -->
-  <!-- (不再使用 libgazebo_ros_diff_drive.so，避免双控制器冲�? -->
+  <!-- 差速驱动: 由 ros_control 的 diff_drive_controller 统一管理 -->
+  <!-- (不再使用 libgazebo_ros_diff_drive.so，避免双控制器冲突) -->
 </robot>
 ```
 
-## 3.2 差速底盘宏（含左右驱动�?+ 万向轮）
+## 3.2 差速底盘宏（含左右驱动轮 + 万向轮）
 
 **文件：`~/air_ground_sim_ws/src/car_bringup/urdf/diff_chassis.urdf.xacro`**
 
@@ -153,7 +153,7 @@
     <axis xyz="0 0 1"/>
   </joint>
 
-  <!-- ============ 前万向轮（caster�?============ -->
+  <!-- ============ 前万向轮（caster） ============ -->
   <link name="front_caster">
     <inertial>
       <mass value="0.01"/>
@@ -171,7 +171,7 @@
       </geometry>
     </collision>
   </link>
-  <!-- 前万向轮: continuous joint �?Z 自转，yaw 旋转错开 90° 形成被动�?-->
+  <!-- 前万向轮: continuous joint 绕 Z 自转，yaw 旋转错开 90° 形成被动轮 -->
   <joint name="front_caster_joint" type="continuous">
     <parent link="base_link"/>
     <child link="front_caster"/>
@@ -214,7 +214,7 @@
 ```yaml
 # Diff chassis ros_control configuration
 car:
-  # 关节状态发�?
+  # 关节状态发布
   joint_state_controller:
     type: joint_state_controller/JointStateController
     publish_rate: 30
@@ -268,7 +268,7 @@ car:
   <arg name="y" default="0.0"/>
   <arg name="z" default="0.1"/>
 
-  <!-- Gazebo 空世�?-->
+  <!-- Gazebo 空世界 -->
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(arg world)"/>
     <arg name="gui" value="$(arg gui)"/>
@@ -286,18 +286,18 @@ car:
         args="-param robot_description -urdf -model diff_car
               -x $(arg x) -y $(arg y) -z $(arg z)" output="screen"/>
 
-  <!-- �?Gazebo 完全加载模型（约 2s）再启动控制�?-->
+  <!-- 等 Gazebo 完全加载模型（约 2s）再启动控制器 -->
   <node pkg="rostopic" type="rostopic" name="wait_for_robot"
         args="echo /car/joint_states -n 1" output="log"/>
 
   <!-- 加载 ros_control 配置 -->
   <rosparam file="$(find car_bringup)/config/diff_chassis_control.yaml" command="load"/>
 
-  <!-- 启动控制�?-->
+  <!-- 启动控制器 -->
   <node name="controller_spawner" pkg="controller_manager" type="spawner"
         args="joint_state_controller diff_drive_controller" output="screen"/>
 
-  <!-- 键盘遥控（调试用�?-->
+  <!-- 键盘遥控（调试用） -->
   <node name="teleop" pkg="teleop_twist_keyboard" type="teleop_twist_keyboard.py"
         output="screen" launch-prefix="xterm -e" if="$(arg gui)"/>
 </launch>
@@ -308,14 +308,14 @@ car:
 **文件：`~/air_ground_sim_ws/src/car_bringup/config/chassis_params.yaml`**
 
 ```yaml
-# 底盘共通参�?
+# 底盘共通参数
 diff_chassis:
   type: "differential_drive"
   track_width: 0.18       # m, 轮距
   wheel_radius: 0.033     # m
   max_linear_speed: 1.0   # m/s
   max_angular_speed: 3.0  # rad/s
-  encoder_resolution: 11  # 520 电机编码�? 11 PPR × 减速比 (实际需 ×4 正交)
+  encoder_resolution: 11  # 520 电机编码器: 11 PPR × 减速比 (实际需 ×4 正交)
 
 mecanum_chassis:
   type: "mecanum"
@@ -325,9 +325,9 @@ mecanum_chassis:
   max_linear_speed: 0.8
   max_angular_speed: 2.0
 
-# 底盘检测引脚（模拟 STM32 检测当前安装的底盘类型�?
+# 底盘检测引脚（模拟 STM32 检测当前安装的底盘类型）
 chassis_detect:
-  diff_pin: 1    # GPIO 拉高 = 差速底盘在�?
+  diff_pin: 1    # GPIO 拉高 = 差速底盘在位
   mecanum_pin: 0 # GPIO 拉高 = 麦轮底盘在位
 ```
 
@@ -376,14 +376,14 @@ install(DIRECTORY worlds/
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/worlds)
 ```
 
-并创建空世界�?
+并创建空世界：
 ```bash
 cp ~/air_ground_sim_ws/src/drone_bringup/worlds/empty.world ~/air_ground_sim_ws/src/car_bringup/worlds/empty.world
 ```
 
 ## 交付产物
 
-1. `roslaunch air_ground_car_bringup car_diff.launch` 能启动差速小�?
+1. `roslaunch car_bringup car_diff.launch` 能启动差速小车
 2. `/car/cmd_vel` 可控制小车前进后退转弯
-3. `/car/odom` 发布里程计数�?
+3. `/car/odom` 发布里程计数据
 4. `test_diff.sh` 全部 PASS

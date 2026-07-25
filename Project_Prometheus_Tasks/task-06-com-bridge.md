@@ -10,14 +10,14 @@
 建立三条通信链路：
 
 ```
-无人�?──MAVLink(UDP)──�?车机 ──TCP──�?服务�?
-   �?                      �?             �?
-   └────MAVLink(UDP)───────�?             �?
-                                          �?
-                                       车机 ◀──TCP── 服务�?
+无人机 ──MAVLink(UDP)──▶ 车机 ──TCP──▶ 服务器
+   ▲                       │              │
+   └────MAVLink(UDP)───────┘              │
+                                          ▼
+                                       车机 ◀──TCP── 服务器
 ```
 
-在仿真中所有通信�?`localhost`，通过不同端口区分�?
+在仿真中所有通信走 `localhost`，通过不同端口区分。
 
 ---
 
@@ -49,7 +49,7 @@ throttle:
   enable: true
   max_bandwidth_bytes_per_sec: 24000   # 3DR SiK 典型带宽 ~24KB/s
   image_quality: 50                    # JPEG compression 1-100
-  max_image_freq: 2                    # Hz (图像最大发送频�?
+  max_image_freq: 2                    # Hz (图像最大发送频率)
 ```
 
 ## 6.2 无人机↔车 MAVLink 桥
@@ -59,7 +59,7 @@ throttle:
 ```python
 #!/usr/bin/env python3
 """
-MAVLink Bridge: Drone �?Car over simulated 3DR radio (UDP).
+MAVLink Bridge: Drone ↔ Car over simulated 3DR radio (UDP).
 
 This node runs on the car edge and:
 1. Listens for MAVLink heartbeat/telemetry from drone via UDP
@@ -236,8 +236,8 @@ chmod +x ~/air_ground_sim_ws/src/com_bridge/scripts/drone_car_bridge.py
 Edge-Server TCP Bridge.
 
 Runs on car edge node. Responsibilities:
-1. Collect sensor+state data �?serialize as JSON �?send to server via TCP
-2. Receive ServerCommand from server �?publish to local ROS topics
+1. Collect sensor+state data → serialize as JSON → send to server via TCP
+2. Receive ServerCommand from server → publish to local ROS topics
 """
 import rospy
 import socket
@@ -360,7 +360,7 @@ class EdgeServerBridge:
         """Serialize latest sensor data to lightweight JSON dict."""
         out = {"timestamp": rospy.Time.now().to_sec(), "source": "car"}
 
-        # Odometry �?pose
+        # Odometry → pose
         if self.latest["odom"]:
             o = self.latest["odom"]
             out["pose"] = {
@@ -373,7 +373,7 @@ class EdgeServerBridge:
                 "vx": o.twist.twist.linear.x, "vz": o.twist.twist.angular.z
             }
 
-        # IMU �?orientation + angular velocity
+        # IMU → orientation + angular velocity
         if self.latest["imu"]:
             i = self.latest["imu"]
             out["imu"] = {
@@ -383,24 +383,24 @@ class EdgeServerBridge:
                 "az": i.linear_acceleration.z
             }
 
-        # LiDAR �?compressed range array (pick every 4th sample for bandwidth)
+        # LiDAR → compressed range array (pick every 4th sample for bandwidth)
         if self.latest["scan"]:
             s = self.latest["scan"]
             ranges = s.ranges[::4]  # downsample 4:1
-            # JSON 不支�?inf: �?-1.0 替代
+            # JSON 不支持 inf: 用 -1.0 替代
             out["scan"] = {
                 "angle_min": s.angle_min, "angle_increment": s.angle_increment * 4,
                 "ranges": [r if r > 0 and np.isfinite(r) else -1.0 for r in ranges]
             }
 
-        # OpenMV image �?base64 JPEG (throttled to bandwidth limits)
+        # OpenMV image → base64 JPEG (throttled to bandwidth limits)
         if self.latest["image"]:
             now = time.time()
             max_freq = self.throttle_cfg.get("max_image_freq", 2)
             if now - self.last_image_time >= 1.0 / max_freq:
                 self.last_image_time = now
                 try:
-                    # Convert ROS Image �?OpenCV �?JPEG �?base64
+                    # Convert ROS Image → OpenCV → JPEG → base64
                     cv_img = self.cv_bridge.imgmsg_to_cv2(self.latest["image"], "bgr8")
                     quality = self.throttle_cfg.get("image_quality", 50)
                     _, jpeg = cv2.imencode(".jpg", cv_img,
@@ -409,7 +409,7 @@ class EdgeServerBridge:
                 except Exception as e:
                     rospy.logwarn(f"[EdgeServerBridge] Image encode failed: {e}")
 
-        # Ultrasonic �?distances
+        # Ultrasonic → distances
         out["ultrasonic"] = {}
         for d, msg in self.latest["ultrasonic"].items():
             if msg and msg.ranges:
@@ -558,6 +558,6 @@ install(DIRECTORY launch config scripts
 
 ## 交付产物
 
-1. `drone_car_bridge.py` 可接收无人机 MAVLink 心跳并发�?`/drone/heartbeat`
-2. `edge_server_bridge.py` 可正常启动（连接服务器可能显�?retrying，这是预期的——服务器�?Task-07 实现�?
-3. `test_bridge.sh` 前两�?PASS，第三项至少确认 edge_server_bridge 节点在运�?
+1. `drone_car_bridge.py` 可接收无人机 MAVLink 心跳并发布 `/drone/heartbeat`
+2. `edge_server_bridge.py` 可正常启动（连接服务器可能显示 retrying，这是预期的——服务器在 Task-07 实现）
+3. `test_bridge.sh` 前两项 PASS，第三项至少确认 edge_server_bridge 节点在运行

@@ -6,13 +6,13 @@
 
 ## 目标
 
-提供一键启动整个空地联合仿真系统的 Launch 文件和便�?Makefile�?
+提供一键启动整个空地联合仿真系统的 Launch 文件和便捷 Makefile。
 
 ---
 
-### 8.1 创建 air_ground_bringup 包（承载所有顶�?launch 文件�?
+### 8.1 创建 air_ground_bringup 包（承载所有顶层 launch 文件）
 
-> P0-05 修复：launch 文件必须放在 catkin package 内，不能�?`src/` 根目录�?
+> P0-05 修复：launch 文件必须放在 catkin package 内，不能放 `src/` 根目录。
 
 ```bash
 cd ~/air_ground_sim_ws/src
@@ -20,7 +20,7 @@ catkin_create_pkg air_ground_bringup rospy std_msgs
 mkdir -p air_ground_bringup/launch
 ```
 
-**package.xml** 需额外依赖�?
+**package.xml** 需额外依赖：
 ```xml
 <exec_depend>drone_bringup</exec_depend>
 <exec_depend>car_bringup</exec_depend>
@@ -275,7 +275,7 @@ chmod +x ~/air_ground_sim_ws/setup_all.sh
 
 ## 8.6 更新 `package.xml` 补全依赖
 
-确认所有包�?`package.xml` 都已包含所需 `<exec_depend>`�?
+确认所有包的 `package.xml` 都已包含所需 `<exec_depend>`：
 
 **`com_bridge/package.xml`** 应包含：
 ```xml

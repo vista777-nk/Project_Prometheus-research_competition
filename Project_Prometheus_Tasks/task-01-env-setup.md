@@ -58,13 +58,13 @@ mkdir -p car_bringup/launch car_bringup/config car_bringup/scripts car_bringup/u
 mkdir -p com_bridge/launch com_bridge/config com_bridge/scripts
 mkdir -p lab_server/launch lab_server/config lab_server/scripts
 
-# 创建每个包的 package.xml �?CMakeLists.txt（Python 包）
-for pkg in air_ground_interfaces air_ground_drone_bringup air_ground_car_bringup air_ground_com_bridge air_ground_lab_server; do
+# 创建每个包的 package.xml 和 CMakeLists.txt（Python 包）
+for pkg in air_ground_interfaces drone_bringup car_bringup com_bridge lab_server; do
   mkdir -p ~/air_ground_sim_ws/src/$pkg
 done
 ```
 
-### 1.4 创建 `air_ground_interfaces` �?自定义消息包（需要先编译�?
+### 1.4 创建 `air_ground_interfaces` — 自定义消息包（需要先编译）
 
 **文件：`air_ground_interfaces/package.xml`**
 ```xml
@@ -161,7 +161,7 @@ Header header
 string robot_id            # "drone" | "car"
 string[] modalities        # present modalities: ["rgb","depth","lidar_2d","ultrasonic","imu"]
 
-# Images (optional �?only when modality listed)
+# Images (optional — only when modality listed)
 sensor_msgs/CompressedImage rgb
 sensor_msgs/Image depth
 
@@ -221,7 +221,7 @@ time last_observed
 
 **文件：`air_ground_interfaces/msg/Mission.msg`**
 ```
-# Server �?Edge: high-level task (WHAT, not HOW) (ICD §�?1)
+# Server → Edge: high-level task (WHAT, not HOW) (ICD §三.1)
 Header header
 string mission_id            # UUID
 string robot_id
@@ -238,7 +238,7 @@ string query_id
 
 **文件：`air_ground_interfaces/msg/MissionStatus.msg`**
 ```
-# Edge �?Server: mission execution status (ICD §�?2)
+# Edge → Server: mission execution status (ICD §三.2)
 Header header
 string mission_id
 string status                # "accepted" | "executing" | "completed" | "failed" | "aborted"
@@ -248,7 +248,7 @@ float32 progress             # 0.0 ~ 1.0
 
 **文件：`air_ground_interfaces/msg/Capability.msg`**
 ```
-# Edge �?Server: robot capability self-description (ICD §�?3)
+# Edge → Server: robot capability self-description (ICD §三.3)
 Header header
 string robot_id
 
@@ -270,7 +270,7 @@ bool has_gripper
 
 **文件：`air_ground_interfaces/srv/QueryWorldState.srv`**
 ```
-# ASK WorldModel: synchronous query (ICD §�?2)
+# ASK WorldModel: synchronous query (ICD §四.2)
 string query_type            # "nearest_landmark" | "path_to" | "visibility_from"
 string[] args
 ---
@@ -284,14 +284,14 @@ bool found
 
 **文件：`air_ground_interfaces/action/Navigate.action`**
 ```
-# Long-running navigation task (ICD §�?
+# Long-running navigation task (ICD §六)
 geometry_msgs/Pose target_pose
 float32 target_speed
 ---
 float32 progress             # 0.0 ~ 1.0
 geometry_msgs/Pose current_pose
 ---
-# (empty �?cancellation not needed for placeholder)
+# (empty — cancellation not needed for placeholder)
 ```
 
 ---
@@ -344,7 +344,7 @@ string message
 
 ### 1.5 创建其他包的 `package.xml` 和 `CMakeLists.txt`
 
-**共同模板 �?�?`air_ground_drone_bringup/package.xml` 为例（其余类似）**�?
+**共同模板 — 以 `drone_bringup/package.xml` 为例（其余类似）**：
 
 ```xml
 <?xml version="1.0"?>
@@ -365,7 +365,7 @@ string message
 </package>
 ```
 
-**共同模板 �?�?`air_ground_drone_bringup/CMakeLists.txt` 为例**�?
+**共同模板 — 以 `drone_bringup/CMakeLists.txt` 为例**：
 
 ```cmake
 cmake_minimum_required(VERSION 3.0.2)
@@ -379,10 +379,10 @@ install(DIRECTORY launch config scripts
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 ```
 
-你需要为 `air_ground_car_bringup`、`air_ground_com_bridge`、`air_ground_lab_server` 创建类似文件，依赖项按需调整�?
-- `air_ground_car_bringup`：额外依�?`gazebo_ros`、`ros_control`、`nav_msgs`
-- `air_ground_com_bridge`：额外依�?`mavros`
-- `air_ground_lab_server`：额外依�?`nav_msgs`
+你需要为 `car_bringup`、`com_bridge`、`lab_server` 创建类似文件，依赖项按需调整：
+- `car_bringup`：额外依赖 `gazebo_ros`、`ros_control`、`nav_msgs`
+- `com_bridge`：额外依赖 `mavros`
+- `lab_server`：额外依赖 `nav_msgs`
 
 ### 1.6 初始化编译
 
@@ -392,7 +392,7 @@ catkin build
 source devel/setup.bash
 echo "source ~/air_ground_sim_ws/devel/setup.bash" >> ~/.bashrc
 
-# 验证自定义消息编译成�?
+# 验证自定义消息编译成功
 rosmsg show air_ground_interfaces/SensorFusion
 rossrv show air_ground_interfaces/SwapChassis
 ```
@@ -426,6 +426,6 @@ echo "=== Done ==="
 
 ## 注意事项
 
-- 如果 `rosdep init` 失败，检�?`/etc/ros/rosdep/sources.list.d/20-default.list` 是否已存在，若存在则跳过 init
-- 华为轻薄本磁盘可能有限，如空间不足，可先不装 `ros-noetic-desktop-full`，改�?`ros-noetic-ros-base` + 手动安装 Gazebo 依赖
-- `catkin build` 首次编译需 3-5 分钟，务必等待完�?
+- 如果 `rosdep init` 失败，检查 `/etc/ros/rosdep/sources.list.d/20-default.list` 是否已存在，若存在则跳过 init
+- 华为轻薄本磁盘可能有限，如空间不足，可先不装 `ros-noetic-desktop-full`，改为 `ros-noetic-ros-base` + 手动安装 Gazebo 依赖
+- `catkin build` 首次编译需 3-5 分钟，务必等待完成
