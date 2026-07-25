@@ -18,7 +18,7 @@ sudo apt install curl -y
 curl -s https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | sudo apt-key add -
 sudo apt update
 
-# 安装 ROS Noetic Desktop-Full（含 Gazebo 9）
+# 安装 ROS Noetic Desktop-Full（含 Gazebo 11）
 sudo apt install ros-noetic-desktop-full -y
 
 # 安装常用工具

@@ -16,6 +16,6 @@
     4.小结：规划阶段正式完结。项目现在拥有完整的四份核心文献：哲学（why）→ 架构（what）→ 契约（how to connect）→ 路线（where to go），
           加上一套可执行的基础设施规范（CONVENTIONS.md）与安全策略（SECURITY.md）。ChatGPT 终审意见全部落地。
           今日所有提交均遵循 CONVENTIONS.md 规定的 Conventional Commits 1.0.0 + 简体中文规范。可以正式开始仿真搭建。
-    5.下一步：task-01-env-setup.md —— 在 Ubuntu 20.04 上搭建 ROS Noetic + Gazebo 9 + PX4 工具链 + 工作空间脚手架
+    5.下一步：task-01-env-setup.md —— 在 Ubuntu 20.04 上搭建 ROS Noetic + Gazebo 11 + PX4 工具链 + 工作空间脚手架
 
 ######
