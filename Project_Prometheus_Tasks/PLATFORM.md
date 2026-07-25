@@ -28,7 +28,7 @@
 | 组件 | 选择 | 理由 |
 |------|------|------|
 | ROS 发行版 | **Noetic** (Python 3.8+) | Ubuntu 20.04 原生支持 |
-| Gazebo | **Gazebo 9** | ROS Noetic 默认，与 PX4 SITL 兼容 |
+| Gazebo | **Gazebo Classic 11** | Focal/Noetic 官方源实际提供版本，与 PX4 SITL 兼容 |
 | 无人机仿真 | **PX4-Autopilot v1.14** SITL | 与 Pixhawk 6C 固件一致 |
 | 车机仿真 | `ros_control` + `diff_drive_controller` + 自定义麦轮控制器 | 轻量、可控 |
 | 通信协议 | MAVLink (via MAVROS)；TCP JSON (edge↔server) | Pixhawk 原生 + 自定义抽象层 |

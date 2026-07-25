@@ -7,7 +7,7 @@
 
 ## 目标
 
-在 Gazebo 9 中启动一架搭载深度相机、GPS 和 IMU 的无人机，通过 MAVROS 与 ROS 通信，可用 `rostopic` 查看传感器数据。
+在 Gazebo 11 中启动一架搭载深度相机、GPS 和 IMU 的无人机，通过 MAVROS 与 ROS 通信，可用 `rostopic` 查看传感器数据。
 
 ---
 

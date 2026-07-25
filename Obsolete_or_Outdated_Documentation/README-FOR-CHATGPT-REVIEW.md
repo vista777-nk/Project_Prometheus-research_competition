@@ -20,7 +20,7 @@
   + LiDAR + OpenMV + 超声波 + IMU              + 深度相机 + GPS + IMU
 ```
 
-- 无人机：PX4 SITL (v1.14) + Gazebo 9，搭载深度相机、GPS、IMU
+- 无人机：PX4 SITL (v1.14) + Gazebo 11，搭载深度相机、GPS、IMU
 - 车机：Gazebo 独立模型，搭载 OpenMV 云台相机、RPLIDAR A1、4×HC-SR04、ICM42688 IMU，底盘可在差速/麦轮间模块化切换
 - 通信：无人机↔车 3DR 数传直连 (MAVLink)；车↔服务器 TCP (模拟 WiFi)
 - 所有智能算法在服务器端运行（VLM、SLAM、EQA），边缘端仅做传感器数据采集、预处理和中继
@@ -34,7 +34,7 @@
 | 文件 | 内容 | 预计耗时 | 依赖 |
 |------|------|---------|------|
 | `00-OVERVIEW.md` | 总体架构说明、ROS 包结构、话题一览 | 阅读用 | — |
-| `task-01-env-setup.md` | ROS Noetic + Gazebo 9 + PX4 工具链 + 工作空间脚手架 + 自定义消息 | 1h | — |
+| `task-01-env-setup.md` | ROS Noetic + Gazebo 11 + PX4 工具链 + 工作空间脚手架 + 自定义消息 | 1h | — |
 | `task-02-drone-sitl.md` | PX4 SITL 无人机 + 深度相机/GPS/IMU Gazebo 插件 | 2h | task-01 |
 | `task-03-diff-chassis.md` | 差速底盘 URDF + ros_control + 编码器车轮 + 万向轮 | 2h | task-01 |
 | `task-04-mecanum-chassis.md` | 麦轮底盘 URDF + 自定义逆运动学控制器 + 底盘动态切换服务 | 2h | task-03 |

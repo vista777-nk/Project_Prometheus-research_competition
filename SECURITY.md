@@ -82,7 +82,7 @@
 
 ```
 PX4-Autopilot v1.14 → MAVLink v2 → MAVROS
-ROS Noetic → Gazebo 9
+ROS Noetic → Gazebo 11
 Python 3.8+ → PyTorch / Transformers (推理)
 ```
 
