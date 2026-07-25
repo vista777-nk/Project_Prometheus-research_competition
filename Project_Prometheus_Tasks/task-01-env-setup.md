@@ -47,22 +47,24 @@ pip3 install pymavlink pyserial
 ### 1.3 创建工作空间和目录结构
 
 ```bash
-mkdir -p ~/air_ground_sim_ws/src
-cd ~/air_ground_sim_ws/src
-catkin_init_workspace
+# 在 Git 仓库根目录执行：源码保存在仓库内，工作空间只保存构建产物
+cd /path/to/research_compitition
+mkdir -p src
+cd src
 
 # 创建包目录（后续 task 填充内容）
-mkdir -p air_ground_interfaces/msg air_ground_interfaces/srv
-mkdir -p air_ground_drone_bringup/launch air_ground_drone_bringup/config air_ground_drone_bringup/scripts
-mkdir -p air_ground_car_bringup/launch air_ground_car_bringup/config air_ground_car_bringup/scripts air_ground_car_bringup/urdf
+mkdir -p air_ground_interfaces/msg air_ground_interfaces/srv air_ground_interfaces/action
+mkdir -p air_ground_drone_bringup/{launch,config,scripts,worlds}
+mkdir -p air_ground_car_bringup/{launch,config,scripts,urdf,worlds}
 mkdir -p air_ground_com_bridge/launch air_ground_com_bridge/config air_ground_com_bridge/scripts
 mkdir -p air_ground_lab_server/launch air_ground_lab_server/config air_ground_lab_server/scripts
 
-# 创建每个包的 package.xml 和 CMakeLists.txt（Python 包）
-for pkg in air_ground_interfaces air_ground_drone_bringup air_ground_car_bringup air_ground_com_bridge air_ground_lab_server; do
-  mkdir -p ~/air_ground_sim_ws/src/$pkg
-done
+# 将外部 Catkin 工作空间映射到 Git 仓库源码
+mkdir -p ~/air_ground_sim_ws
+ln -s "$(pwd)" ~/air_ground_sim_ws/src
 ```
+
+若 `~/air_ground_sim_ws/src` 已存在，必须先确认其指向当前仓库的 `src/`；不要覆盖未知目录。
 
 ### 1.4 创建 `air_ground_interfaces` — 自定义消息包（需要先编译）
 
@@ -77,11 +79,13 @@ done
   <license>MIT</license>
   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>message_generation</build_depend>
+  <build_depend>actionlib_msgs</build_depend>
   <build_depend>std_msgs</build_depend>
   <build_depend>geometry_msgs</build_depend>
   <build_depend>sensor_msgs</build_depend>
   <build_depend>nav_msgs</build_depend>
   <exec_depend>message_runtime</exec_depend>
+  <exec_depend>actionlib_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
@@ -226,7 +230,7 @@ Header header
 string mission_id            # UUID
 string robot_id
 
-string type                  # "navigate" | "search" | "inspect" | "return_home" | "follow"
+string type                  # "navigate" | "search" | "inspect" | "return_home" | "follow" | "explore" | "takeoff" | "land"
 geometry_msgs/Pose target_pose
 string target_landmark_id
 float32 search_radius
@@ -252,7 +256,7 @@ float32 progress             # 0.0 ~ 1.0
 Header header
 string robot_id
 
-string locomotion_type       # "aerial" | "ground_wheeled"
+string locomotion_type       # "aerial" | "ground_wheeled" | "ground_tracked"
 float32 max_speed
 float32 max_endurance
 
@@ -329,8 +333,8 @@ Header header
 string chassis_type       # "diff" or "mecanum"
 bool is_connected
 float32 battery_voltage
-float32 motor_currents[4]
-float32 encoder_ticks[4]
+float32[4] motor_currents
+float32[4] encoder_ticks
 ```
 
 **文件：`air_ground_interfaces/srv/SwapChassis.srv`**
@@ -355,13 +359,15 @@ string message
   <maintainer email="user@example.com">user</maintainer>
   <license>MIT</license>
   <buildtool_depend>catkin</buildtool_depend>
-  <exec_depend>roscpp</exec_depend>
-  <exec_depend>rospy</exec_depend>
-  <exec_depend>std_msgs</exec_depend>
-  <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>sensor_msgs</exec_depend>
+  <!-- CMake find_package 中使用的组件必须同时是构建和运行依赖 -->
+  <depend>roscpp</depend>
+  <depend>rospy</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>mavros_msgs</depend>
+  <depend>air_ground_interfaces</depend>
   <exec_depend>mavros</exec_depend>
-  <exec_depend>air_ground_interfaces</exec_depend>
 </package>
 ```
 
@@ -373,56 +379,121 @@ project(air_ground_drone_bringup)
 find_package(catkin REQUIRED COMPONENTS
   roscpp rospy std_msgs geometry_msgs sensor_msgs air_ground_interfaces
 )
-catkin_package()
+catkin_package(
+  CATKIN_DEPENDS
+  roscpp rospy std_msgs geometry_msgs sensor_msgs air_ground_interfaces
+)
 include_directories(${catkin_INCLUDE_DIRS})
 install(DIRECTORY launch config scripts
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 ```
 
 你需要为 `air_ground_car_bringup`、`air_ground_com_bridge`、`air_ground_lab_server` 创建类似文件，依赖项按需调整：
-- `air_ground_car_bringup`：额外依赖 `gazebo_ros`、`ros_control`、`nav_msgs`
-- `air_ground_com_bridge`：额外依赖 `mavros`
-- `air_ground_lab_server`：额外依赖 `nav_msgs`
+- `air_ground_car_bringup`：额外依赖 `gazebo_ros`、`gazebo_ros_control`、`controller_manager`、`hardware_interface`、`nav_msgs`
+- `air_ground_com_bridge`：额外依赖 `mavros`、`mavros_msgs`、`nav_msgs`、`cv_bridge`
+- `air_ground_lab_server`：依赖 `air_ground_interfaces`、`geometry_msgs`、`nav_msgs`、`rospy`、`std_msgs`；不得依赖 `mavros`、`gazebo_msgs` 或 `sensor_msgs`
+
+> `ros_control` 是技术栈名称，不是可供 `find_package` 使用的 ROS package；应声明上面列出的实际 package。
 
 ### 1.6 初始化编译
 
 ```bash
+source /opt/ros/noetic/setup.bash
 cd ~/air_ground_sim_ws
+catkin init
+catkin config --extend /opt/ros/noetic \
+  --cmake-args -DPYTHON_EXECUTABLE=/usr/bin/python3
 catkin build
 source devel/setup.bash
-echo "source ~/air_ground_sim_ws/devel/setup.bash" >> ~/.bashrc
 
 # 验证自定义消息编译成功
-rosmsg show air_ground_interfaces/SensorFusion
+rosmsg show air_ground_interfaces/Observation
+rosmsg show air_ground_interfaces/WorldState
 rossrv show air_ground_interfaces/SwapChassis
+rosmsg show air_ground_interfaces/NavigateAction
 ```
+
+显式指定 `/usr/bin/python3`，避免已自动激活的 Conda Python 与 ROS Noetic 的系统 Python 3.8 冲突。确认环境稳定后，可按需将 ROS 与工作空间的 `setup.bash` 加入用户 Shell 配置；本任务不自动修改 `~/.bashrc`。
 
 ### 1.7 验证脚本
 
 创建 `~/air_ground_sim_ws/src/test_task01.sh`：
 
 ```bash
-#!/bin/bash
+#!/usr/bin/env bash
+
+set -o pipefail
+
+WORKSPACE_ROOT="${AIR_GROUND_WS:-${HOME}/air_ground_sim_ws}"
+FAILURES=0
+
+pass() {
+  printf '[PASS] %s\n' "$1"
+}
+
+fail() {
+  printf '[FAIL] %s\n' "$1"
+  FAILURES=$((FAILURES + 1))
+}
+
+check_ros_interface() {
+  local command_name="$1"
+  local interface_name="$2"
+
+  if "${command_name}" show "${interface_name}" >/dev/null 2>&1; then
+    pass "${interface_name}"
+  else
+    fail "${interface_name}"
+  fi
+}
+
 echo "=== Task-01 Verification ==="
 
-# 1. ROS 安装检查
-if [ -d "/opt/ros/noetic" ]; then echo "[PASS] ROS Noetic installed"; else echo "[FAIL] ROS not found"; exit 1; fi
+if [ -f /opt/ros/noetic/setup.bash ]; then
+  source /opt/ros/noetic/setup.bash
+  pass "ROS Noetic installed"
+else
+  fail "ROS Noetic setup not found"
+fi
 
-# 2. Gazebo 安装检查
-if command -v gzclient &> /dev/null; then echo "[PASS] Gazebo installed"; else echo "[FAIL] Gazebo not found"; fi
+if command -v gzserver >/dev/null 2>&1; then
+  pass "Gazebo server installed"
+else
+  fail "Gazebo server not found"
+fi
 
-# 3. 工作空间编译检查
-if [ -d "$HOME/air_ground_sim_ws/devel" ]; then echo "[PASS] Workspace built"; else echo "[FAIL] Workspace not built"; fi
+if [ -f "${WORKSPACE_ROOT}/devel/setup.bash" ]; then
+  source "${WORKSPACE_ROOT}/devel/setup.bash"
+  pass "Catkin workspace built"
+else
+  fail "Workspace setup missing"
+fi
 
-# 4. 自定义消息检查
-if rosmsg show air_ground_interfaces/SensorFusion &>/dev/null; then echo "[PASS] Custom messages OK"; else echo "[FAIL] Custom messages broken"; fi
+for message_name in Capability ChassisState Mission MissionStatus Observation \
+  RobotState SemanticLandmark SensorFusion ServerCommand WorldState; do
+  check_ros_interface rosmsg "air_ground_interfaces/${message_name}"
+done
 
-echo "=== Done ==="
+for service_name in QueryWorldState SwapChassis; do
+  check_ros_interface rossrv "air_ground_interfaces/${service_name}"
+done
+
+for action_message in NavigateAction NavigateGoal NavigateResult NavigateFeedback; do
+  check_ros_interface rosmsg "air_ground_interfaces/${action_message}"
+done
+
+if [ "${FAILURES}" -eq 0 ]; then
+  echo "=== Task-01 PASS ==="
+  exit 0
+fi
+
+echo "=== Task-01 FAIL: ${FAILURES} check(s) failed ==="
+exit 1
 ```
 
 ## 交付产物
 
-完成后 `catkin build` 应无错误，`rosmsg show air_ground_interfaces/*` 能列出三条消息和一条服务，`test_task01.sh` 全部 PASS。
+完成后 `catkin build` 应无错误；`air_ground_interfaces` 应生成 10 个声明消息、2 个服务和 `Navigate` Action 的派生消息；`test_task01.sh` 必须全部 PASS 并返回 0。
 
 ## 注意事项
 
