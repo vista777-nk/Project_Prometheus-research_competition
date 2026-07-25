@@ -259,11 +259,10 @@ bool found
 /<robot_id>/<layer>/<content>
 
 示例:
-/drone/observation           — 无人机观测 (Edge → Server)
-/car/observation             — 车机观测 (Edge → Server)
-/drone/state                 — 无人机 RobotState
-/car/state                   — 车机 RobotState
-/server/world_state          — 全局 WorldState
+/drone/observation           — 无人机观测 (Edge 发布)
+/car/observation             — 车机观测 (Edge 发布)
+/drone/state                 — 无人机 RobotState (Edge 发布)
+/car/state                   — 车机 RobotState (Edge 发布)
 /drone/mission               — 发送给无人机的任务
 /car/mission                 — 发送给车机的任务
 /drone/mission_status        — 无人机任务状态
@@ -271,10 +270,21 @@ bool found
 /drone/capability            — 无人机能力声明
 /car/capability              — 车机能力声明
 
+# 服务器侧话题 (TCP 接收器在服务器端重建):
+# 加上 /server/ 前缀以区分来源 (即数据已过 TCP 桥接，非原始边缘发布)
+/server/drone/observation    — 服务器侧重建的无人机观测 (来源: TCP)
+/server/car/observation      — 服务器侧重建的车机观测 (来源: TCP)
+/server/drone/state          — 服务器侧重建的无人机状态
+/server/car/state            — 服务器侧重建的车机状态
+/server/world_state          — World Model 发布的全局世界状态
+/server/world_state/update   — SLAM/EQA 节点 TELL WorldModel 的更新通道
+
 # 硬件相关话题 (Layer 1-2, 不在 ICD 保证范围内)
+# 以下为桥接层内部实现细节，可能随硬件更换而变化
 /drone/mavros/...            — MAVROS 原始话题 (Layer 2)
 /car/scan                    — LiDAR 原始话题 (Layer 2)
 /car/cmd_vel                 — 底盘速度命令 (Layer 2)
+/drone/heartbeat             — 桥接层临时话题 (非稳定接口)
 ```
 
 ---

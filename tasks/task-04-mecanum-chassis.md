@@ -199,6 +199,16 @@ car:
     type: velocity_controllers/JointVelocityController
     joint: rear_right_wheel_joint
     pid: {p: 1.0, i: 0.1, d: 0.01}
+
+  # 云台舵机位置控制器 (pan/tilt)
+  gimbal_pan_controller:
+    type: position_controllers/JointPositionController
+    joint: gimbal_pan_joint
+    pid: {p: 10.0, i: 0.1, d: 0.5}
+  gimbal_tilt_controller:
+    type: position_controllers/JointPositionController
+    joint: gimbal_tilt_joint
+    pid: {p: 10.0, i: 0.1, d: 0.5}
 ```
 
 ## 4.4 麦轮底盘 Launch
@@ -236,7 +246,8 @@ car:
   <rosparam file="$(find car_bringup)/config/mecanum_chassis_control.yaml" command="load"/>
   <node name="controller_spawner" pkg="controller_manager" type="spawner"
         args="joint_state_controller front_left_wheel_controller front_right_wheel_controller
-              rear_left_wheel_controller rear_right_wheel_controller" output="screen"/>
+              rear_left_wheel_controller rear_right_wheel_controller
+              gimbal_pan_controller gimbal_tilt_controller" output="screen"/>
 
   <!-- 麦轮运动学转换节点 -->
   <node name="mecanum_controller" pkg="car_bringup" type="mecanum_controller.py" output="screen">
@@ -360,18 +371,28 @@ class ChassisSwapper:
         return resp
 
     def _reload_controllers(self, chassis_type):
-        """Load controller params and spawn all controllers for the new chassis."""
+        """Stop old controllers, load new params, spawn new controllers."""
         import subprocess
+
+        # 1. Stop and unload ALL current controllers
+        rospy.loginfo("Stopping all current controllers...")
+        all_ctrl = ["joint_state_controller", "diff_drive_controller",
+                    "front_left_wheel_controller", "front_right_wheel_controller",
+                    "rear_left_wheel_controller", "rear_right_wheel_controller"]
+        for ctrl in all_ctrl:
+            subprocess.call(["rosservice", "call", f"/car/controller_manager/unload_controller",
+                           f"name: '{ctrl}'"], stderr=subprocess.DEVNULL)
+
+        # 2. Load new params
         config_file = os.path.join(
             os.path.expanduser("~"),
             "air_ground_sim_ws/src/car_bringup/config",
             f"{chassis_type}_chassis_control.yaml"
         )
-        # Load params into /car namespace
         subprocess.call(["rosparam", "load", config_file, "/car"])
         rospy.loginfo(f"Loaded controller config: {config_file}")
 
-        # Spawn controllers via controller_manager
+        # 3. Spawn controllers for this chassis
         if chassis_type == "mecanum":
             controllers = ["joint_state_controller", "front_left_wheel_controller",
                           "front_right_wheel_controller", "rear_left_wheel_controller",
@@ -382,9 +403,9 @@ class ChassisSwapper:
         for ctrl in controllers:
             subprocess.call(["rosservice", "call", f"/car/controller_manager/load_controller",
                            f"name: '{ctrl}'"], stderr=subprocess.DEVNULL)
-            subprocess.call(["rosservice", "call", f"/car/controller_manager/switch_controller",
-                           f"start_controllers: ['{ctrl}']", "stop_controllers: []",
-                           "strictness: 2"], stderr=subprocess.DEVNULL)
+        subprocess.call(["rosservice", "call", f"/car/controller_manager/switch_controller",
+                       f"start_controllers: {controllers}", "stop_controllers: []",
+                       "strictness: 2"], stderr=subprocess.DEVNULL)
         rospy.loginfo(f"Spawned {len(controllers)} controllers for {chassis_type} chassis")
 
 

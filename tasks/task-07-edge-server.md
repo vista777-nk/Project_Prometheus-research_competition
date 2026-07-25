@@ -71,8 +71,7 @@ class DronePreprocessor:
         # ── Observation ──
         obs = Observation()
         obs.header.stamp = rospy.Time.now()
-        obs.header.frame_id = "map"
-        obs.robot_id = "drone"
+        obs.header.frame_id = "drone/base_link"  # drone body frame
         modalities = []
         if self.latest_depth:
             obs.depth = self.latest_depth
@@ -184,7 +183,7 @@ class CarPreprocessor:
         # ── Observation ──
         obs = Observation()
         obs.header.stamp = rospy.Time.now()
-        obs.header.frame_id = "base_link"
+        obs.header.frame_id = "base_link"  # car's body frame
         obs.robot_id = "car"
         modalities = []
 
@@ -213,7 +212,7 @@ class CarPreprocessor:
         # ── RobotState ──
         state = RobotState()
         state.header.stamp = rospy.Time.now()
-        state.header.frame_id = "base_link"
+        state.header.frame_id = "map"  # world frame
         state.robot_id = "car"
         if self.latest_odom:
             state.pose = self.latest_odom.pose.pose
@@ -503,9 +502,15 @@ class WorldModel:
 
     def _publish_world_state(self, event):
         """定期发布聚合后的 WorldState."""
+        # 初始化空结构体, 避免订阅方反序列化崩溃
         ws = WorldState()
         ws.header.stamp = rospy.Time.now()
         ws.header.frame_id = "map"
+        ws.agents = []
+        ws.map_2d = OccupancyGrid()
+        ws.map_2d.header.frame_id = "map"
+        ws.dynamic_obstacles = []
+        ws.landmarks = []
 
         with self._lock:
             # 聚合所有 agent 状态
@@ -574,7 +579,9 @@ class SLAMPlaceholder:
         # 订阅: RobotState (里程计)
         rospy.Subscriber("/server/car/state", RobotState, self.car_state_cb, queue_size=5)
 
-        # 发布: 更新后的 World State (map + pose)        self.world_update_pub = rospy.Publisher("/server/world_state/update", WorldState, queue_size=5)        self.map_pub = rospy.Publisher("/server/world_state/map", OccupancyGrid, queue_size=1, latch=True)
+        # 发布: 更新后的 World State (TELL WorldModel)
+        self.world_update_pub = rospy.Publisher("/server/world_state/update", WorldState, queue_size=5)
+        self.map_pub = rospy.Publisher("/server/world_state/map", OccupancyGrid, queue_size=1, latch=True)
         self.car_pose_pub = rospy.Publisher("/server/world_state/car_pose",
                                             PoseWithCovarianceStamped, queue_size=5)
 

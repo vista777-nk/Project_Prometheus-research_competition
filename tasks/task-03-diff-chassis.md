@@ -84,26 +84,8 @@
     </plugin>
   </gazebo>
 
-  <!-- 差速驱动控制器 -->
-  <gazebo>
-    <plugin name="diff_drive" filename="libgazebo_ros_diff_drive.so">
-      <rosDebugLevel>na</rosDebugLevel>
-      <publishWheelTF>true</publishWheelTF>
-      <publishOdomTF>true</publishOdomTF>
-      <publishWheelJointState>true</publishWheelJointState>
-      <alwaysOn>true</alwaysOn>
-      <updateRate>30.0</updateRate>
-      <leftJoint>left_wheel_joint</leftJoint>
-      <rightJoint>right_wheel_joint</rightJoint>
-      <wheelSeparation>0.18</wheelSeparation>    <!-- 轮距 18cm -->
-      <wheelDiameter>0.066</wheelDiameter>        <!-- 轮径 65mm -->
-      <torque>1.5</torque>                        <!-- 520 电机扭矩 -->
-      <commandTopic>cmd_vel</commandTopic>
-      <odometryTopic>odom</odometryTopic>
-      <odometryFrame>odom</odometryFrame>
-      <robotBaseFrame>base_link</robotBaseFrame>
-    </plugin>
-  </gazebo>
+  <!-- 差速驱动: 由 ros_control 的 diff_drive_controller 统一管理 -->
+  <!-- (不再使用 libgazebo_ros_diff_drive.so，避免双控制器冲突) -->
 </robot>
 ```
 
@@ -242,28 +224,32 @@ car:
     publish_rate: 30
     pose_covariance_diagonal: [0.001, 0.001, 1000000.0, 1000000.0, 1000000.0, 0.03]
     twist_covariance_diagonal: [0.001, 0.001, 1000000.0, 1000000.0, 1000000.0, 0.03]
-
-    # 运动学约束
     cmd_vel_timeout: 0.5
     base_frame_id: base_link
-
-    # 轮子参数
     wheel_separation: 0.18
     wheel_radius: 0.033
-
-    # 速度限制（模拟 520 电机真实性能）
     linear:
       x:
         has_velocity_limits: true
-        max_velocity: 1.0   # m/s
+        max_velocity: 1.0
         has_acceleration_limits: true
         max_acceleration: 2.0
     angular:
       z:
         has_velocity_limits: true
-        max_velocity: 3.0   # rad/s
+        max_velocity: 3.0
         has_acceleration_limits: true
         max_acceleration: 5.0
+
+  # 云台舵机位置控制器 (pan/tilt)
+  gimbal_pan_controller:
+    type: position_controllers/JointPositionController
+    joint: gimbal_pan_joint
+    pid: {p: 10.0, i: 0.1, d: 0.5}
+  gimbal_tilt_controller:
+    type: position_controllers/JointPositionController
+    joint: gimbal_tilt_joint
+    pid: {p: 10.0, i: 0.1, d: 0.5}
 ```
 
 ## 3.4 Launch 文件
