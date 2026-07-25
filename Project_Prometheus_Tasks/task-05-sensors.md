@@ -16,7 +16,7 @@
 
 ## 5.1 传感器支架 + 所有传感器的 URDF 宏
 
-**文件：`~/air_ground_sim_ws/src/car_bringup/urdf/car_sensors.urdf.xacro`**
+**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/urdf/car_sensors.urdf.xacro`**
 
 ```xml
 <?xml version="1.0"?>
@@ -245,13 +245,13 @@
 
 ## 5.2 更新 `diff_chassis.urdf.xacro` 引入传感器
 
-**文件：`~/air_ground_sim_ws/src/car_bringup/urdf/diff_chassis.urdf.xacro`**
+**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/urdf/diff_chassis.urdf.xacro`**
 
 在文件末尾 `</robot>` 之前追加：
 
 ```xml
   <!-- ====== 引入传感器 ====== -->
-  <xacro:include filename="$(find car_bringup)/urdf/car_sensors.urdf.xacro"/>
+  <xacro:include filename="$(find air_ground_car_bringup)/urdf/car_sensors.urdf.xacro"/>
 
   <!-- OpenMV 云台相机 -->
   <xacro:openmv_gimbal parent_link="sensor_mount"/>
@@ -280,7 +280,7 @@
 
 ## 5.3 传感器参数配置 YAML
 
-**文件：`~/air_ground_sim_ws/src/car_bringup/config/car_sensors.yaml`**
+**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/config/car_sensors.yaml`**
 
 ```yaml
 # Car sensor configuration (mirrors real hardware specs)
@@ -339,7 +339,7 @@ imu:
 
 ## 5.5 云台控制脚本（模拟舵机）
 
-**文件：`~/air_ground_sim_ws/src/car_bringup/scripts/gimbal_controller.py`**
+**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/scripts/gimbal_controller.py`**
 
 ```python
 #!/usr/bin/env python3
@@ -382,18 +382,18 @@ if __name__ == "__main__":
 ```
 
 ```bash
-chmod +x ~/air_ground_sim_ws/src/car_bringup/scripts/gimbal_controller.py
+chmod +x ~/air_ground_sim_ws/src/air_ground_car_bringup/scripts/gimbal_controller.py
 ```
 
 ## 5.6 验证脚本
 
-**文件：`~/air_ground_sim_ws/src/car_bringup/scripts/test_sensors.sh`**
+**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/scripts/test_sensors.sh`**
 
 ```bash
 #!/bin/bash
 echo "=== Task-05 Car Sensors Verification ==="
 
-roslaunch car_bringup car_diff.launch headless:=true gui:=false &
+roslaunch air_ground_car_bringup car_diff.launch headless:=true gui:=false &
 CAR_PID=$!
 sleep 10
 

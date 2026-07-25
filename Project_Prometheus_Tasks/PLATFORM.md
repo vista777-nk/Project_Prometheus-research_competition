@@ -41,7 +41,7 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  Layer 4: Research (研究层)          [lab_server]            │
+│  Layer 4: Research (研究层)          [air_ground_lab_server]            │
 │  VLM · EQA · SLAM · World Model · Planner · Coordinator      │
 │  只依赖 Layer 3 抽象接口，永不引用 MAVLink / PX4 / STM32       │
 ├──────────────────────────────────────────────────────────────┤
@@ -49,7 +49,7 @@
 │  Observation · RobotState · WorldState · Mission · Capability │
 │  详见 ICD.md                                                  │
 ├──────────────────────────────────────────────────────────────┤
-│  Layer 2: Bridge (协议翻译层)        [com_bridge]            │
+│  Layer 2: Bridge (协议翻译层)        [air_ground_com_bridge]            │
 │  drone_car_bridge:    MAVLink UDP ↔ ROS topics               │
 │  edge_server_bridge:  ROS topics ↔ TCP JSON (Thrift-like)    │
 │  边缘预处理器:           传感器原始数据 ↔ Observation          │
@@ -93,7 +93,7 @@ STM32F407 / MSPM0G3507 (Layer 1)           Pixhawk 6C (Layer 1)
 │   └── action/
 │       └── Navigate.action
 │
-├── drone_bringup/               # 无人机启动与配置
+├── air_ground_drone_bringup/               # 无人机启动与配置
 │   ├── launch/
 │   │   ├── drone_sitl.launch    # PX4 SITL + Gazebo
 │   │   └── drone_edge.launch    # 边缘预处理节点
@@ -105,7 +105,7 @@ STM32F407 / MSPM0G3507 (Layer 1)           Pixhawk 6C (Layer 1)
 │       ├── drone_preprocessor.py   # 传感器→Observation
 │       └── gps_converter.py        # NavSatFix→本地ENU
 │
-├── car_bringup/                 # 车机启动与配置
+├── air_ground_car_bringup/                 # 车机启动与配置
 │   ├── launch/
 │   │   ├── car_diff.launch
 │   │   ├── car_mecanum.launch
@@ -126,16 +126,16 @@ STM32F407 / MSPM0G3507 (Layer 1)           Pixhawk 6C (Layer 1)
 │       ├── diff_chassis.urdf.xacro
 │       └── mecanum_chassis.urdf.xacro
 │
-├── com_bridge/                  # 空地通信桥 (Layer 2)
+├── air_ground_com_bridge/                  # 空地通信桥 (Layer 2)
 │   ├── launch/
-│   │   └── com_bridge.launch
+│   │   └── air_ground_com_bridge.launch
 │   ├── config/
 │   │   └── network.yaml
 │   └── scripts/
 │       ├── drone_car_bridge.py     # MAVLink ↔ ROS
 │       └── edge_server_bridge.py   # ROS ↔ TCP JSON
 │
-└── lab_server/                  # 实验室服务器 (Layer 4)
+└── air_ground_lab_server/                  # 实验室服务器 (Layer 4)
     ├── launch/
     │   └── server.launch
     ├── config/
@@ -197,14 +197,14 @@ make launch-full    chassis:=diff    gui:=false    headless:=true
 
 ```bash
 # 无人机树莓派
-roslaunch drone_bringup drone_edge.launch
+roslaunch air_ground_drone_bringup drone_edge.launch
 
 # 车机树莓派
-roslaunch car_bringup car_edge.launch chassis:=diff
-roslaunch com_bridge com_bridge.launch
+roslaunch air_ground_car_bringup car_edge.launch chassis:=diff
+roslaunch air_ground_com_bridge air_ground_com_bridge.launch
 
 # 实验室服务器
-roslaunch lab_server server.launch
+roslaunch air_ground_lab_server server.launch
 ```
 
 ---

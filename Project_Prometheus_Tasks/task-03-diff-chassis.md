@@ -13,7 +13,7 @@
 
 ## 3.1 车体 URDF 模型
 
-**文件：`~/air_ground_sim_ws/src/car_bringup/urdf/car_base.urdf.xacro`**
+**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/urdf/car_base.urdf.xacro`**
 
 ```xml
 <?xml version="1.0"?>
@@ -91,13 +91,13 @@
 
 ## 3.2 差速底盘宏（含左右驱动轮 + 万向轮）
 
-**文件：`~/air_ground_sim_ws/src/car_bringup/urdf/diff_chassis.urdf.xacro`**
+**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/urdf/diff_chassis.urdf.xacro`**
 
 ```xml
 <?xml version="1.0"?>
 <robot name="diff_chassis" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <xacro:include filename="$(find car_bringup)/urdf/car_base.urdf.xacro"/>
+  <xacro:include filename="$(find air_ground_car_bringup)/urdf/car_base.urdf.xacro"/>
 
   <xacro:property name="wheel_radius" value="0.033"/>
   <xacro:property name="wheel_width" value="0.026"/>
@@ -209,7 +209,7 @@
 
 ## 3.3 底盘控制配置 YAML
 
-**文件：`~/air_ground_sim_ws/src/car_bringup/config/diff_chassis_control.yaml`**
+**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/config/diff_chassis_control.yaml`**
 
 ```yaml
 # Diff chassis ros_control configuration
@@ -257,11 +257,11 @@ car:
 
 ## 3.4 Launch 文件
 
-**文件：`~/air_ground_sim_ws/src/car_bringup/launch/car_diff.launch`**
+**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/launch/car_diff.launch`**
 
 ```xml
 <launch>
-  <arg name="world" default="$(find car_bringup)/worlds/empty.world"/>
+  <arg name="world" default="$(find air_ground_car_bringup)/worlds/empty.world"/>
   <arg name="gui" default="false"/>
   <arg name="headless" default="true"/>
   <arg name="x" default="0.0"/>
@@ -279,7 +279,7 @@ car:
 
   <!-- 加载差速底盘 URDF -->
   <param name="robot_description"
-         command="$(find xacro)/xacro $(find car_bringup)/urdf/diff_chassis.urdf.xacro"/>
+         command="$(find xacro)/xacro $(find air_ground_car_bringup)/urdf/diff_chassis.urdf.xacro"/>
 
   <!-- 生成小车 -->
   <node name="spawn_car" pkg="gazebo_ros" type="spawn_model"
@@ -291,7 +291,7 @@ car:
         args="echo /car/joint_states -n 1" output="log"/>
 
   <!-- 加载 ros_control 配置 -->
-  <rosparam file="$(find car_bringup)/config/diff_chassis_control.yaml" command="load"/>
+  <rosparam file="$(find air_ground_car_bringup)/config/diff_chassis_control.yaml" command="load"/>
 
   <!-- 启动控制器 -->
   <node name="controller_spawner" pkg="controller_manager" type="spawner"
@@ -305,7 +305,7 @@ car:
 
 ## 3.5 底盘配置参数（汇总）
 
-**文件：`~/air_ground_sim_ws/src/car_bringup/config/chassis_params.yaml`**
+**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/config/chassis_params.yaml`**
 
 ```yaml
 # 底盘共通参数
@@ -333,14 +333,14 @@ chassis_detect:
 
 ## 3.6 验证脚本
 
-**文件：`~/air_ground_sim_ws/src/car_bringup/scripts/test_diff.sh`**
+**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/scripts/test_diff.sh`**
 
 ```bash
 #!/bin/bash
 echo "=== Task-03 Diff Chassis Verification ==="
 
 # Start diff car in background
-roslaunch car_bringup car_diff.launch headless:=true gui:=false &
+roslaunch air_ground_car_bringup car_diff.launch headless:=true gui:=false &
 CAR_PID=$!
 sleep 8
 
@@ -369,7 +369,7 @@ wait $CAR_PID 2>/dev/null
 echo "=== Done ==="
 ```
 
-## 3.7 更新 `car_bringup/CMakeLists.txt`
+## 3.7 更新 `air_ground_car_bringup/CMakeLists.txt`
 
 ```cmake
 install(DIRECTORY worlds/
@@ -378,12 +378,12 @@ install(DIRECTORY worlds/
 
 并创建空世界：
 ```bash
-cp ~/air_ground_sim_ws/src/drone_bringup/worlds/empty.world ~/air_ground_sim_ws/src/car_bringup/worlds/empty.world
+cp ~/air_ground_sim_ws/src/air_ground_drone_bringup/worlds/empty.world ~/air_ground_sim_ws/src/air_ground_car_bringup/worlds/empty.world
 ```
 
 ## 交付产物
 
-1. `roslaunch car_bringup car_diff.launch` 能启动差速小车
+1. `roslaunch air_ground_car_bringup car_diff.launch` 能启动差速小车
 2. `/car/cmd_vel` 可控制小车前进后退转弯
 3. `/car/odom` 发布里程计数据
 4. `test_diff.sh` 全部 PASS

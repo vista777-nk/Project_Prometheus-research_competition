@@ -53,13 +53,13 @@ catkin_init_workspace
 
 # 创建包目录（后续 task 填充内容）
 mkdir -p air_ground_interfaces/msg air_ground_interfaces/srv
-mkdir -p drone_bringup/launch drone_bringup/config drone_bringup/scripts
-mkdir -p car_bringup/launch car_bringup/config car_bringup/scripts car_bringup/urdf
-mkdir -p com_bridge/launch com_bridge/config com_bridge/scripts
-mkdir -p lab_server/launch lab_server/config lab_server/scripts
+mkdir -p air_ground_drone_bringup/launch air_ground_drone_bringup/config air_ground_drone_bringup/scripts
+mkdir -p air_ground_car_bringup/launch air_ground_car_bringup/config air_ground_car_bringup/scripts air_ground_car_bringup/urdf
+mkdir -p air_ground_com_bridge/launch air_ground_com_bridge/config air_ground_com_bridge/scripts
+mkdir -p air_ground_lab_server/launch air_ground_lab_server/config air_ground_lab_server/scripts
 
 # 创建每个包的 package.xml 和 CMakeLists.txt（Python 包）
-for pkg in air_ground_interfaces drone_bringup car_bringup com_bridge lab_server; do
+for pkg in air_ground_interfaces air_ground_drone_bringup air_ground_car_bringup air_ground_com_bridge air_ground_lab_server; do
   mkdir -p ~/air_ground_sim_ws/src/$pkg
 done
 ```
@@ -344,12 +344,12 @@ string message
 
 ### 1.5 创建其他包的 `package.xml` 和 `CMakeLists.txt`
 
-**共同模板 — 以 `drone_bringup/package.xml` 为例（其余类似）**：
+**共同模板 — 以 `air_ground_drone_bringup/package.xml` 为例（其余类似）**：
 
 ```xml
 <?xml version="1.0"?>
 <package format="2">
-  <name>drone_bringup</name>
+  <name>air_ground_drone_bringup</name>
   <version>0.1.0</version>
   <description>Drone simulation bringup: PX4 SITL + sensors + edge preprocessor</description>
   <maintainer email="user@example.com">user</maintainer>
@@ -365,11 +365,11 @@ string message
 </package>
 ```
 
-**共同模板 — 以 `drone_bringup/CMakeLists.txt` 为例**：
+**共同模板 — 以 `air_ground_drone_bringup/CMakeLists.txt` 为例**：
 
 ```cmake
 cmake_minimum_required(VERSION 3.0.2)
-project(drone_bringup)
+project(air_ground_drone_bringup)
 find_package(catkin REQUIRED COMPONENTS
   roscpp rospy std_msgs geometry_msgs sensor_msgs air_ground_interfaces
 )
@@ -379,10 +379,10 @@ install(DIRECTORY launch config scripts
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 ```
 
-你需要为 `car_bringup`、`com_bridge`、`lab_server` 创建类似文件，依赖项按需调整：
-- `car_bringup`：额外依赖 `gazebo_ros`、`ros_control`、`nav_msgs`
-- `com_bridge`：额外依赖 `mavros`
-- `lab_server`：额外依赖 `nav_msgs`
+你需要为 `air_ground_car_bringup`、`air_ground_com_bridge`、`air_ground_lab_server` 创建类似文件，依赖项按需调整：
+- `air_ground_car_bringup`：额外依赖 `gazebo_ros`、`ros_control`、`nav_msgs`
+- `air_ground_com_bridge`：额外依赖 `mavros`
+- `air_ground_lab_server`：额外依赖 `nav_msgs`
 
 ### 1.6 初始化编译
 
