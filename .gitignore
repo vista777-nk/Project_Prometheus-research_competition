@@ -1,0 +1,125 @@
+# ============================================================
+# 空地联合具身智能研究平台 (Project Prometheus)
+# .gitignore — Python / ROS / Gazebo / PX4 / C++ 项目
+# ============================================================
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+eggs/
+.eggs/
+*.manifest
+*.spec
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+htmlcov/
+*.cover
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+pythonenv/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# === ROS ===
+# Build artifacts
+build/
+devel/
+install/
+logs/
+
+# Catkin tools
+.catkin_tools/
+catkin_ws/
+*.rosinstall
+
+# ROS logs
+*.log
+rosout.log
+
+# === Gazebo ===
+# Gazebo model cache
+.gazebo/
+~/.gazebo/
+
+# Gazebo log files
+*.gazebo_log
+
+# === PX4 ===
+# PX4 build artifacts
+Firmware/build/
+PX4-Autopilot/build/
+px4_sitl/
+*.px4
+
+# === C / C++ ===
+*.o
+*.obj
+*.out
+*.a
+*.la
+*.lo
+*.dll
+*.dylib
+*.exe
+*.app
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+!tasks/**/Makefile
+
+# === IDE / Editor ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# === OS ===
+# Linux
+*~
+
+# Windows
+Desktop.ini
+$RECYCLE.BIN/
+
+# === Environment & Secrets ===
+.env
+.env.*
+*.secret
+config/secrets.yaml
+config/local.yaml
+
+# === Misc ===
+*.bak
+*.tmp
+*.swp
+tmp/
+temp/
+
+# === Zip / Archives (don't track large binaries) ===
+*.zip
+*.tar.gz
+*.rar
+*.7z
+!models/**/*.zip
