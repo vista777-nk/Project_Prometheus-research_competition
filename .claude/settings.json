@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(/d/NUS/project/NUS-SOC/web/.venv/Scripts/pip install *)"
-    ]
-  }
-}
