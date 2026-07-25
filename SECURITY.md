@@ -1,21 +1,96 @@
-# Security Policy
+# Security Policy — 空地联合具身智能研究平台
 
-## Supported Versions
+> 本项目是学术研究平台，但仍涉及真实机器人硬件、通信链路和实验数据。
+> 以下策略适用于从仿真阶段到实机部署的全生命周期。
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+---
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+## 适用范围
 
-## Reporting a Vulnerability
+| 组件 | 安全关注点 |
+|------|-----------|
+| 仿真环境 (Gazebo + PX4 SITL) | 本地隔离，无外部网络暴露 |
+| 空地通信链路 (MAVLink / TCP JSON) | 数传链路劫持、消息注入、重放攻击 |
+| 边缘设备 (树莓派5) | 物理访问、SSH 加固、最小权限 |
+| 实验室服务器 (GPU 推理) | 内网隔离、模型文件完整性 |
+| 实机固件 (Pixhawk 6C / STM32 / MSPM0) | 固件校验、飞控参数锁定 |
+| Git 仓库 | 密钥泄露、大文件管理、提交签名 |
 
-Use this section to tell people how to report a vulnerability.
+---
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+## 当前阶段
+
+| 阶段 | 状态 | 安全策略 |
+|------|:---:|---------|
+| **Phase 0: 仿真搭建** (当前) | 🟢 活跃 | 本地 localhost 通信，无外部暴露。重点关注代码仓库安全。 |
+| **Phase 1: 实机调试** (2026.08+) | 🔴 计划中 | 启用 MAVLink 签名、SSH 密钥认证、内网 VLAN 隔离 |
+| **Phase 2: 竞赛/论文** (2027+) | 🔴 计划中 | 完整安全加固 + 实验数据完整性校验 |
+
+---
+
+## 安全原则
+
+### 1. 最小网络暴露
+- 仿真阶段所有通信绑定 `127.0.0.1`
+- 实机阶段使用内网隔离，实验室服务器不直接暴露于公网
+- 3DR 数传使用点对点模式，不广播
+
+### 2. 通信链路防护
+- **MAVLink**: 实机阶段启用 MAVLink 2 消息签名 (`MSG_SIGNATURE`)
+- **TCP JSON 桥**: 仅在内网使用；未来若需远程访问，须加 TLS
+- **ROS**: 仿真阶段使用默认 `ROS_MASTER_URI=http://localhost:11311`
+
+### 3. 固件与硬件安全
+- Pixhawk 飞控参数 (`*.params`) 在每次飞行前校验，禁止不明来源的参数文件
+- STM32 / MSPM0 固件烧录前做 checksum 校验
+- 电机测试使用 `--safe-mode` 或拆桨测试
+
+### 4. 仓库安全
+- **绝不** 提交任何密钥、Token、密码到仓库
+- 飞控参数、WiFi SSID/密码等敏感配置使用 `.gitignore` 排除的模板文件
+- 大文件 (>10MB) 使用 Git LFS 管理（仿真模型 `.stl`/`.dae`、数据集采样）
+- 推荐对关键 tag (如 `v1.0.0`) 做 GPG 签名
+
+### 5. 实验数据保护
+- 实验日志和传感器数据不包含个人身份信息
+- 竞赛/论文相关数据在公开发布前去敏
+
+---
+
+## 报告安全问题
+
+本项目目前为个人/小团队学术研究，如果你发现安全相关问题（包括但不限于）：
+
+- 代码中意外包含的密钥或敏感配置
+- 通信协议设计缺陷
+- 仿真环境中的不安全默认配置
+- 依赖库的已知漏洞
+
+请通过以下方式联系：
+
+> **Email**: [项目维护者邮箱]  
+> **议题**: 在仓库中创建私有安全通告（如平台支持）  
+> **响应时间**: 通常在 7 天内确认，30 天内给出修复方案
+
+**注意**：请勿在公开 Issue 中披露安全漏洞细节。
+
+---
+
+## 依赖安全
+
+本项目关键依赖链：
+
+```
+PX4-Autopilot v1.14 → MAVLink v2 → MAVROS
+ROS Noetic → Gazebo 9
+Python 3.8+ → PyTorch / Transformers (推理)
+```
+
+- PX4 固件升级需经过 SITL 回归测试
+- ROS 包仅从官方 apt 源和手动审核的源码安装
+- Python 依赖冻结在 `requirements.txt` / `pyproject.toml`，定期 `pip audit` 检查
+
+---
+
+*最后更新：2026-07-25*  
+*下一审查日期：实机调试启动前 (2026.08)*
