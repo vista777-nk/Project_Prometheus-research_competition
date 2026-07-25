@@ -1,18 +1,18 @@
-# Task-09: 仿真集成验证 + 端到端测试
+# Task-09: 仿真集成验证 + 端到端测�?
 
 ## 前置条件
 
 - Task-01~08 全部完成
-- `make build` 无错误
+- `make build` 无错�?
 - 至少 4GB 空闲内存用于同时运行 PX4 SITL + Gazebo + ROS nodes
 
 ## 目标
 
-对整套空地联合仿真系统进行端到端（E2E）集成测试，验证数据从传感器→边缘→服务器→决策→执行的完整闭环。
+对整套空地联合仿真系统进行端到端（E2E）集成测试，验证数据从传感器→边缘→服务器→决策→执行的完整闭环�?
 
 ---
 
-## 9.1 端到端集成测试脚本
+## 9.1 端到端集成测试脚�?
 
 **文件：`~/air_ground_sim_ws/src/e2e_test.sh`**
 
@@ -153,7 +153,7 @@ rostopic pub -1 /server/eqa/query std_msgs/String "data: 'Find the nearest obsta
 sleep 2
 
 # 7.2 Verify coordinator dispatched command (via cmd_vel as placeholder)
-check "Coordinator processed EQA query → car cmd_vel" \
+check "Coordinator processed EQA query �?car cmd_vel" \
     "timeout 3 rostopic echo /car/cmd_vel -n 1 2>/dev/null | grep -q linear"
 
 # ── Phase 8: Chassis Swap Test ──────────────────────────────
@@ -214,13 +214,13 @@ exit $FAIL
 chmod +x ~/air_ground_sim_ws/src/e2e_test.sh
 ```
 
-## 9.2 快速冒烟测试（日常开发用）
+## 9.2 快速冒烟测试（日常开发用�?
 
 **文件：`~/air_ground_sim_ws/src/quick_smoke.sh`**
 
 ```bash
 #!/bin/bash
-# Quick smoke test (30 seconds) — run before committing code.
+# Quick smoke test (30 seconds) �?run before committing code.
 source ~/air_ground_sim_ws/devel/setup.bash
 
 roslaunch air_ground_sim.launch chassis:=diff gui:=false headless:=true &
@@ -242,35 +242,35 @@ make kill 2>/dev/null
 chmod +x ~/air_ground_sim_ws/src/quick_smoke.sh
 ```
 
-## 9.3 最终检查清单
+## 9.3 最终检查清�?
 
-完成所有 9 个 task 后，逐一确认：
+完成所�?9 �?task 后，逐一确认�?
 
 | # | 检查项 | 命令 |
 |---|--------|------|
-| 1 | 工作空间编译无错误 | `catkin build` |
-| 2 | 自定义消息可用 | `rosmsg show air_ground_interfaces/SensorFusion` |
-| 3 | 无人机可启动 | `make launch-drone`（等 15s，`Ctrl+C`） |
+| 1 | 工作空间编译无错�?| `catkin build` |
+| 2 | 自定义消息可�?| `rosmsg show air_ground_interfaces/SensorFusion` |
+| 3 | 无人机可启动 | `make launch-drone`（等 15s，`Ctrl+C`�?|
 | 4 | 差速小车可启动 | `make launch-car` |
-| 5 | 麦轮小车可启动 | `make launch-car-mecanum` |
-| 6 | 所有传感器话题有数据 | `make test-sensors` |
-| 7 | 通信桥正常转发 | `make test-bridge` |
-| 8 | 服务器节点运行 | `make test-server` |
+| 5 | 麦轮小车可启�?| `make launch-car-mecanum` |
+| 6 | 所有传感器话题有数�?| `make test-sensors` |
+| 7 | 通信桥正常转�?| `make test-bridge` |
+| 8 | 服务器节点运�?| `make test-server` |
 | 9 | 完整系统启动 | `make launch-full` |
-| 10 | E2E 测试全 PASS | `bash src/e2e_test.sh` |
+| 10 | E2E 测试�?PASS | `bash src/e2e_test.sh` |
 
-## 9.4 已知限制与 TODO
+## 9.4 已知限制�?TODO
 
 | 限制 | 说明 | 后续计划 |
 |------|------|---------|
-| 麦轮摩擦近似 | Gazebo 无法原生模拟麦轮辊子，用 `mu2≈0` 近似 | 实机上验证即可 |
-| 云台为速度控制 | Gazebo 中云台是 velocity-controlled joint | 加 PID 位置环 |
-| MAVLink 解析不完整 | 当前只解析 heartbeat 和 global_position | 按需扩展 pymavlink 解析 |
-| 无 world 模型 | 使用空白世界，无障碍物 | 后续加障碍物世界测试 SLAM |
-| TCP 无加密 | 仿真中明文传输，实机需加 TLS | 实机部署时处理 |
+| 麦轮摩擦近似 | Gazebo 无法原生模拟麦轮辊子，用 `mu2�?` 近似 | 实机上验证即�?|
+| 云台为速度控制 | Gazebo 中云台是 velocity-controlled joint | �?PID 位置�?|
+| MAVLink 解析不完�?| 当前只解�?heartbeat �?global_position | 按需扩展 pymavlink 解析 |
+| �?world 模型 | 使用空白世界，无障碍�?| 后续加障碍物世界测试 SLAM |
+| TCP 无加�?| 仿真中明文传输，实机需�?TLS | 实机部署时处�?|
 
 ## 交付产物
 
-1. `e2e_test.sh` 可验证整条数据链路（传感器→边缘→服务器→命令→执行）
-2. `quick_smoke.sh` 供日常开发快速验证
-3. 最终检查清单全部 ✅
+1. `e2e_test.sh` 可验证整条数据链路（传感器→边缘→服务器→命令→执行�?
+2. `quick_smoke.sh` 供日常开发快速验�?
+3. 最终检查清单全�?�?

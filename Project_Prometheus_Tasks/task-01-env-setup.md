@@ -1,30 +1,30 @@
-# Task-01: 环境搭建 + ROS 工作空间脚手架
+# Task-01: 环境搭建 + ROS 工作空间脚手�?
 
 ## 前置条件
 
 - Ubuntu 20.04.6 (x86_64)
 - 至少 20GB 自由磁盘空间
 - 已连接互联网
-- 用户有 sudo 权限
+- 用户�?sudo 权限
 
-## 可执行步骤
+## 可执行步�?
 
 ### 1.1 安装 ROS Noetic
 
 ```bash
-# 添加 ROS 源
+# 添加 ROS �?
 sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu focal main" > /etc/apt/sources.list.d/ros-latest.list'
 sudo apt install curl -y
 curl -s https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | sudo apt-key add -
 sudo apt update
 
-# 安装 ROS Noetic Desktop-Full（含 Gazebo 11）
+# 安装 ROS Noetic Desktop-Full（含 Gazebo 11�?
 sudo apt install ros-noetic-desktop-full -y
 
 # 安装常用工具
 sudo apt install python3-rosdep python3-rosinstall python3-rosinstall-generator python3-wstool build-essential python3-catkin-tools -y
 
-# 初始化 rosdep
+# 初始�?rosdep
 sudo rosdep init
 rosdep update
 
@@ -33,7 +33,7 @@ echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
 source ~/.bashrc
 ```
 
-### 1.2 安装 MAVROS 和相关依赖
+### 1.2 安装 MAVROS 和相关依�?
 
 ```bash
 sudo apt install ros-noetic-mavros ros-noetic-mavros-extras ros-noetic-mavros-msgs -y
@@ -44,27 +44,27 @@ sudo apt install python3-pip python3-yaml python3-numpy -y
 pip3 install pymavlink pyserial
 ```
 
-### 1.3 创建工作空间和目录结构
+### 1.3 创建工作空间和目录结�?
 
 ```bash
 mkdir -p ~/air_ground_sim_ws/src
 cd ~/air_ground_sim_ws/src
 catkin_init_workspace
 
-# 创建包目录（后续 task 填充内容）
+# 创建包目录（后续 task 填充内容�?
 mkdir -p air_ground_interfaces/msg air_ground_interfaces/srv
-mkdir -p drone_bringup/launch drone_bringup/config drone_bringup/scripts
-mkdir -p car_bringup/launch car_bringup/config car_bringup/scripts car_bringup/urdf
-mkdir -p com_bridge/launch com_bridge/config com_bridge/scripts
-mkdir -p lab_server/launch lab_server/config lab_server/scripts
+mkdir -p air_ground_drone_bringup/launch air_ground_drone_bringup/config air_ground_drone_bringup/scripts
+mkdir -p air_ground_car_bringup/launch air_ground_car_bringup/config air_ground_car_bringup/scripts air_ground_car_bringup/urdf
+mkdir -p air_ground_com_bridge/launch air_ground_com_bridge/config air_ground_com_bridge/scripts
+mkdir -p air_ground_lab_server/launch air_ground_lab_server/config air_ground_lab_server/scripts
 
-# 创建每个包的 package.xml 和 CMakeLists.txt（Python 包）
-for pkg in air_ground_interfaces drone_bringup car_bringup com_bridge lab_server; do
+# 创建每个包的 package.xml �?CMakeLists.txt（Python 包）
+for pkg in air_ground_interfaces air_ground_drone_bringup air_ground_car_bringup air_ground_com_bridge air_ground_lab_server; do
   mkdir -p ~/air_ground_sim_ws/src/$pkg
 done
 ```
 
-### 1.4 创建 `air_ground_interfaces` — 自定义消息包（需要先编译）
+### 1.4 创建 `air_ground_interfaces` �?自定义消息包（需要先编译�?
 
 **文件：`air_ground_interfaces/package.xml`**
 ```xml
@@ -152,16 +152,16 @@ catkin_package(
 
 ---
 
-### ICD 新消息定义（task-07 依赖）
+### ICD 新消息定义（task-07 依赖�?
 
 **文件：`air_ground_interfaces/msg/Observation.msg`**
 ```
-# Edge → Server: multimodal observation snapshot (ICD §二.1)
+# Edge �?Server: multimodal observation snapshot (ICD §�?1)
 Header header
 string robot_id            # "drone" | "car"
 string[] modalities        # present modalities: ["rgb","depth","lidar_2d","ultrasonic","imu"]
 
-# Images (optional — only when modality listed)
+# Images (optional �?only when modality listed)
 sensor_msgs/CompressedImage rgb
 sensor_msgs/Image depth
 
@@ -180,7 +180,7 @@ geometry_msgs/Vector3 linear_acceleration
 
 **文件：`air_ground_interfaces/msg/RobotState.msg`**
 ```
-# Edge → Server: robot self-state snapshot (ICD §二.2)
+# Edge �?Server: robot self-state snapshot (ICD §�?2)
 Header header
 string robot_id
 
@@ -197,7 +197,7 @@ bool is_connected
 
 **文件：`air_ground_interfaces/msg/WorldState.msg`**
 ```
-# Server internal: global world state maintained by WorldModel (ICD §二.3)
+# Server internal: global world state maintained by WorldModel (ICD §�?3)
 Header header
 
 RobotState[] agents
@@ -211,7 +211,7 @@ time last_update_planning
 
 **文件：`air_ground_interfaces/msg/SemanticLandmark.msg`**
 ```
-# Semantic landmark for EQA queries (ICD §二.4)
+# Semantic landmark for EQA queries (ICD §�?4)
 string landmark_id
 string semantic_label        # "red_ball", "door", "table", "charging_station"
 geometry_msgs/Pose pose
@@ -221,7 +221,7 @@ time last_observed
 
 **文件：`air_ground_interfaces/msg/Mission.msg`**
 ```
-# Server → Edge: high-level task (WHAT, not HOW) (ICD §三.1)
+# Server �?Edge: high-level task (WHAT, not HOW) (ICD §�?1)
 Header header
 string mission_id            # UUID
 string robot_id
@@ -238,7 +238,7 @@ string query_id
 
 **文件：`air_ground_interfaces/msg/MissionStatus.msg`**
 ```
-# Edge → Server: mission execution status (ICD §三.2)
+# Edge �?Server: mission execution status (ICD §�?2)
 Header header
 string mission_id
 string status                # "accepted" | "executing" | "completed" | "failed" | "aborted"
@@ -248,7 +248,7 @@ float32 progress             # 0.0 ~ 1.0
 
 **文件：`air_ground_interfaces/msg/Capability.msg`**
 ```
-# Edge → Server: robot capability self-description (ICD §三.3)
+# Edge �?Server: robot capability self-description (ICD §�?3)
 Header header
 string robot_id
 
@@ -270,7 +270,7 @@ bool has_gripper
 
 **文件：`air_ground_interfaces/srv/QueryWorldState.srv`**
 ```
-# ASK WorldModel: synchronous query (ICD §四.2)
+# ASK WorldModel: synchronous query (ICD §�?2)
 string query_type            # "nearest_landmark" | "path_to" | "visibility_from"
 string[] args
 ---
@@ -284,14 +284,14 @@ bool found
 
 **文件：`air_ground_interfaces/action/Navigate.action`**
 ```
-# Long-running navigation task (ICD §六)
+# Long-running navigation task (ICD §�?
 geometry_msgs/Pose target_pose
 float32 target_speed
 ---
 float32 progress             # 0.0 ~ 1.0
 geometry_msgs/Pose current_pose
 ---
-# (empty — cancellation not needed for placeholder)
+# (empty �?cancellation not needed for placeholder)
 ```
 
 ---
@@ -300,7 +300,7 @@ geometry_msgs/Pose current_pose
 
 **文件：`air_ground_interfaces/msg/SensorFusion.msg`**
 ```
-# Edge node → Server: aggregated sensor data
+# Edge node �?Server: aggregated sensor data
 Header header
 string source_id          # "drone" or "car"
 geometry_msgs/Pose pose   # current pose estimate
@@ -313,7 +313,7 @@ geometry_msgs/Point[] gps  # GPS coordinates (drone only)
 
 **文件：`air_ground_interfaces/msg/ServerCommand.msg`**
 ```
-# Server → Edge node: high-level commands
+# Server �?Edge node: high-level commands
 Header header
 string target_id          # "drone" or "car"
 string command_type       # "navigate", "takeoff", "land", "explore", "query"
@@ -342,14 +342,14 @@ bool success
 string message
 ```
 
-### 1.5 创建其他包的 `package.xml` 和 `CMakeLists.txt`
+### 1.5 创建其他包的 `package.xml` �?`CMakeLists.txt`
 
-**共同模板 — 以 `drone_bringup/package.xml` 为例（其余类似）**：
+**共同模板 �?�?`air_ground_drone_bringup/package.xml` 为例（其余类似）**�?
 
 ```xml
 <?xml version="1.0"?>
 <package format="2">
-  <name>drone_bringup</name>
+  <name>air_ground_drone_bringup</name>
   <version>0.1.0</version>
   <description>Drone simulation bringup: PX4 SITL + sensors + edge preprocessor</description>
   <maintainer email="user@example.com">user</maintainer>
@@ -365,11 +365,11 @@ string message
 </package>
 ```
 
-**共同模板 — 以 `drone_bringup/CMakeLists.txt` 为例**：
+**共同模板 �?�?`air_ground_drone_bringup/CMakeLists.txt` 为例**�?
 
 ```cmake
 cmake_minimum_required(VERSION 3.0.2)
-project(drone_bringup)
+project(air_ground_drone_bringup)
 find_package(catkin REQUIRED COMPONENTS
   roscpp rospy std_msgs geometry_msgs sensor_msgs air_ground_interfaces
 )
@@ -379,12 +379,12 @@ install(DIRECTORY launch config scripts
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 ```
 
-你需要为 `car_bringup`、`com_bridge`、`lab_server` 创建类似文件，依赖项按需调整：
-- `car_bringup`：额外依赖 `gazebo_ros`、`ros_control`、`nav_msgs`
-- `com_bridge`：额外依赖 `mavros`
-- `lab_server`：额外依赖 `nav_msgs`
+你需要为 `air_ground_car_bringup`、`air_ground_com_bridge`、`air_ground_lab_server` 创建类似文件，依赖项按需调整�?
+- `air_ground_car_bringup`：额外依�?`gazebo_ros`、`ros_control`、`nav_msgs`
+- `air_ground_com_bridge`：额外依�?`mavros`
+- `air_ground_lab_server`：额外依�?`nav_msgs`
 
-### 1.6 初始化编译
+### 1.6 初始化编�?
 
 ```bash
 cd ~/air_ground_sim_ws
@@ -392,29 +392,29 @@ catkin build
 source devel/setup.bash
 echo "source ~/air_ground_sim_ws/devel/setup.bash" >> ~/.bashrc
 
-# 验证自定义消息编译成功
+# 验证自定义消息编译成�?
 rosmsg show air_ground_interfaces/SensorFusion
 rossrv show air_ground_interfaces/SwapChassis
 ```
 
 ### 1.7 验证脚本
 
-创建 `~/air_ground_sim_ws/src/test_task01.sh`：
+创建 `~/air_ground_sim_ws/src/test_task01.sh`�?
 
 ```bash
 #!/bin/bash
 echo "=== Task-01 Verification ==="
 
-# 1. ROS 安装检查
+# 1. ROS 安装检�?
 if [ -d "/opt/ros/noetic" ]; then echo "[PASS] ROS Noetic installed"; else echo "[FAIL] ROS not found"; exit 1; fi
 
-# 2. Gazebo 安装检查
+# 2. Gazebo 安装检�?
 if command -v gzclient &> /dev/null; then echo "[PASS] Gazebo installed"; else echo "[FAIL] Gazebo not found"; fi
 
-# 3. 工作空间编译检查
+# 3. 工作空间编译检�?
 if [ -d "$HOME/air_ground_sim_ws/devel" ]; then echo "[PASS] Workspace built"; else echo "[FAIL] Workspace not built"; fi
 
-# 4. 自定义消息检查
+# 4. 自定义消息检�?
 if rosmsg show air_ground_interfaces/SensorFusion &>/dev/null; then echo "[PASS] Custom messages OK"; else echo "[FAIL] Custom messages broken"; fi
 
 echo "=== Done ==="
@@ -422,10 +422,10 @@ echo "=== Done ==="
 
 ## 交付产物
 
-完成后 `catkin build` 应无错误，`rosmsg show air_ground_interfaces/*` 能列出三条消息和一条服务，`test_task01.sh` 全部 PASS。
+完成�?`catkin build` 应无错误，`rosmsg show air_ground_interfaces/*` 能列出三条消息和一条服务，`test_task01.sh` 全部 PASS�?
 
 ## 注意事项
 
-- 如果 `rosdep init` 失败，检查 `/etc/ros/rosdep/sources.list.d/20-default.list` 是否已存在，若存在则跳过 init
-- 华为轻薄本磁盘可能有限，如空间不足，可先不装 `ros-noetic-desktop-full`，改为 `ros-noetic-ros-base` + 手动安装 Gazebo 依赖
-- `catkin build` 首次编译需 3-5 分钟，务必等待完成
+- 如果 `rosdep init` 失败，检�?`/etc/ros/rosdep/sources.list.d/20-default.list` 是否已存在，若存在则跳过 init
+- 华为轻薄本磁盘可能有限，如空间不足，可先不装 `ros-noetic-desktop-full`，改�?`ros-noetic-ros-base` + 手动安装 Gazebo 依赖
+- `catkin build` 首次编译需 3-5 分钟，务必等待完�?
