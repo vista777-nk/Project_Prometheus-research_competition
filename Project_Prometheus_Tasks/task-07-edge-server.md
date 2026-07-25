@@ -13,7 +13,7 @@
 
 ## 7.1 无人机边缘预处理器（→ Observation + RobotState）
 
-**文件：`~/air_ground_sim_ws/src/drone_bringup/scripts/drone_preprocessor.py`**
+**文件：`~/air_ground_sim_ws/src/air_ground_drone_bringup/scripts/drone_preprocessor.py`**
 
 ```python
 #!/usr/bin/env python3
@@ -105,12 +105,12 @@ if __name__ == "__main__":
 ```
 
 ```bash
-chmod +x ~/air_ground_sim_ws/src/drone_bringup/scripts/drone_preprocessor.py
+chmod +x ~/air_ground_sim_ws/src/air_ground_drone_bringup/scripts/drone_preprocessor.py
 ```
 
 ## 7.2 车机边缘预处理器（→ Observation + RobotState）
 
-**文件：`~/air_ground_sim_ws/src/car_bringup/scripts/car_preprocessor.py`**
+**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/scripts/car_preprocessor.py`**
 
 ```python
 #!/usr/bin/env python3
@@ -230,12 +230,12 @@ if __name__ == "__main__":
 ```
 
 ```bash
-chmod +x ~/air_ground_sim_ws/src/car_bringup/scripts/car_preprocessor.py
+chmod +x ~/air_ground_sim_ws/src/air_ground_car_bringup/scripts/car_preprocessor.py
 ```
 
 ## 7.3 实验室服务器 — TCP 接收器（→ Observation / RobotState）
 
-**文件：`~/air_ground_sim_ws/src/lab_server/scripts/tcp_receiver.py`**
+**文件：`~/air_ground_sim_ws/src/air_ground_lab_server/scripts/tcp_receiver.py`**
 
 ```python
 #!/usr/bin/env python3
@@ -263,7 +263,7 @@ class TCPServer:
         rospy.init_node("tcp_server")
 
         config_path = rospy.get_param("~config_path",
-            os.path.expanduser("~/air_ground_sim_ws/src/com_bridge/config/network.yaml"))
+            os.path.expanduser("~/air_ground_sim_ws/src/air_ground_com_bridge/config/network.yaml"))
         with open(config_path) as f:
             cfg = yaml.safe_load(f)["edge_server_tcp"]
 
@@ -412,7 +412,7 @@ if __name__ == "__main__":
 ```
 
 ```bash
-chmod +x ~/air_ground_sim_ws/src/lab_server/scripts/tcp_receiver.py
+chmod +x ~/air_ground_sim_ws/src/air_ground_lab_server/scripts/tcp_receiver.py
 ```
 
 ## 7.4 World Model 节点（系统认知中心）← 新增
@@ -420,7 +420,7 @@ chmod +x ~/air_ground_sim_ws/src/lab_server/scripts/tcp_receiver.py
 > 根据 ChatGPT 审阅建议 #3: 从 Day 1 就将 World Model 定义为系统概念中心。  
 > 一切节点要么 TELL、要么 ASK World Model。
 
-**文件：`~/air_ground_sim_ws/src/lab_server/scripts/world_model.py`**
+**文件：`~/air_ground_sim_ws/src/air_ground_lab_server/scripts/world_model.py`**
 
 ```python
 #!/usr/bin/env python3
@@ -548,14 +548,14 @@ if __name__ == "__main__":
 ```
 
 ```bash
-chmod +x ~/air_ground_sim_ws/src/lab_server/scripts/world_model.py
+chmod +x ~/air_ground_sim_ws/src/air_ground_lab_server/scripts/world_model.py
 ```
 
 ---
 
 ## 7.5 SLAM 占位节点（→ World Model）
 
-**文件：`~/air_ground_sim_ws/src/lab_server/scripts/slam_node.py`**
+**文件：`~/air_ground_sim_ws/src/air_ground_lab_server/scripts/slam_node.py`**
 
 ```python
 #!/usr/bin/env python3
@@ -638,12 +638,12 @@ if __name__ == "__main__":
 ```
 
 ```bash
-chmod +x ~/air_ground_sim_ws/src/lab_server/scripts/slam_node.py
+chmod +x ~/air_ground_sim_ws/src/air_ground_lab_server/scripts/slam_node.py
 ```
 
 ## 7.6 EQA 引擎占位节点（← World Model → Coordinator）
 
-**文件：`~/air_ground_sim_ws/src/lab_server/scripts/eqa_engine.py`**
+**文件：`~/air_ground_sim_ws/src/air_ground_lab_server/scripts/eqa_engine.py`**
 
 ```python
 #!/usr/bin/env python3
@@ -713,12 +713,12 @@ if __name__ == "__main__":
 ```
 
 ```bash
-chmod +x ~/air_ground_sim_ws/src/lab_server/scripts/eqa_engine.py
+chmod +x ~/air_ground_sim_ws/src/air_ground_lab_server/scripts/eqa_engine.py
 ```
 
 ## 7.7 空地协同策略占位节点（← EQA/Planner → Edge）
 
-**文件：`~/air_ground_sim_ws/src/lab_server/scripts/coordinator.py`**
+**文件：`~/air_ground_sim_ws/src/air_ground_lab_server/scripts/coordinator.py`**
 
 ```python
 #!/usr/bin/env python3
@@ -802,81 +802,81 @@ if __name__ == "__main__":
 ```
 
 ```bash
-chmod +x ~/air_ground_sim_ws/src/lab_server/scripts/coordinator.py
+chmod +x ~/air_ground_sim_ws/src/air_ground_lab_server/scripts/coordinator.py
 ```
 
 ## 7.8 Launch 文件
 
-**文件：`~/air_ground_sim_ws/src/drone_bringup/launch/drone_edge.launch`**
+**文件：`~/air_ground_sim_ws/src/air_ground_drone_bringup/launch/drone_edge.launch`**
 
 ```xml
 <launch>
   <!-- 边缘预处理器: 传感器 → Observation + RobotState -->
-  <node name="drone_preprocessor" pkg="drone_bringup" type="drone_preprocessor.py"
+  <node name="drone_preprocessor" pkg="air_ground_drone_bringup" type="drone_preprocessor.py"
         output="screen"/>
-  <node name="gps_converter" pkg="drone_bringup" type="gps_converter.py"
+  <node name="gps_converter" pkg="air_ground_drone_bringup" type="gps_converter.py"
         output="screen"/>
 </launch>
 ```
 
-**文件：`~/air_ground_sim_ws/src/car_bringup/launch/car_edge.launch`**
+**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/launch/car_edge.launch`**
 
 ```xml
 <launch>
   <!-- 边缘预处理器: 传感器 → Observation + RobotState -->
-  <node name="car_preprocessor" pkg="car_bringup" type="car_preprocessor.py"
+  <node name="car_preprocessor" pkg="air_ground_car_bringup" type="car_preprocessor.py"
         output="screen"/>
-  <node name="gimbal_controller" pkg="car_bringup" type="gimbal_controller.py"
+  <node name="gimbal_controller" pkg="air_ground_car_bringup" type="gimbal_controller.py"
         output="screen"/>
-  <node name="chassis_swapper" pkg="car_bringup" type="chassis_swapper.py"
+  <node name="chassis_swapper" pkg="air_ground_car_bringup" type="chassis_swapper.py"
         output="screen"/>
 </launch>
 ```
 
-**文件：`~/air_ground_sim_ws/src/lab_server/launch/server.launch`**
+**文件：`~/air_ground_sim_ws/src/air_ground_lab_server/launch/server.launch`**
 
 ```xml
 <launch>
   <!-- Layer 2→4 桥接: TCP JSON → ROS -->
-  <node name="tcp_server" pkg="lab_server" type="tcp_receiver.py" output="screen"/>
+  <node name="tcp_server" pkg="air_ground_lab_server" type="tcp_receiver.py" output="screen"/>
 
   <!-- Layer 4: World Model (认知中心) -->
   <!-- 所有其他节点 ASK/TELL WorldModel，不直接读传感器 -->
-  <node name="world_model" pkg="lab_server" type="world_model.py" output="screen"/>
+  <node name="world_model" pkg="air_ground_lab_server" type="world_model.py" output="screen"/>
 
   <!-- Layer 4: 研究模块 (只依赖 WorldState + Mission 接口) -->
-  <node name="slam_node" pkg="lab_server" type="slam_node.py" output="screen"/>
-  <node name="eqa_engine" pkg="lab_server" type="eqa_engine.py" output="screen"/>
-  <node name="coordinator" pkg="lab_server" type="coordinator.py" output="screen"/>
+  <node name="slam_node" pkg="air_ground_lab_server" type="slam_node.py" output="screen"/>
+  <node name="eqa_engine" pkg="air_ground_lab_server" type="eqa_engine.py" output="screen"/>
+  <node name="coordinator" pkg="air_ground_lab_server" type="coordinator.py" output="screen"/>
 </launch>
 ```
 
 ## 7.9 验证脚本
 
-**文件：`~/air_ground_sim_ws/src/lab_server/scripts/test_server.sh`**
+**文件：`~/air_ground_sim_ws/src/air_ground_lab_server/scripts/test_server.sh`**
 
 ```bash
 #!/bin/bash
 echo "=== Task-07 Edge+Server Verification ==="
 
 # Start drone + edge
-roslaunch drone_bringup drone_sitl.launch headless:=true gui:=false &
+roslaunch air_ground_drone_bringup drone_sitl.launch headless:=true gui:=false &
 D_PID=$!
 sleep 8
-roslaunch drone_bringup drone_edge.launch &
+roslaunch air_ground_drone_bringup drone_edge.launch &
 DE_PID=$!
 sleep 3
 
 # Start car + edge
-roslaunch car_bringup car_diff.launch headless:=true gui:=false &
+roslaunch air_ground_car_bringup car_diff.launch headless:=true gui:=false &
 C_PID=$!
 sleep 8
-roslaunch car_bringup car_edge.launch &
+roslaunch air_ground_car_bringup car_edge.launch &
 CE_PID=$!
 sleep 3
 
 # Start server
-roslaunch lab_server server.launch &
+roslaunch air_ground_lab_server server.launch &
 S_PID=$!
 sleep 3
 

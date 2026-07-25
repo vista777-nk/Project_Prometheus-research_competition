@@ -23,7 +23,7 @@
 
 ## 6.1 网络配置
 
-**文件：`~/air_ground_sim_ws/src/com_bridge/config/network.yaml`**
+**文件：`~/air_ground_sim_ws/src/air_ground_com_bridge/config/network.yaml`**
 
 ```yaml
 # Communication bridge network configuration
@@ -54,7 +54,7 @@ throttle:
 
 ## 6.2 无人机↔车 MAVLink 桥
 
-**文件：`~/air_ground_sim_ws/src/com_bridge/scripts/drone_car_bridge.py`**
+**文件：`~/air_ground_sim_ws/src/air_ground_com_bridge/scripts/drone_car_bridge.py`**
 
 ```python
 #!/usr/bin/env python3
@@ -103,7 +103,7 @@ class DroneCarBridge:
 
         # Load config
         config_path = rospy.get_param("~config_path",
-            os.path.expanduser("~/air_ground_sim_ws/src/com_bridge/config/network.yaml"))
+            os.path.expanduser("~/air_ground_sim_ws/src/air_ground_com_bridge/config/network.yaml"))
         with open(config_path) as f:
             self.config = yaml.safe_load(f)
 
@@ -223,12 +223,12 @@ if __name__ == "__main__":
 ```
 
 ```bash
-chmod +x ~/air_ground_sim_ws/src/com_bridge/scripts/drone_car_bridge.py
+chmod +x ~/air_ground_sim_ws/src/air_ground_com_bridge/scripts/drone_car_bridge.py
 ```
 
 ## 6.3 边缘↔服务器 TCP 桥
 
-**文件：`~/air_ground_sim_ws/src/com_bridge/scripts/edge_server_bridge.py`**
+**文件：`~/air_ground_sim_ws/src/air_ground_com_bridge/scripts/edge_server_bridge.py`**
 
 ```python
 #!/usr/bin/env python3
@@ -264,7 +264,7 @@ class EdgeServerBridge:
 
         # Load config
         config_path = rospy.get_param("~config_path",
-            os.path.expanduser("~/air_ground_sim_ws/src/com_bridge/config/network.yaml"))
+            os.path.expanduser("~/air_ground_sim_ws/src/air_ground_com_bridge/config/network.yaml"))
         with open(config_path) as f:
             cfg = yaml.safe_load(f)["edge_server_tcp"]
             self.network_cfg = yaml.safe_load(f)
@@ -476,51 +476,51 @@ if __name__ == "__main__":
 ```
 
 ```bash
-chmod +x ~/air_ground_sim_ws/src/com_bridge/scripts/edge_server_bridge.py
+chmod +x ~/air_ground_sim_ws/src/air_ground_com_bridge/scripts/edge_server_bridge.py
 ```
 
 ## 6.4 Launch 文件
 
-**文件：`~/air_ground_sim_ws/src/com_bridge/launch/com_bridge.launch`**
+**文件：`~/air_ground_sim_ws/src/air_ground_com_bridge/launch/air_ground_com_bridge.launch`**
 
 ```xml
 <launch>
   <!-- MAVLink Drone↔Car Bridge -->
-  <node name="drone_car_bridge" pkg="com_bridge" type="drone_car_bridge.py"
+  <node name="drone_car_bridge" pkg="air_ground_com_bridge" type="drone_car_bridge.py"
         output="screen">
     <param name="config_path"
-           value="$(find com_bridge)/config/network.yaml"/>
+           value="$(find air_ground_com_bridge)/config/network.yaml"/>
   </node>
 
   <!-- Edge↔Server TCP Bridge -->
-  <node name="edge_server_bridge" pkg="com_bridge" type="edge_server_bridge.py"
+  <node name="edge_server_bridge" pkg="air_ground_com_bridge" type="edge_server_bridge.py"
         output="screen">
     <param name="config_path"
-           value="$(find com_bridge)/config/network.yaml"/>
+           value="$(find air_ground_com_bridge)/config/network.yaml"/>
   </node>
 </launch>
 ```
 
 ## 6.5 验证脚本
 
-**文件：`~/air_ground_sim_ws/src/com_bridge/scripts/test_bridge.sh`**
+**文件：`~/air_ground_sim_ws/src/air_ground_com_bridge/scripts/test_bridge.sh`**
 
 ```bash
 #!/bin/bash
 echo "=== Task-06 Communication Bridge Verification ==="
 
 # Start drone in background
-roslaunch drone_bringup drone_sitl.launch headless:=true gui:=false &
+roslaunch air_ground_drone_bringup drone_sitl.launch headless:=true gui:=false &
 DRONE_PID=$!
 sleep 12
 
 # Start car in background
-roslaunch car_bringup car_diff.launch headless:=true gui:=false &
+roslaunch air_ground_car_bringup car_diff.launch headless:=true gui:=false &
 CAR_PID=$!
 sleep 8
 
 # Start bridge
-roslaunch com_bridge com_bridge.launch &
+roslaunch air_ground_com_bridge air_ground_com_bridge.launch &
 BRIDGE_PID=$!
 sleep 5
 
@@ -542,11 +542,11 @@ wait 2>/dev/null
 echo "=== Done ==="
 ```
 
-## 6.6 更新 `com_bridge/CMakeLists.txt`
+## 6.6 更新 `air_ground_com_bridge/CMakeLists.txt`
 
 ```cmake
 cmake_minimum_required(VERSION 3.0.2)
-project(com_bridge)
+project(air_ground_com_bridge)
 find_package(catkin REQUIRED COMPONENTS
   roscpp rospy std_msgs geometry_msgs sensor_msgs nav_msgs
   air_ground_interfaces mavros
