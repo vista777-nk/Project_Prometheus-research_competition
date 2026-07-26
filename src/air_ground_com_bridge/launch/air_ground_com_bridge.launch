@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="config_file"
+       default="$(find air_ground_com_bridge)/config/network.yaml"/>
+  <arg name="start_drone_bridge" default="true"/>
+  <arg name="start_edge_bridge" default="true"/>
+
+  <node if="$(arg start_drone_bridge)"
+        name="drone_car_bridge"
+        pkg="air_ground_com_bridge"
+        type="drone_car_bridge.py"
+        output="screen">
+    <param name="config_path" value="$(arg config_file)"/>
+  </node>
+
+  <node if="$(arg start_edge_bridge)"
+        name="edge_server_bridge"
+        pkg="air_ground_com_bridge"
+        type="edge_server_bridge.py"
+        output="screen">
+    <param name="config_path" value="$(arg config_file)"/>
+  </node>
+</launch>

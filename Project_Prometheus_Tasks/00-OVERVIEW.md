@@ -22,8 +22,8 @@
 | [task-03](./task-03-diff-chassis.md) | 差速底盘仿真（电赛规格） | task-01 | 2h | ✅ |
 | [task-04](./task-04-mecanum-chassis.md) | 麦轮底盘仿真 + 模块化切换 | task-03 | 2h | ✅ |
 | [task-05](./task-05-sensors.md) | 车载传感器与二维云台 | task-03,04 | 1.5h | ✅ |
-| [task-06](./task-06-com-bridge.md) | 空地通信桥（MAVLink + TCP） | task-02,03 | 2h | 🔵 可开始 |
-| [task-07](./task-07-edge-server.md) | 边缘预处理 + 服务器节点 | task-01,06 | 2h | ⬜ |
+| [task-06](./task-06-com-bridge.md) | 空地通信桥（MAVLink + TCP） | task-02,03 | 2h | ✅ |
+| [task-07](./task-07-edge-server.md) | 边缘预处理 + 服务器节点 | task-01,06 | 2h | 🔵 可开始 |
 | [task-08](./task-08-integration.md) | 集成总装 Launch + Makefile | task-02~07 | 1.5h | ⬜ |
 | [task-09](./task-09-validation.md) | 仿真验证 + 测试脚本 | task-08 | 1h | ⬜ |
 
@@ -64,4 +64,4 @@ bash src/e2e_test.sh
 
 ---
 
-*版本: v6.1 · 日期: 2026-07-27 · 作者: DeepSeek (经 ChatGPT 、 混元3 、 豆包 、 执行端subagent集群审阅后重构)*
+*版本: v6.2 · 日期: 2026-07-27 · 作者: DeepSeek (经 ChatGPT 、 混元3 、 豆包 、 执行端subagent集群审阅后重构)*

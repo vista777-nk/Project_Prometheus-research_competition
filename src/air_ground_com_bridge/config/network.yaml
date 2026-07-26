@@ -1,0 +1,35 @@
+# Task-06 communication bridge configuration.
+drone_car_mavlink:
+  protocol: udp
+  drone_ip: 127.0.0.1
+  drone_port: 14550
+  car_ip: 127.0.0.1
+  car_port: 14551
+  heartbeat_interval: 1.0
+  target_system: 1
+  target_component: 1
+  source_system: 255
+  source_component: 190
+
+simulation_adapter:
+  enable: true
+  px4_ip: 127.0.0.1
+  px4_port: 18570
+
+edge_server_tcp:
+  protocol: tcp
+  server_ip: 127.0.0.1
+  server_port: 9090
+  reconnect_interval: 3.0
+  connect_timeout: 2.0
+  socket_timeout: 1.0
+  heartbeat_interval: 2.0
+  publish_rate: 10.0
+  max_payload_bytes: 10485760
+
+throttle:
+  enable: true
+  max_bandwidth_bytes_per_sec: 24000
+  image_quality: 50
+  max_image_freq: 2.0
+  lidar_downsample: 4
