@@ -1,0 +1,39 @@
+# Task-05 car sensor metadata and gimbal command limits.
+openmv:
+  resolution: [320, 240]
+  fps: 10
+  horizontal_fov_deg: 65.0
+  image_topic: /car/openmv/image_raw
+  camera_info_topic: /car/openmv/camera_info
+
+gimbal:
+  pan_min: -1.57079632679
+  pan_max: 1.57079632679
+  tilt_min: -0.78539816339
+  tilt_max: 0.78539816339
+  publish_rate: 20.0
+  pan_command_topic: /car/gimbal/pan/command
+  tilt_command_topic: /car/gimbal/tilt/command
+
+lidar:
+  model: RPLIDAR_A1
+  samples: 360
+  scan_rate: 10
+  min_range: 0.15
+  max_range: 12.0
+  topic: /car/scan
+
+ultrasonic:
+  model: HC-SR04
+  directions: [front, rear, left, right]
+  update_rate: 25
+  min_range: 0.02
+  max_range: 4.0
+  topic_prefix: /car/ultrasonic
+
+imu:
+  model: ICM42688
+  update_rate: 30
+  gyro_noise_stddev: 0.0005
+  accel_noise_stddev: 0.001
+  topic: /car/imu/data

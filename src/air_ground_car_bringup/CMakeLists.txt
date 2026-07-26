@@ -62,6 +62,7 @@ target_link_libraries(
 catkin_install_python(
   PROGRAMS
     scripts/chassis_swapper.py
+    scripts/gimbal_controller.py
     scripts/mecanum_controller.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
@@ -70,6 +71,7 @@ install(
   PROGRAMS
     scripts/test_diff.sh
     scripts/test_mecanum.sh
+    scripts/test_sensors.sh
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
@@ -84,5 +86,6 @@ install(
 )
 
 if(CATKIN_ENABLE_TESTING)
+  catkin_add_nosetests(test/test_gimbal_controller.py)
   catkin_add_nosetests(test/test_mecanum_controller.py)
 endif()

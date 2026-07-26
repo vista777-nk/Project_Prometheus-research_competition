@@ -23,15 +23,24 @@ from gazebo_msgs.srv import DeleteModel, GetModelState, SpawnModel
 
 
 CHASSIS_CONTROLLERS: Dict[str, List[str]] = {
-    "diff": ["joint_state_controller", "diff_drive_controller"],
+    "diff": [
+        "joint_state_controller",
+        "gimbal_pan_controller",
+        "gimbal_tilt_controller",
+        "diff_drive_controller",
+    ],
     "mecanum": [
         "joint_state_controller",
+        "gimbal_pan_controller",
+        "gimbal_tilt_controller",
         "front_left_wheel_controller",
         "front_right_wheel_controller",
         "rear_left_wheel_controller",
         "rear_right_wheel_controller",
     ],
 }
+
+
 class ChassisSwapper:
     """Own controller and robot-state-publisher lifecycle across model swaps."""
 

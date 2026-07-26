@@ -50,6 +50,13 @@
     <param name="publish_tf" value="true"/>
   </node>
 
+  <node name="gimbal_controller"
+        pkg="air_ground_car_bringup" type="gimbal_controller.py"
+        output="screen">
+    <rosparam command="load"
+              file="$(find air_ground_car_bringup)/config/car_sensors.yaml"/>
+  </node>
+
   <!-- This node owns controller and robot_state_publisher lifecycle. -->
   <node name="chassis_swapper"
         pkg="air_ground_car_bringup" type="chassis_swapper.py"
