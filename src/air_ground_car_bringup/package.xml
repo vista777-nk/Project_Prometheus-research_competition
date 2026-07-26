@@ -11,6 +11,9 @@
 
   <depend>air_ground_interfaces</depend>
   <depend>controller_manager</depend>
+  <depend>controller_manager_msgs</depend>
+  <depend>gazebo_msgs</depend>
+  <depend>gazebo_dev</depend>
   <depend>gazebo_ros</depend>
   <depend>gazebo_ros_control</depend>
   <depend>geometry_msgs</depend>
@@ -20,11 +23,22 @@
   <depend>rospy</depend>
   <depend>sensor_msgs</depend>
   <depend>std_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>topic_tools</depend>
 
   <exec_depend>diff_drive_controller</exec_depend>
   <exec_depend>joint_state_controller</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>roslaunch</exec_depend>
+  <exec_depend>rosnode</exec_depend>
+  <exec_depend>rosparam</exec_depend>
+  <exec_depend>rosservice</exec_depend>
+  <exec_depend>rostopic</exec_depend>
+  <exec_depend>velocity_controllers</exec_depend>
   <exec_depend>xacro</exec_depend>
+
+  <test_depend>python3-nose</test_depend>
 
   <export/>
 </package>

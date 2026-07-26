@@ -1,0 +1,90 @@
+<?xml version="1.0"?>
+<robot name="mecanum_chassis" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:include
+    filename="$(find air_ground_car_bringup)/urdf/car_base.urdf.xacro"/>
+
+  <xacro:property name="wheel_radius" value="0.033"/>
+  <xacro:property name="wheel_width" value="0.026"/>
+  <xacro:property name="wheel_mass" value="0.05"/>
+  <xacro:property name="wheel_x" value="0.10"/>
+  <xacro:property name="wheel_y" value="0.09"/>
+
+  <!-- fdir_z is expressed in the wheel collision frame. After the wheel is
+       rotated onto its axle, it selects a +/-45 degree ground traction line. -->
+  <xacro:macro name="mecanum_wheel" params="name x y fdir_z">
+    <link name="${name}_wheel">
+      <inertial>
+        <mass value="${wheel_mass}"/>
+        <inertia
+          ixx="${wheel_mass * (3.0 * wheel_radius * wheel_radius + wheel_width * wheel_width) / 12.0}"
+          ixy="0"
+          ixz="0"
+          iyy="${wheel_mass * (3.0 * wheel_radius * wheel_radius + wheel_width * wheel_width) / 12.0}"
+          iyz="0"
+          izz="${wheel_mass * wheel_radius * wheel_radius / 2.0}"/>
+      </inertial>
+      <visual>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+        </geometry>
+        <material name="car_black"/>
+      </visual>
+      <collision>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+        </geometry>
+      </collision>
+    </link>
+
+    <joint name="${name}_wheel_joint" type="continuous">
+      <parent link="base_link"/>
+      <child link="${name}_wheel"/>
+      <origin xyz="${x} ${y} ${wheel_radius}" rpy="${-pi / 2.0} 0 0"/>
+      <axis xyz="0 0 1"/>
+      <limit effort="5.0" velocity="35.0"/>
+      <dynamics damping="0.02" friction="0.0"/>
+    </joint>
+
+    <transmission name="${name}_wheel_transmission">
+      <type>transmission_interface/SimpleTransmission</type>
+      <joint name="${name}_wheel_joint">
+        <hardwareInterface>hardware_interface/VelocityJointInterface</hardwareInterface>
+      </joint>
+      <actuator name="${name}_wheel_motor">
+        <hardwareInterface>hardware_interface/VelocityJointInterface</hardwareInterface>
+        <mechanicalReduction>1</mechanicalReduction>
+      </actuator>
+    </transmission>
+
+    <gazebo reference="${name}_wheel">
+      <material>Gazebo/Black</material>
+      <mu1>0.2</mu1>
+      <mu2>0.01</mu2>
+      <fdir1>0.70710678 0 ${fdir_z * 0.70710678}</fdir1>
+      <kp>1000000</kp>
+      <kd>10</kd>
+    </gazebo>
+  </xacro:macro>
+
+  <xacro:mecanum_wheel name="front_left"
+    x="${wheel_x}" y="${wheel_y}" fdir_z="1"/>
+  <xacro:mecanum_wheel name="front_right"
+    x="${wheel_x}" y="${-wheel_y}" fdir_z="-1"/>
+  <xacro:mecanum_wheel name="rear_left"
+    x="${-wheel_x}" y="${wheel_y}" fdir_z="-1"/>
+  <xacro:mecanum_wheel name="rear_right"
+    x="${-wheel_x}" y="${-wheel_y}" fdir_z="1"/>
+
+  <!-- A single anisotropic cylinder cannot reproduce free-spinning rollers
+       at every wheel angle. The planar plugin applies the body velocity
+       reconstructed from the four bounded wheel commands and publishes
+       ground-truth odometry, while ros_control still drives all wheel joints. -->
+  <gazebo>
+    <plugin name="mecanum_planar_drive"
+            filename="libmecanum_planar_drive_plugin.so">
+      <robotNamespace>/car</robotNamespace>
+      <commandTopic>mecanum_cmd_vel</commandTopic>
+      <cmdTimeout>0.5</cmdTimeout>
+    </plugin>
+  </gazebo>
+</robot>

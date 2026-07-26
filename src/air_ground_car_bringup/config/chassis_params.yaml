@@ -1,0 +1,21 @@
+# Mechanical metadata shared by the interchangeable chassis implementations.
+diff_chassis:
+  type: differential_drive
+  track_width: 0.18
+  wheel_radius: 0.033
+  max_linear_speed: 1.0
+  max_angular_speed: 3.0
+  motor_encoder_ppr: 11
+  encoder_note: effective wheel counts depend on gearbox ratio and x4 quadrature
+
+mecanum_chassis:
+  type: mecanum
+  track_width: 0.18
+  wheel_base: 0.20
+  wheel_radius: 0.033
+  max_linear_speed: 0.8
+  max_angular_speed: 2.0
+
+chassis_detect:
+  diff_pin: 1
+  mecanum_pin: 0

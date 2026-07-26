@@ -1,0 +1,76 @@
+<?xml version="1.0"?>
+<robot name="car_base" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:property name="body_length" value="0.25"/>
+  <xacro:property name="body_width" value="0.20"/>
+  <xacro:property name="body_height" value="0.08"/>
+  <xacro:property name="body_center_z" value="0.073"/>
+  <xacro:property name="body_mass" value="2.5"/>
+
+  <material name="car_gray">
+    <color rgba="0.30 0.30 0.35 1.0"/>
+  </material>
+  <material name="car_black">
+    <color rgba="0.08 0.08 0.08 1.0"/>
+  </material>
+
+  <!-- The model origin lies on the ground below the chassis centre. -->
+  <link name="base_link">
+    <inertial>
+      <origin xyz="0 0 ${body_center_z}" rpy="0 0 0"/>
+      <mass value="${body_mass}"/>
+      <inertia
+        ixx="${body_mass * (body_width * body_width + body_height * body_height) / 12.0}"
+        ixy="0"
+        ixz="0"
+        iyy="${body_mass * (body_length * body_length + body_height * body_height) / 12.0}"
+        iyz="0"
+        izz="${body_mass * (body_length * body_length + body_width * body_width) / 12.0}"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 ${body_center_z}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${body_length} ${body_width} ${body_height}"/>
+      </geometry>
+      <material name="car_gray"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${body_center_z}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${body_length} ${body_width} ${body_height}"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="sensor_mount">
+    <inertial>
+      <mass value="0.1"/>
+      <inertia ixx="0.000033" ixy="0" ixz="0"
+               iyy="0.000057" iyz="0" izz="0.000083"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <box size="0.08 0.06 0.02"/>
+      </geometry>
+      <material name="car_black"/>
+    </visual>
+  </link>
+  <joint name="sensor_mount_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="sensor_mount"/>
+    <origin xyz="0 0 0.125" rpy="0 0 0"/>
+  </joint>
+
+  <gazebo reference="base_link">
+    <material>Gazebo/DarkGrey</material>
+  </gazebo>
+  <gazebo reference="sensor_mount">
+    <material>Gazebo/Black</material>
+  </gazebo>
+
+  <gazebo>
+    <plugin name="gazebo_ros_control" filename="libgazebo_ros_control.so">
+      <robotNamespace>/car</robotNamespace>
+      <robotParam>/robot_description</robotParam>
+    </plugin>
+  </gazebo>
+</robot>
