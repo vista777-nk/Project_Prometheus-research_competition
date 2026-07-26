@@ -1,563 +1,191 @@
-# Task-06: 空地通信桥（MAVLink + TCP）
+# Task-06：空地通信桥（MAVLink UDP + TCP JSON）
 
-## 前置条件
+## 状态
 
-- Task-02、Task-03 完成（无人机和车可独立仿真运行）
-- `air_ground_interfaces` 消息包已编译
+| 项目 | 结果 |
+|------|------|
+| 依赖 | Task-02、Task-03 |
+| 实施状态 | ✅ 已完成 |
+| 完成日期 | 2026-07-27 |
+| Task-06 自动验收 | `11 passed, 0 failed` |
+| 真实 PX4 联合验证 | `3 passed, 0 failed` |
+| 回归验收 | Task-03 `7/7`；Task-04 `17/17` |
 
-## 目标
+## 目标与拓扑
 
-建立三条通信链路：
+在车机侧建立两条受控通信链路：
 
-```
-无人机 ──MAVLink(UDP)──▶ 车机 ──TCP──▶ 服务器
-   ▲                       │              │
-   └────MAVLink(UDP)───────┘              │
-                                          ▼
-                                       车机 ◀──TCP── 服务器
-```
-
-在仿真中所有通信走 `localhost`，通过不同端口区分。
-
----
-
-## 6.1 网络配置
-
-**文件：`~/air_ground_sim_ws/src/air_ground_com_bridge/config/network.yaml`**
-
-```yaml
-# Communication bridge network configuration
-# In simulation, all use localhost. Ports for real hardware deployment.
-
-drone_car_mavlink:
-  protocol: "udp"
-  drone_ip: "127.0.0.1"
-  drone_port: 14550         # PX4 默认 MAVLink 端口 (SITL: udp_gcs_port_local)
-  car_ip: "127.0.0.1"
-  car_port: 14551
-  heartbeat_interval: 1.0   # seconds
-
-edge_server_tcp:
-  protocol: "tcp"
-  server_ip: "127.0.0.1"   # lab server IP (local in simulation)
-  server_port: 9090
-  reconnect_interval: 3.0   # seconds
-  heartbeat_interval: 2.0
-
-# Data throttling (simulate limited bandwidth of 3DR radio)
-throttle:
-  enable: true
-  max_bandwidth_bytes_per_sec: 24000   # 3DR SiK 典型带宽 ~24KB/s
-  image_quality: 50                    # JPEG compression 1-100
-  max_image_freq: 2                    # Hz (图像最大发送频率)
+```text
+PX4/无人机 ── MAVLink UDP ──▶ drone_car_bridge ── ROS
+车载传感器 ── ROS ──▶ edge_server_bridge ── TCP JSON ──▶ 实验室服务器
 ```
 
-## 6.2 无人机↔车 MAVLink 桥
+仿真和实机使用同一逻辑无线电端口：
 
-**文件：`~/air_ground_sim_ws/src/air_ground_com_bridge/scripts/drone_car_bridge.py`**
-
-```python
-#!/usr/bin/env python3
-"""
-MAVLink Bridge: Drone ↔ Car over simulated 3DR radio (UDP).
-
-This node runs on the car edge and:
-1. Listens for MAVLink heartbeat/telemetry from drone via UDP
-2. Forwards drone state to ROS topics (/drone/state, /drone/pose, etc.)
-3. Receives car→drone commands from ROS and forwards via MAVLink
-
-Simulated bandwidth throttling: limits image/data rate to 3DR radio specs.
-"""
-import rospy
-import socket
-import struct
-import threading
-import time
-import yaml
-import os
-from geometry_msgs.msg import PoseStamped, TwistStamped
-from std_msgs.msg import String, Bool
-
-# pymavlink is lightweight; use manual MAVLink v1 parsing for core messages
-# to avoid full pymavlink dependency on car edge. If pymavlink is available,
-# prefer the full parser. Fallback to minimal parser:
-try:
-    from pymavlink import mavutil
-    HAS_PYMAVLINK = True
-except ImportError:
-    HAS_PYMAVLINK = False
-    rospy.logwarn("[DroneCarBridge] pymavlink not found, using minimal MAVLink parser")
-
-
-class DroneCarBridge:
-    """MAVLink bridge between drone (UDP) and car's ROS topics."""
-
-    # MAVLink message IDs (subset)
-    MAVLINK_MSG_ID_HEARTBEAT = 0
-    MAVLINK_MSG_ID_GLOBAL_POSITION_INT = 33
-    MAVLINK_MSG_ID_ATTITUDE = 30
-    MAVLINK_MSG_ID_COMMAND_LONG = 76
-
-    def __init__(self):
-        rospy.init_node("drone_car_bridge")
-
-        # Load config
-        config_path = rospy.get_param("~config_path",
-            os.path.expanduser("~/air_ground_sim_ws/src/air_ground_com_bridge/config/network.yaml"))
-        with open(config_path) as f:
-            self.config = yaml.safe_load(f)
-
-        cfg = self.config["drone_car_mavlink"]
-        self.drone_addr = (cfg["drone_ip"], cfg["drone_port"])
-        self.car_port = cfg["car_port"]
-        self.throttle = self.config.get("throttle", {})
-
-        # UDP socket for MAVLink
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sock.bind(("0.0.0.0", self.car_port))
-        self.sock.settimeout(0.5)
-
-        # Throttling state
-        self.last_image_time = 0.0
-        self.bytes_sent_window = 0.0
-        self.window_start = time.time()
-
-        # ROS publishers (drone telemetry → ROS)
-        self.pub_drone_pose = rospy.Publisher("/drone/pose", PoseStamped, queue_size=5)
-        self.pub_drone_heartbeat = rospy.Publisher("/drone/heartbeat", Bool, queue_size=5)
-        self.pub_drone_state = rospy.Publisher("/drone/state", String, queue_size=5)
-
-        # ROS subscribers (car commands → drone MAVLink)
-        self.sub_cmd = rospy.Subscriber("/car/to_drone/cmd", String, self.cmd_callback)
-
-        # For drone pose, reuse existing gps_converter output instead of raw MAVLink parse
-        rospy.Subscriber("/drone/gps/local_pose", PoseStamped, self._drone_pose_cb, queue_size=5)
-        self._drone_pose = None
-
-        # RX thread
-        self.running = True
-        self.rx_thread = threading.Thread(target=self._rx_loop, daemon=True)
-        self.rx_thread.start()
-
-        rospy.loginfo(f"[DroneCarBridge] Listening on UDP:{self.car_port}")
-
-    def _drone_pose_cb(self, msg: PoseStamped):
-        """Receive properly converted ENU pose from gps_converter (not raw MAVLink lat/lon)."""
-        self._drone_pose = msg
-        self.pub_drone_pose.publish(msg)
-
-    def _rx_loop(self):
-        """Receive MAVLink packets from drone."""
-        while self.running and not rospy.is_shutdown():
-            try:
-                data, addr = self.sock.recvfrom(4096)
-                self._parse_mavlink(data)
-                # Update drone address in case it changed
-                if addr != self.drone_addr:
-                    rospy.loginfo(f"[DroneCarBridge] Drone addr updated: {addr}")
-                    # Don't update self.drone_addr - we still send to configured addr
-            except socket.timeout:
-                continue
-            except Exception as e:
-                rospy.logwarn(f"[DroneCarBridge] RX error: {e}")
-
-    def _parse_mavlink(self, data: bytes):
-        """Parse MAVLink v1/v2 packet and publish to ROS."""
-        if len(data) < 8:
-            return
-
-        # MAVLink v1 frame: STX(0xFE) LEN SEQ SYS COMP MSG_ID PAYLOAD CKA CKB
-        if data[0] == 0xFE:  # MAVLink v1
-            msg_id = data[5]
-            payload = data[6:-2]  # strip 2-byte checksum
-
-            if msg_id == self.MAVLINK_MSG_ID_HEARTBEAT:
-                self.pub_drone_heartbeat.publish(Bool(True))
-                # Publish custom_mode as state
-                if len(payload) >= 8:
-                    custom_mode = struct.unpack("<I", payload[2:6])[0]
-                    self.pub_drone_state.publish(String(f"mode:{custom_mode}"))
-
-            elif msg_id == self.MAVLINK_MSG_ID_GLOBAL_POSITION_INT:
-                # NOTE: Raw MAVLink lat/lon (degrees*1e7) is not a valid ENU pose.
-                # Use /drone/gps/local_pose (from gps_converter.py, HOME-offset ENU) instead.
-                # This handler only logs that the drone is alive.
-                rospy.logdebug("[DroneCarBridge] GPS raw received (ignored; using /drone/gps/local_pose)")
-
-    def cmd_callback(self, msg: String):
-        """Forward car commands to drone via MAVLink."""
-        # Throttle check
-        if self.throttle.get("enable", False):
-            elapsed = time.time() - self.window_start
-            if elapsed > 1.0:
-                self.window_start = time.time()
-                self.bytes_sent_window = 0
-            max_bw = self.throttle.get("max_bandwidth_bytes_per_sec", 24000)
-            if self.bytes_sent_window > max_bw:
-                rospy.logdebug("[DroneCarBridge] Throttled")
-                return
-
-        # Build simple MAVLink COMMAND_LONG
-        # For full implementation, use pymavlink.mavutil.mavlink.MAVLink_command_long_encode
-        if HAS_PYMAVLINK:
-            try:
-                mav = mavutil.mavlink.MAVLink(None)
-                # Simplified - real impl would parse msg.data
-                cmd_bytes = bytes([0xFE, 21, 0, 1, 0, self.MAVLINK_MSG_ID_COMMAND_LONG])
-                cmd_bytes += bytes(32)  # placeholder payload + checksum
-                self.sock.sendto(cmd_bytes, self.drone_addr)
-                self.bytes_sent_window += len(cmd_bytes)
-            except Exception as e:
-                rospy.logwarn(f"[DroneCarBridge] TX error: {e}")
-
-    def shutdown(self):
-        self.running = False
-        self.sock.close()
-
-
-if __name__ == "__main__":
-    bridge = DroneCarBridge()
-    rospy.on_shutdown(bridge.shutdown)
-    rospy.spin()
+```text
+逻辑无人机 127.0.0.1:14550 ↔ 车机 127.0.0.1:14551
 ```
+
+PX4 v1.14 SITL 的 GCS 实例实际绑定 `18570`，并非旧草案假设的 `14550`。
+仿真默认启用透明适配层：
+
+```text
+PX4 SITL :18570 ↔ 无人机逻辑端 :14550 ↔ 车机逻辑端 :14551
+```
+
+适配层由
+[`network.yaml`](../src/air_ground_com_bridge/config/network.yaml)
+的 `simulation_adapter.enable` 控制；实机部署时关闭即可。
+
+## 实现
+
+### MAVLink UDP 桥
+
+节点：
+[`drone_car_bridge.py`](../src/air_ground_com_bridge/scripts/drone_car_bridge.py)
+
+- 增量解析 MAVLink v1，支持分片、前导噪声和单个 UDP 包内多帧；
+- 对 HEARTBEAT、GLOBAL_POSITION_INT 和 COMMAND_LONG 校验 X.25 CRC extra；
+- 可选使用 pymavlink 解析 MAVLink v2；未安装时 v1 核心链路仍可工作；
+- 从 `/drone/gps/local_pose` 复用 Task-02 已转换的 ENU 位姿；
+- 周期发送 GCS HEARTBEAT，使 PX4 SITL 学习 UDP 回程地址；
+- ROS 上行命令必须是结构化 JSON，并编码为合法 COMMAND_LONG；
+- 拒绝非法 JSON、越界 ID、超长参数和 NaN/Inf；
+- 对命令链路应用 24 KB/s 令牌桶限流；
+- 心跳超过三个周期未到达时发布断连状态。
+
+`/car/to_drone/cmd` 示例：
 
 ```bash
-chmod +x ~/air_ground_sim_ws/src/air_ground_com_bridge/scripts/drone_car_bridge.py
+rostopic pub -1 /car/to_drone/cmd std_msgs/String \
+  "data: '{\"command\":400,\"params\":[1.0]}'"
 ```
 
-## 6.3 边缘↔服务器 TCP 桥
+### TCP JSON 桥
 
-**文件：`~/air_ground_sim_ws/src/air_ground_com_bridge/scripts/edge_server_bridge.py`**
+节点：
+[`edge_server_bridge.py`](../src/air_ground_com_bridge/scripts/edge_server_bridge.py)
 
-```python
-#!/usr/bin/env python3
-"""
-Edge-Server TCP Bridge.
+- 缓存车体里程计、IMU、LiDAR、OpenMV、四向超声波及无人机位姿；
+- LiDAR 默认 4:1 降采样，OpenMV JPEG 质量 50、最大 2 Hz；
+- JSON 禁止 NaN/Inf，非有限测距转换为 `-1.0`；
+- 每帧使用 4 字节网络序长度头，接收端保证完整读取；
+- 单帧最大 10 MiB，拒绝零长度和超限数据；
+- 24 KB/s 令牌桶限制总上行带宽；
+- 服务器缺席时保持节点运行并每 3 秒重试；
+- 断线后关闭旧连接并自动恢复发送；
+- 服务器命令经过字段与有限数值验证后发布到 ROS。
 
-Runs on car edge node. Responsibilities:
-1. Collect sensor+state data → serialize as JSON → send to server via TCP
-2. Receive ServerCommand from server → publish to local ROS topics
-"""
-import rospy
-import socket
-import json
-import struct
-import threading
-import time
-import yaml
-import os
-import zlib
-from air_ground_interfaces.msg import SensorFusion, ServerCommand
-from sensor_msgs.msg import Image, LaserScan, Imu
-import base64
-import cv2
-from cv_bridge import CvBridge
-from nav_msgs.msg import Odometry
-from geometry_msgs.msg import PoseStamped
-import numpy as np
+TCP 上行格式与 Task-07 `tcp_receiver` 兼容，主要字段包括：
 
-
-class EdgeServerBridge:
-    def __init__(self):
-        rospy.init_node("edge_server_bridge")
-
-        # Load config
-        config_path = rospy.get_param("~config_path",
-            os.path.expanduser("~/air_ground_sim_ws/src/air_ground_com_bridge/config/network.yaml"))
-        with open(config_path) as f:
-            cfg = yaml.safe_load(f)["edge_server_tcp"]
-            self.network_cfg = yaml.safe_load(f)
-
-        self.server_addr = (cfg["server_ip"], cfg["server_port"])
-        self.reconnect_interval = cfg.get("reconnect_interval", 3.0)
-        self.throttle_cfg = self.network_cfg.get("throttle", {})
-
-        # CV bridge for image compression
-        self.cv_bridge = CvBridge()
-
-        # Latest sensor data cache
-        self.latest = {
-            "odom": None,
-            "imu": None,
-            "scan": None,
-            "image": None,
-            "ultrasonic": {},
-            "drone_pose": None,
-        }
-        self.last_image_time = 0.0  # throttle image encoding
-
-        # Subscribers (car sensors)
-        rospy.Subscriber("/car/odom", Odometry, self._cb("odom"), queue_size=5)
-        rospy.Subscriber("/car/imu/data", Imu, self._cb("imu"), queue_size=5)
-        rospy.Subscriber("/car/scan", LaserScan, self._cb("scan"), queue_size=5)
-        rospy.Subscriber("/car/openmv/image_raw", Image, self._cb("image"), queue_size=2)
-        for d in ["front", "rear", "left", "right"]:
-            rospy.Subscriber(f"/car/ultrasonic/{d}", LaserScan,
-                             self._cb_ultrasonic(d), queue_size=5)
-        rospy.Subscriber("/drone/pose", PoseStamped, self._cb("drone_pose"), queue_size=5)
-
-        # Publisher (server→edge commands)
-        self.pub_server_cmd = rospy.Publisher("/car/server_command", ServerCommand, queue_size=10)
-
-        # TCP state
-        self.sock = None
-        self.connected = False
-        self.running = True
-
-        # TX thread (periodic data push)
-        self.tx_timer = rospy.Timer(rospy.Duration(0.1), self._tx_tick)  # 10Hz push
-
-        # Connect async
-        self.connect_thread = threading.Thread(target=self._connect_loop, daemon=True)
-        self.connect_thread.start()
-
-        rospy.loginfo(f"[EdgeServerBridge] Ready, server={self.server_addr}")
-
-    def _cb(self, key):
-        """Create a callback that caches latest value."""
-        def callback(msg):
-            self.latest[key] = msg
-        return callback
-
-    def _cb_ultrasonic(self, direction):
-        def callback(msg):
-            self.latest["ultrasonic"][direction] = msg
-        return callback
-
-    def _connect_loop(self):
-        """Persistent TCP reconnect loop."""
-        while self.running and not rospy.is_shutdown():
-            try:
-                self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.sock.settimeout(5.0)
-                self.sock.connect(self.server_addr)
-                self.connected = True
-                rospy.loginfo("[EdgeServerBridge] Connected to server")
-                # RX thread for server commands
-                rx = threading.Thread(target=self._rx_loop, daemon=True)
-                rx.start()
-                break
-            except (socket.error, ConnectionRefusedError) as e:
-                rospy.logwarn(f"[EdgeServerBridge] Connection failed: {e}, retrying...")
-                time.sleep(self.reconnect_interval)
-
-    def _tx_tick(self, event):
-        """Periodic data push to server."""
-        if not self.connected or self.sock is None:
-            return
-        try:
-            payload = self._serialize_sensors()
-            data = json.dumps(payload).encode()
-            # Prepend 4-byte length header
-            header = struct.pack("!I", len(data))
-            self.sock.sendall(header + data)
-        except (socket.error, BrokenPipeError) as e:
-            rospy.logwarn(f"[EdgeServerBridge] TX failed: {e}")
-            self.connected = False
-
-    def _serialize_sensors(self) -> dict:
-        """Serialize latest sensor data to lightweight JSON dict."""
-        out = {"timestamp": rospy.Time.now().to_sec(), "source": "car"}
-
-        # Odometry → pose
-        if self.latest["odom"]:
-            o = self.latest["odom"]
-            out["pose"] = {
-                "x": o.pose.pose.position.x, "y": o.pose.pose.position.y,
-                "z": o.pose.pose.position.z,
-                "qw": o.pose.pose.orientation.w, "qx": o.pose.pose.orientation.x,
-                "qy": o.pose.pose.orientation.y, "qz": o.pose.pose.orientation.z
-            }
-            out["twist"] = {
-                "vx": o.twist.twist.linear.x, "vz": o.twist.twist.angular.z
-            }
-
-        # IMU → orientation + angular velocity
-        if self.latest["imu"]:
-            i = self.latest["imu"]
-            out["imu"] = {
-                "wx": i.angular_velocity.x, "wy": i.angular_velocity.y,
-                "wz": i.angular_velocity.z,
-                "ax": i.linear_acceleration.x, "ay": i.linear_acceleration.y,
-                "az": i.linear_acceleration.z
-            }
-
-        # LiDAR → compressed range array (pick every 4th sample for bandwidth)
-        if self.latest["scan"]:
-            s = self.latest["scan"]
-            ranges = s.ranges[::4]  # downsample 4:1
-            # JSON 不支持 inf: 用 -1.0 替代
-            out["scan"] = {
-                "angle_min": s.angle_min, "angle_increment": s.angle_increment * 4,
-                "ranges": [r if r > 0 and np.isfinite(r) else -1.0 for r in ranges]
-            }
-
-        # OpenMV image → base64 JPEG (throttled to bandwidth limits)
-        if self.latest["image"]:
-            now = time.time()
-            max_freq = self.throttle_cfg.get("max_image_freq", 2)
-            if now - self.last_image_time >= 1.0 / max_freq:
-                self.last_image_time = now
-                try:
-                    # Convert ROS Image → OpenCV → JPEG → base64
-                    cv_img = self.cv_bridge.imgmsg_to_cv2(self.latest["image"], "bgr8")
-                    quality = self.throttle_cfg.get("image_quality", 50)
-                    _, jpeg = cv2.imencode(".jpg", cv_img,
-                                           [cv2.IMWRITE_JPEG_QUALITY, quality])
-                    out["image_jpeg_b64"] = base64.b64encode(jpeg.tobytes()).decode()
-                except Exception as e:
-                    rospy.logwarn(f"[EdgeServerBridge] Image encode failed: {e}")
-
-        # Ultrasonic → distances
-        out["ultrasonic"] = {}
-        for d, msg in self.latest["ultrasonic"].items():
-            if msg and msg.ranges:
-                out["ultrasonic"][d] = min(msg.ranges[0], 4.0)  # clamp
-
-        # Drone pose (if available)
-        if self.latest["drone_pose"]:
-            dp = self.latest["drone_pose"]
-            out["drone_pose"] = {
-                "x": dp.pose.position.x, "y": dp.pose.position.y,
-                "z": dp.pose.position.z
-            }
-
-        return out
-
-    def _rx_loop(self):
-        """Receive server commands via TCP."""
-        while self.running and self.connected:
-            try:
-                # Read 4-byte length header
-                header = self.sock.recv(4)
-                if len(header) < 4:
-                    break
-                length = struct.unpack("!I", header)[0]
-                data = b""
-                while len(data) < length:
-                    chunk = self.sock.recv(length - len(data))
-                    if not chunk:
-                        break
-                    data += chunk
-                if data:
-                    self._handle_server_msg(json.loads(data))
-            except socket.timeout:
-                continue
-            except Exception as e:
-                rospy.logwarn(f"[EdgeServerBridge] RX error: {e}")
-                break
-        self.connected = False
-
-    def _handle_server_msg(self, msg: dict):
-        """Parse server message and publish to ROS."""
-        cmd = ServerCommand()
-        cmd.header.stamp = rospy.Time.now()
-        cmd.target_id = msg.get("target_id", "car")
-        cmd.command_type = msg.get("command_type", "")
-        cmd.query_text = msg.get("query_text", "")
-        target = msg.get("target_pose", {})
-        cmd.target_pose.position.x = target.get("x", 0)
-        cmd.target_pose.position.y = target.get("y", 0)
-        cmd.target_pose.position.z = target.get("z", 0)
-        cmd.target_velocity = msg.get("target_velocity", 0.0)
-        self.pub_server_cmd.publish(cmd)
-
-    def shutdown(self):
-        self.running = False
-        if self.sock:
-            self.sock.close()
-
-
-if __name__ == "__main__":
-    bridge = EdgeServerBridge()
-    rospy.on_shutdown(bridge.shutdown)
-    rospy.spin()
+```json
+{
+  "protocol_version": 1,
+  "kind": "telemetry",
+  "timestamp": 0.0,
+  "source": "car",
+  "pose": {},
+  "twist": {},
+  "imu": {},
+  "scan": {},
+  "ultrasonic": {},
+  "image_jpeg_b64": "",
+  "drone_pose": {}
+}
 ```
+
+## 公共与兼容接口
+
+| 接口 | 类型 | 方向 |
+|------|------|------|
+| `/drone/heartbeat` | `std_msgs/Bool` | MAVLink → ROS |
+| `/drone/pose` | `geometry_msgs/PoseStamped` | Task-02 ENU → ROS |
+| `/drone/state` | `air_ground_interfaces/RobotState` | MAVLink → ROS |
+| `/car/to_drone/cmd` | `std_msgs/String`（JSON） | ROS → MAVLink |
+| `/car/server_connected` | `std_msgs/Bool` | TCP 状态 |
+| `/car/server_command` | `air_ground_interfaces/ServerCommand` | TCP → ROS |
+
+`/drone/state` 使用 ICD 规定的 `RobotState`，修正了草案中
+`std_msgs/String` 与 Task-07 稳定接口类型冲突的问题。
+`ServerCommand` 是保留到 Task-09 的兼容消息；后续稳定任务接口为 `Mission`。
+
+## 配置
+
+[`network.yaml`](../src/air_ground_com_bridge/config/network.yaml)
+集中配置以下内容：
+
+| 配置 | 默认值 |
+|------|-------:|
+| 无人机逻辑 UDP 端口 | 14550 |
+| 车机逻辑 UDP 端口 | 14551 |
+| PX4 v1.14 SITL GCS 端口 | 18570 |
+| 服务器 TCP 端口 | 9090 |
+| TCP 重连间隔 | 3 s |
+| TCP 发布频率 | 10 Hz |
+| 最大 TCP 帧 | 10 MiB |
+| 总带宽 | 24,000 B/s |
+| JPEG 质量 | 50 |
+| 图像最大频率 | 2 Hz |
+| LiDAR 降采样 | 4:1 |
+
+启动入口：
 
 ```bash
-chmod +x ~/air_ground_sim_ws/src/air_ground_com_bridge/scripts/edge_server_bridge.py
+roslaunch air_ground_com_bridge air_ground_com_bridge.launch
 ```
 
-## 6.4 Launch 文件
+可使用 `start_drone_bridge` 和 `start_edge_bridge` 参数单独启动任一链路。
 
-**文件：`~/air_ground_sim_ws/src/air_ground_com_bridge/launch/air_ground_com_bridge.launch`**
+## 自动验收
 
-```xml
-<launch>
-  <!-- MAVLink Drone↔Car Bridge -->
-  <node name="drone_car_bridge" pkg="air_ground_com_bridge" type="drone_car_bridge.py"
-        output="screen">
-    <param name="config_path"
-           value="$(find air_ground_com_bridge)/config/network.yaml"/>
-  </node>
-
-  <!-- Edge↔Server TCP Bridge -->
-  <node name="edge_server_bridge" pkg="air_ground_com_bridge" type="edge_server_bridge.py"
-        output="screen">
-    <param name="config_path"
-           value="$(find air_ground_com_bridge)/config/network.yaml"/>
-  </node>
-</launch>
-```
-
-## 6.5 验证脚本
-
-**文件：`~/air_ground_sim_ws/src/air_ground_com_bridge/scripts/test_bridge.sh`**
+脚本：
+[`test_bridge.sh`](../src/air_ground_com_bridge/scripts/test_bridge.sh)
 
 ```bash
-#!/bin/bash
-echo "=== Task-06 Communication Bridge Verification ==="
-
-# Start drone in background
-roslaunch air_ground_drone_bringup drone_sitl.launch headless:=true gui:=false &
-DRONE_PID=$!
-sleep 12
-
-# Start car in background
-roslaunch air_ground_car_bringup car_diff.launch headless:=true gui:=false &
-CAR_PID=$!
-sleep 8
-
-# Start bridge
-roslaunch air_ground_com_bridge air_ground_com_bridge.launch &
-BRIDGE_PID=$!
-sleep 5
-
-# 1. Check drone heartbeat published by bridge
-echo "--- Checking /drone/heartbeat ---"
-rostopic echo /drone/heartbeat -n 1 2>/dev/null | grep -q "data" && echo "[PASS]" || echo "[WARN]"
-
-# 2. Check drone pose forwarded
-echo "--- Checking /drone/pose ---"
-rostopic echo /drone/pose -n 1 2>/dev/null | grep -q "position" && echo "[PASS]" || echo "[WARN]"
-
-# 3. Check edge_server_bridge is running
-echo "--- Checking edge_server_bridge node ---"
-rosnode list 2>/dev/null | grep -q "edge_server_bridge" && echo "[PASS]" || echo "[WARN]"
-
-# Cleanup
-kill $BRIDGE_PID $CAR_PID $DRONE_PID 2>/dev/null
-wait 2>/dev/null
-echo "=== Done ==="
+cd ~/air_ground_sim_ws
+source /opt/ros/noetic/setup.bash
+source devel/setup.bash
+rosrun air_ground_com_bridge test_bridge.sh
 ```
 
-## 6.6 更新 `air_ground_com_bridge/CMakeLists.txt`
+验收脚本不依赖人工观察，也不把 `[WARN]` 当作通过。它会：
 
-```cmake
-cmake_minimum_required(VERSION 3.0.2)
-project(air_ground_com_bridge)
-find_package(catkin REQUIRED COMPONENTS
-  roscpp rospy std_msgs geometry_msgs sensor_msgs nav_msgs
-  air_ground_interfaces mavros
-)
-catkin_package()
-install(DIRECTORY launch config scripts
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
-```
+1. 检查 14550、14551、18570 和 9090 无端口占用；
+2. 在服务器缺席时确认 TCP retry 状态；
+3. 发送带合法 CRC 的 MAVLink HEARTBEAT；
+4. 校验 `/drone/pose` 和 ICD `RobotState`；
+5. 验证 ROS JSON 命令被编码为合法 COMMAND_LONG；
+6. 发布完整模拟车载传感器数据；
+7. 验证长度头 JSON、90 点 LiDAR、四向超声波和 base64 JPEG；
+8. 分片发送服务器命令并校验 `/car/server_command`；
+9. 强制断开第一次 TCP 连接，要求第二次连接恢复遥测；
+10. 全程使用超时、独立日志和进程组清理。
 
-## 交付产物
+## 验证记录
 
-1. `drone_car_bridge.py` 可接收无人机 MAVLink 心跳并发布 `/drone/heartbeat`
-2. `edge_server_bridge.py` 可正常启动（连接服务器可能显示 retrying，这是预期的——服务器在 Task-07 实现）
-3. `test_bridge.sh` 前两项 PASS，第三项至少确认 edge_server_bridge 节点在运行
+2026-07-27 在 Ubuntu 20.04、ROS Noetic、PX4 v1.14 和 Gazebo 11
+环境完成：
+
+| 验证项 | 结果 |
+|--------|------|
+| Python、Shell、XML、Launch 静态检查 | ✅ |
+| MAVLink/TCP 单元测试 | ✅，16 tests |
+| pymavlink HEARTBEAT 交叉解析 | ✅ |
+| 全工作空间 `catkin build` | ✅，5 个包 |
+| `rosdep check --from-paths src --ignore-src` | ✅ |
+| 安装目标 | ✅，节点、脚本、launch、config |
+| Task-06 localhost 自动验收 | ✅，11 passed, 0 failed |
+| 真实 PX4/MAVROS 连接 | ✅ |
+| PX4 18570→14550→14551 心跳 | ✅ |
+| Task-02 ENU 位姿经 Task-06 转发 | ✅ |
+| Task-03 回归 | ✅，7 passed, 0 failed |
+| Task-04 回归 | ✅，17 passed, 0 failed |
+
+## 验收结论
+
+- [x] MAVLink UDP 双向通信具有有效帧和 CRC；
+- [x] PX4 v1.14 实际端口已完成联合验证；
+- [x] 车载传感器可按限制编码并发送到 TCP；
+- [x] 服务器缺席、断线和重连均不会导致节点退出；
+- [x] 下行命令可完整、安全地重建为 ROS 消息；
+- [x] Task-03、Task-04 无回归。

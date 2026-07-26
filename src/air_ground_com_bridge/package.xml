@@ -20,5 +20,13 @@
   <depend>sensor_msgs</depend>
   <depend>std_msgs</depend>
 
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>roslaunch</exec_depend>
+  <exec_depend>rosnode</exec_depend>
+  <exec_depend>rostopic</exec_depend>
+
+  <test_depend>python3-nose</test_depend>
+
   <export/>
 </package>
