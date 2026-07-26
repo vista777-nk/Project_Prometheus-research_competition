@@ -1,0 +1,72 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="world"
+       default="$(find air_ground_car_bringup)/worlds/empty.world"/>
+  <arg name="model_name" default="mecanum_car"/>
+  <arg name="gui" default="false"/>
+  <!-- Gazebo 11 keeps this non-functional argument for compatibility. -->
+  <arg name="headless" default="true"/>
+  <arg name="paused" default="false"/>
+  <arg name="verbose" default="false"/>
+  <arg name="x" default="0.0"/>
+  <arg name="y" default="0.0"/>
+  <arg name="z" default="0.0"/>
+  <arg name="R" default="0.0"/>
+  <arg name="P" default="0.0"/>
+  <arg name="Y" default="0.0"/>
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(arg world)"/>
+    <arg name="gui" value="$(arg gui)"/>
+    <arg name="headless" value="$(arg headless)"/>
+    <arg name="paused" value="$(arg paused)"/>
+    <arg name="verbose" value="$(arg verbose)"/>
+    <arg name="use_sim_time" value="true"/>
+  </include>
+
+  <param name="/robot_description"
+         command="$(find xacro)/xacro
+                  $(find air_ground_car_bringup)/urdf/mecanum_chassis.urdf.xacro"/>
+
+  <rosparam command="load"
+            file="$(find air_ground_car_bringup)/config/mecanum_chassis_control.yaml"/>
+
+  <node name="spawn_mecanum_car" pkg="gazebo_ros" type="spawn_model"
+        args="-param /robot_description -urdf -model $(arg model_name)
+              -x $(arg x) -y $(arg y) -z $(arg z)
+              -R $(arg R) -P $(arg P) -Y $(arg Y)"
+        output="screen"/>
+
+  <node name="mecanum_controller"
+        pkg="air_ground_car_bringup" type="mecanum_controller.py"
+        output="screen">
+    <param name="wheel_base" value="0.20"/>
+    <param name="track_width" value="0.18"/>
+    <param name="wheel_radius" value="0.033"/>
+    <param name="max_rpm" value="300.0"/>
+    <param name="command_timeout" value="0.5"/>
+    <param name="gazebo_model_name" value="$(arg model_name)"/>
+    <param name="odometry_source" value="gazebo"/>
+    <param name="publish_tf" value="true"/>
+  </node>
+
+  <!-- This node owns controller and robot_state_publisher lifecycle. -->
+  <node name="chassis_swapper"
+        pkg="air_ground_car_bringup" type="chassis_swapper.py"
+        output="screen">
+    <param name="package_path"
+           value="$(find air_ground_car_bringup)"/>
+    <param name="initial_chassis" value="mecanum"/>
+    <param name="mecanum_model_name" value="$(arg model_name)"/>
+    <param name="diff_model_name" value="diff_car"/>
+    <param name="timeout" value="60.0"/>
+  </node>
+
+  <!-- These relays are dormant for mecanum and become active after a diff swap. -->
+  <node name="relay_car_cmd_vel_diff" pkg="topic_tools" type="relay"
+        args="/car/cmd_vel /car/diff_drive_controller/cmd_vel"
+        output="screen"/>
+  <node name="relay_car_odom_diff" pkg="topic_tools" type="relay"
+        args="/car/diff_drive_controller/odom /car/odom"
+        output="screen"/>
+</launch>
