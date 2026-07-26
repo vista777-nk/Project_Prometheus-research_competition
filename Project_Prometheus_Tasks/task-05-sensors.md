@@ -1,435 +1,131 @@
-# Task-05: 车机传感器插件完整配置
+# Task-05：车载传感器与二维云台
 
-## 前置条件
+## 状态
 
-- Task-03、04 完成（车体 URDF 存在）
-- Gazebo 11 可用
+| 项目 | 结果 |
+|------|------|
+| 依赖 | Task-03、Task-04 |
+| 实施状态 | ✅ 已完成 |
+| 完成日期 | 2026-07-27 |
+| Task-05 验收 | `28 passed, 0 failed` |
+| 回归验收 | Task-03 `7/7`；Task-04 `17/17` |
 
 ## 目标
 
-将以下传感器集成到车体 URDF 中：
-1. **OpenMV 模拟** — RGB 相机 + 2-DOF 云台（模拟真实 OpenMV H7 Plus + 舵机云台）
-2. **2D 激光雷达** — 模拟入门级 RPLIDAR A1（360°，12m 量程）
-3. **4× 超声波传感器** — 前后左右各一，模拟 HC-SR04
+为差速和麦轮底盘提供同一套车载传感器与云台，使底盘动态换模前后保持
+稳定的话题、TF 和控制接口：
 
----
+1. OpenMV RGB 相机与标准 optical frame；
+2. 360° 二维激光雷达；
+3. 前、后、左、右四个单波束超声波；
+4. 车载 IMU；
+5. 可限位、可在换模后恢复目标的 pan/tilt 二维云台。
 
-## 5.1 传感器支架 + 所有传感器的 URDF 宏
+## 实现结构
 
-**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/urdf/car_sensors.urdf.xacro`**
+公共宏
+[`car_sensors.urdf.xacro`](../src/air_ground_car_bringup/urdf/car_sensors.urdf.xacro)
+由
+[`car_base.urdf.xacro`](../src/air_ground_car_bringup/urdf/car_base.urdf.xacro)
+统一实例化，因此差速、麦轮以及动态切换后重新生成的模型具有完全一致的
+传感器和关节定义，不在两种底盘文件中重复维护。
 
-```xml
-<?xml version="1.0"?>
-<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+所有 Gazebo ROS 插件显式使用 `/car` 命名空间。配置元数据与云台限位集中在
+[`car_sensors.yaml`](../src/air_ground_car_bringup/config/car_sensors.yaml)。
 
-  <!-- ============================================================ -->
-  <!-- 二维云台 + OpenMV 相机                                      -->
-  <!-- ============================================================ -->
-  <xacro:macro name="openmv_gimbal" params="parent_link">
-    <!-- 云台底座（pan 轴） -->
-    <link name="gimbal_pan_link">
-      <inertial>
-        <mass value="0.03"/>
-        <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
-      </inertial>
-    </link>
-    <joint name="gimbal_pan_joint" type="revolute">
-      <parent link="${parent_link}"/>
-      <child link="gimbal_pan_link"/>
-      <origin xyz="0.12 0 0.06" rpy="0 0 0"/>  <!-- 车头前方 12cm, 高 6cm -->
-      <axis xyz="0 0 1"/>
-      <limit lower="-1.57" upper="1.57" effort="0.5" velocity="3.0"/>  <!-- ±90° -->
-    </joint>
+### 实测配置
 
-    <!-- 云台俯仰臂（tilt 轴） -->
-    <link name="gimbal_tilt_link">
-      <inertial>
-        <mass value="0.02"/>
-        <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
-      </inertial>
-    </link>
-    <joint name="gimbal_tilt_joint" type="revolute">
-      <parent link="gimbal_pan_link"/>
-      <child link="gimbal_tilt_link"/>
-      <origin xyz="0 0 0.03" rpy="0 0 0"/>
-      <axis xyz="0 1 0"/>
-      <limit lower="-0.785" upper="0.785" effort="0.3" velocity="2.0"/>  <!-- ±45° -->
-    </joint>
+| 设备 | 配置 | 频率 | 量程/噪声 |
+|------|------|:---:|-----------|
+| OpenMV | RGB8，320×240，65° 水平视场 | 10 Hz | 0.05–30 m，图像噪声 σ=0.007 |
+| 2D LiDAR | 360 点，360° | 10 Hz | 0.15–12 m，σ=0.015 m |
+| 4× HC-SR04 | 单波束，前后左右 | 25 Hz | 0.02–4 m，σ=0.003 m |
+| ICM42688 IMU | 角速度、线加速度、姿态 | 30 Hz | gyro σ=0.0005，accel σ=0.001 |
+| 二维云台 | pan ±90°，tilt ±45° | 20 Hz 目标重发 | PositionJointInterface |
 
-    <!-- OpenMV 相机（固定在 tilt 臂末端） -->
-    <link name="openmv_camera_link">
-      <inertial>
-        <mass value="0.02"/>
-        <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
-      </inertial>
-      <visual>
-        <geometry>
-          <box size="0.035 0.035 0.015"/>
-        </geometry>
-        <material name="black"/>
-      </visual>
-    </link>
-    <joint name="openmv_camera_joint" type="fixed">
-      <parent link="gimbal_tilt_link"/>
-      <child link="openmv_camera_link"/>
-      <origin xyz="0.02 0 0" rpy="0 0 0"/>
-    </joint>
-  </xacro:macro>
+IMU 采用项目轻量化规范的 30 Hz，而不是草案中的 100 Hz。
 
-  <!-- ============================================================ -->
-  <!-- Gazebo 相机插件（OpenMV 模拟）                             -->
-  <!-- ============================================================ -->
-  <xacro:macro name="openmv_gazebo_plugin">
-    <gazebo reference="openmv_camera_link">
-      <sensor name="openmv_camera" type="camera">
-        <update_rate>10</update_rate>             <!-- OpenMV 帧率较低 -->
-        <camera>
-          <horizontal_fov>1.13446</horizontal_fov> <!-- 65° FOV -->
-          <image>
-            <width>320</width>                     <!-- QVGA，模拟 OpenMV -->
-            <height>240</height>
-            <format>R8G8B8</format>
-          </image>
-          <clip>
-            <near>0.05</near>
-            <far>30.0</far>
-          </clip>
-        </camera>
-        <plugin name="openmv_camera_plugin" filename="libgazebo_ros_camera.so">
-          <alwaysOn>true</alwaysOn>
-          <updateRate>10.0</updateRate>
-          <cameraName>car/openmv</cameraName>
-          <imageTopicName>image_raw</imageTopicName>
-          <cameraInfoTopicName>camera_info</cameraInfoTopicName>
-          <frameName>openmv_camera_link</frameName>
-          <hackBaseline>0.0</hackBaseline>
-          <distortionK1>0.0</distortionK1>
-          <distortionK2>0.0</distortionK2>
-          <distortionK3>0.0</distortionK3>
-          <distortionT1>0.0</distortionT1>
-          <distortionT2>0.0</distortionT2>
-        </plugin>
-      </sensor>
-    </gazebo>
-  </xacro:macro>
+## 公共接口
 
-  <!-- ============================================================ -->
-  <!-- 2D 激光雷达（RPLIDAR A1 模拟）                              -->
-  <!-- ============================================================ -->
-  <xacro:macro name="lidar_2d" params="parent_link">
-    <link name="lidar_link">
-      <inertial>
-        <mass value="0.17"/>
-        <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
-      </inertial>
-      <visual>
-        <geometry>
-          <cylinder radius="0.05" length="0.04"/>
-        </geometry>
-        <material name="car_gray"/>
-      </visual>
-    </link>
-    <joint name="lidar_joint" type="fixed">
-      <parent link="${parent_link}"/>
-      <child link="lidar_link"/>
-      <origin xyz="0 0 0.17" rpy="0 0 0"/>        <!-- 车顶最高处 -->
-    </joint>
-  </xacro:macro>
+| 接口 | 消息类型 | frame |
+|------|----------|-------|
+| `/car/openmv/image_raw` | `sensor_msgs/Image` | `openmv_camera_optical_link` |
+| `/car/openmv/camera_info` | `sensor_msgs/CameraInfo` | `openmv_camera_optical_link` |
+| `/car/scan` | `sensor_msgs/LaserScan` | `lidar_link` |
+| `/car/ultrasonic/front` | `sensor_msgs/LaserScan` | `ultrasonic_front_link` |
+| `/car/ultrasonic/rear` | `sensor_msgs/LaserScan` | `ultrasonic_rear_link` |
+| `/car/ultrasonic/left` | `sensor_msgs/LaserScan` | `ultrasonic_left_link` |
+| `/car/ultrasonic/right` | `sensor_msgs/LaserScan` | `ultrasonic_right_link` |
+| `/car/imu/data` | `sensor_msgs/Imu` | `imu_link` |
+| `/car/gimbal/pan/command` | `std_msgs/Float64`，rad | — |
+| `/car/gimbal/tilt/command` | `std_msgs/Float64`，rad | — |
 
-  <xacro:macro name="lidar_gazebo_plugin">
-    <gazebo reference="lidar_link">
-      <sensor name="lidar_2d" type="ray">
-        <pose>0 0 0 0 0 0</pose>
-        <update_rate>10</update_rate>              <!-- RPLIDAR A1: 10Hz -->
-        <ray>
-          <scan>
-            <horizontal>
-              <samples>360</samples>               <!-- 1° 分辨率 -->
-              <resolution>1</resolution>
-              <min_angle>-3.14159</min_angle>
-              <max_angle>3.14159</max_angle>
-            </horizontal>
-          </scan>
-          <range>
-            <min>0.15</min>                        <!-- RPLIDAR A1 盲区 -->
-            <max>12.0</max>                        <!-- RPLIDAR A1 最大量程 -->
-            <resolution>0.01</resolution>
-          </range>
-          <noise>
-            <type>gaussian</type>
-            <mean>0.0</mean>
-            <stddev>0.015</stddev>                 <!-- ±1.5cm 噪声 -->
-          </noise>
-        </ray>
-        <plugin name="lidar_plugin" filename="libgazebo_ros_laser.so">
-          <topicName>scan</topicName>
-          <frameName>lidar_link</frameName>
-        </plugin>
-      </sensor>
-    </gazebo>
-  </xacro:macro>
+超声波保留 `LaserScan` 类型，与 Task-06、Task-07 和 Task-09 的既有订阅接口
+兼容。
 
-  <!-- ============================================================ -->
-  <!-- 超声波传感器 ×4（前后左右）                                 -->
-  <!-- ============================================================ -->
-  <xacro:macro name="ultrasonic_sensor" params="name parent_link x y z yaw">
-    <link name="ultrasonic_${name}_link">
-      <inertial>
-        <mass value="0.005"/>
-        <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6"/>
-      </inertial>
-    </link>
-    <joint name="ultrasonic_${name}_joint" type="fixed">
-      <parent link="${parent_link}"/>
-      <child link="ultrasonic_${name}_link"/>
-      <origin xyz="${x} ${y} ${z}" rpy="0 0 ${yaw}"/>
-    </joint>
-  </xacro:macro>
+## 云台控制与换模恢复
 
-  <xacro:macro name="ultrasonic_gazebo_plugin" params="name">
-    <gazebo reference="ultrasonic_${name}_link">
-      <sensor name="ultrasonic_${name}" type="ray">
-        <update_rate>25</update_rate>              <!-- HC-SR04: 25Hz -->
-        <ray>
-          <scan>
-            <horizontal>
-              <samples>1</samples>                 <!-- 单波束 -->
-              <resolution>1</resolution>
-              <min_angle>0</min_angle>
-              <max_angle>0</max_angle>
-            </horizontal>
-          </scan>
-          <range>
-            <min>0.02</min>                        <!-- HC-SR04: 2cm-4m -->
-            <max>4.0</max>
-            <resolution>0.003</resolution>         <!-- 3mm 精度 -->
-          </range>
-        </ray>
-        <plugin name="ultrasonic_${name}_plugin" filename="libgazebo_ros_laser.so">
-          <topicName>ultrasonic/${name}</topicName>
-          <frameName>ultrasonic_${name}_link</frameName>
-        </plugin>
-      </sensor>
-    </gazebo>
-  </xacro:macro>
+pan、tilt 关节分别使用
+`hardware_interface/PositionJointInterface` 和
+`position_controllers/JointPositionController`。差速、麦轮控制配置以及
+Task-04 的换模控制器集合都包含这两个控制器。
 
-  <!-- ============================================================ -->
-  <!-- IMU (ICM42688 模拟) — 直接使用 Gazebo IMU 插件             -->
-  <!-- ============================================================ -->
-  <xacro:macro name="imu_sensor" params="parent_link">
-    <gazebo reference="${parent_link}">
-      <sensor name="car_imu" type="imu">
-        <update_rate>100</update_rate>
-        <imu>
-          <angular_velocity>
-            <x><noise type="gaussian" mean="0" stddev="0.0005"/></x> <!-- 低温漂 -->
-            <y><noise type="gaussian" mean="0" stddev="0.0005"/></y>
-            <z><noise type="gaussian" mean="0" stddev="0.0005"/></z>
-          </angular_velocity>
-          <linear_acceleration>
-            <x><noise type="gaussian" mean="0" stddev="0.001"/></x>
-            <y><noise type="gaussian" mean="0" stddev="0.001"/></y>
-            <z><noise type="gaussian" mean="0" stddev="0.001"/></z>
-          </linear_acceleration>
-        </imu>
-        <plugin name="car_imu_plugin" filename="libgazebo_ros_imu_sensor.so">
-          <topicName>imu/data</topicName>
-          <frameName>base_link</frameName>
-        </plugin>
-      </sensor>
-    </gazebo>
-  </xacro:macro>
+常驻节点
+[`gimbal_controller.py`](../src/air_ground_car_bringup/scripts/gimbal_controller.py)
+提供稳定命令入口：
 
-</robot>
-```
+- 拒绝 NaN 和 Inf，不把非法值转发给 ros_control；
+- pan 限位为 ±π/2，tilt 限位为 ±π/4；
+- 以 20 Hz 重发最近有效目标；
+- 底盘换模、控制器卸载并重建后，无需上层重新发送命令即可恢复姿态。
 
-## 5.2 更新 `diff_chassis.urdf.xacro` 引入传感器
+Task-04 的 `/car/swap_chassis` 服务、模型位姿保持和事务回滚协议未改变。
 
-**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/urdf/diff_chassis.urdf.xacro`**
+## 自动验收
 
-在文件末尾 `</robot>` 之前追加：
-
-```xml
-  <!-- ====== 引入传感器 ====== -->
-  <xacro:include filename="$(find air_ground_car_bringup)/urdf/car_sensors.urdf.xacro"/>
-
-  <!-- OpenMV 云台相机 -->
-  <xacro:openmv_gimbal parent_link="sensor_mount"/>
-  <xacro:openmv_gazebo_plugin/>
-
-  <!-- 2D 激光雷达 -->
-  <xacro:lidar_2d parent_link="sensor_mount"/>
-  <xacro:lidar_gazebo_plugin/>
-
-  <!-- 4× 超声波 -->
-  <xacro:ultrasonic_sensor name="front"  parent_link="base_link" x="0.125" y="0"     z="0.04" yaw="0"/>
-  <xacro:ultrasonic_sensor name="rear"   parent_link="base_link" x="-0.125" y="0"     z="0.04" yaw="3.14159"/>
-  <xacro:ultrasonic_sensor name="left"   parent_link="base_link" x="0"     y="0.10"  z="0.04" yaw="1.5708"/>
-  <xacro:ultrasonic_sensor name="right"  parent_link="base_link" x="0"     y="-0.10" z="0.04" yaw="-1.5708"/>
-
-  <xacro:ultrasonic_gazebo_plugin name="front"/>
-  <xacro:ultrasonic_gazebo_plugin name="rear"/>
-  <xacro:ultrasonic_gazebo_plugin name="left"/>
-  <xacro:ultrasonic_gazebo_plugin name="right"/>
-
-  <!-- IMU -->
-  <xacro:imu_sensor parent_link="base_link"/>
-```
-
-**同样更新 `mecanum_chassis.urdf.xacro`**，在 `</robot>` 前加入相同内容。
-
-## 5.3 传感器参数配置 YAML
-
-**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/config/car_sensors.yaml`**
-
-```yaml
-# Car sensor configuration (mirrors real hardware specs)
-openmv:
-  resolution: [320, 240]
-  fps: 10
-  fov_h: 65.0
-  format: "rgb8"
-
-  # 云台控制
-  gimbal:
-    pan_range: [-90, 90]     # degrees
-    tilt_range: [-45, 45]
-    pan_topic: "/car/gimbal/pan/command"
-    tilt_topic: "/car/gimbal/tilt/command"
-
-lidar:
-  model: "RPLIDAR_A1"
-  samples: 360
-  scan_rate: 10       # Hz
-  min_range: 0.15     # m
-  max_range: 12.0     # m
-  topic: "/car/scan"
-
-ultrasonic:
-  count: 4
-  positions:
-    front:  [0.125, 0,     0.04, 0]
-    rear:   [-0.125, 0,    0.04, 180]
-    left:   [0,      0.10, 0.04, 90]
-    right:  [0,     -0.10, 0.04, -90]
-  min_range: 0.02     # m
-  max_range: 4.0      # m
-
-imu:
-  model: "ICM42688"
-  update_rate: 100    # Hz
-  gyro_noise: 0.0005  # rad/s/√Hz
-  accel_noise: 0.001  # m/s²/√Hz
-```
-
-## 5.4 传感器话题一览
-
-所有话题在 `/car` 命名空间下：
-
-| 传感器 | 话题 | 消息类型 |
-|--------|------|---------|
-| OpenMV RGB | `/car/openmv/image_raw` | `sensor_msgs/Image` |
-| 2D LiDAR | `/car/scan` | `sensor_msgs/LaserScan` |
-| 超声波前 | `/car/ultrasonic/front` | `sensor_msgs/LaserScan` |
-| 超声波后 | `/car/ultrasonic/rear` | `sensor_msgs/LaserScan` |
-| 超声波左 | `/car/ultrasonic/left` | `sensor_msgs/LaserScan` |
-| 超声波右 | `/car/ultrasonic/right` | `sensor_msgs/LaserScan` |
-| IMU | `/car/imu/data` | `sensor_msgs/Imu` |
-| 里程计 | `/car/odom` | `nav_msgs/Odometry` |
-
-## 5.5 云台控制脚本（模拟舵机）
-
-**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/scripts/gimbal_controller.py`**
-
-```python
-#!/usr/bin/env python3
-"""
-Simple gimbal position controller for OpenMV pan-tilt in Gazebo.
-Accepts /car/gimbal/pan/command and /car/gimbal/tilt/command (Float64 in radians).
-"""
-import rospy
-from std_msgs.msg import Float64
-from sensor_msgs.msg import JointState
-
-
-class GimbalController:
-    def __init__(self):
-        rospy.init_node("gimbal_controller")
-        # ros_control position_controllers/JointPositionController 期望的话题名:
-        #   /car/gimbal_pan_controller/command  (非 /car/gimbal_pan_joint/command)
-        self.pan_pub = rospy.Publisher("/car/gimbal_pan_controller/command", Float64, queue_size=10)
-        self.tilt_pub = rospy.Publisher("/car/gimbal_tilt_controller/command", Float64, queue_size=10)
-
-        self.sub_pan = rospy.Subscriber("/car/gimbal/pan/command", Float64, self.pan_cb)
-        self.sub_tilt = rospy.Subscriber("/car/gimbal/tilt/command", Float64, self.tilt_cb)
-
-        rospy.loginfo("[Gimbal Controller] Ready")
-
-    def pan_cb(self, msg: Float64):
-        # Clamp to ±90°
-        val = max(-1.57, min(1.57, msg.data))
-        self.pan_pub.publish(Float64(val))
-
-    def tilt_cb(self, msg: Float64):
-        # Clamp to ±45°
-        val = max(-0.785, min(0.785, msg.data))
-        self.tilt_pub.publish(Float64(val))
-
-
-if __name__ == "__main__":
-    GimbalController()
-    rospy.spin()
-```
+验收脚本：
+[`test_sensors.sh`](../src/air_ground_car_bringup/scripts/test_sensors.sh)
 
 ```bash
-chmod +x ~/air_ground_sim_ws/src/air_ground_car_bringup/scripts/gimbal_controller.py
+cd ~/air_ground_sim_ws
+source /opt/ros/noetic/setup.bash
+source devel/setup.bash
+rosrun air_ground_car_bringup test_sensors.sh
 ```
 
-## 5.6 验证脚本
+脚本具有以下约束：
 
-**文件：`~/air_ground_sim_ws/src/air_ground_car_bringup/scripts/test_sensors.sh`**
+- 无 `DISPLAY` 时自动选择空闲显示号启动 Xvfb；
+- 使用独立临时日志、命令超时和进程组清理；
+- 在车体四向生成静态障碍物，要求 LiDAR 和每个超声波均返回有限距离；
+- 校验 RGB8 图像尺寸与数据长度、CameraInfo、IMU 有限值和全部传感器 TF；
+- 实际读取 `joint_states` 验证云台 ±90°/±45° 限位；
+- 执行麦轮→差速→麦轮，并在每阶段重新校验传感器、控制器和云台目标恢复；
+- 任何检查失败均计为 `[FAIL]`，不接受人工检查或 `[WARN]` 作为通过。
 
-```bash
-#!/bin/bash
-echo "=== Task-05 Car Sensors Verification ==="
+## 验证记录
 
-roslaunch air_ground_car_bringup car_diff.launch headless:=true gui:=false &
-CAR_PID=$!
-sleep 10
+2026-07-27 在 Ubuntu 20.04、ROS Noetic、Gazebo Classic 11 环境完成：
 
-# 1. OpenMV camera
-echo "--- Checking OpenMV camera ---"
-rostopic echo /car/openmv/image_raw -n 1 2>/dev/null | grep -q "height" && echo "[PASS] OpenMV" || echo "[WARN] OpenMV"
+| 验证项 | 结果 |
+|--------|------|
+| XML、Python、Shell 静态检查 | ✅ |
+| diff/mecanum Xacro 展开 | ✅ |
+| diff/mecanum SDF 解析 | ✅，每套 7 个传感器插件 |
+| 全工作空间 `catkin build` | ✅，5 个包 |
+| `rosdep check --from-paths src --ignore-src` | ✅ |
+| 云台与麦轮单元测试 | ✅，12 tests |
+| Task-05 Gazebo 验收 | ✅，28 passed, 0 failed |
+| Task-03 回归 | ✅，7 passed, 0 failed |
+| Task-04 回归 | ✅，17 passed, 0 failed |
 
-# 2. 2D LiDAR
-echo "--- Checking LiDAR ---"
-rostopic echo /car/scan -n 1 2>/dev/null | grep -q "ranges" && echo "[PASS] LiDAR" || echo "[WARN] LiDAR"
+构建仅出现 Gazebo Classic 11 已结束上游生命周期的弃用提示，不影响本项目
+锁定的 ROS Noetic/Gazebo 11 运行基线。
 
-# 3. Ultrasonic ×4
-echo "--- Checking Ultrasonic ---"
-for dir in front rear left right; do
-  rostopic echo /car/ultrasonic/$dir -n 1 2>/dev/null | grep -q "ranges" && echo "  [PASS] $dir" || echo "  [WARN] $dir"
-done
+## 验收结论
 
-# 4. IMU
-echo "--- Checking IMU ---"
-rostopic echo /car/imu/data -n 1 2>/dev/null | grep -q "angular_velocity" && echo "[PASS] IMU" || echo "[WARN] IMU"
-
-# 5. Gimbal test
-echo "--- Testing gimbal ---"
-rostopic pub -1 /car/gimbal/pan/command std_msgs/Float64 "data: 0.5" 2>/dev/null
-rostopic pub -1 /car/gimbal/tilt/command std_msgs/Float64 "data: -0.3" 2>/dev/null
-sleep 1
-echo "[INFO] Check gimbal joints moved"
-
-kill $CAR_PID 2>/dev/null
-wait $CAR_PID 2>/dev/null
-echo "=== Done ==="
-```
-
-## 交付产物
-
-1. `car_sensors.urdf.xacro` 可被 diff 和 mecanum 底盘正确引用
-2. 启动后所有传感器话题有数据
-3. 云台可响应 `/car/gimbal/*/command` 话题
-4. `test_sensors.sh` 至少所有传感器都能检测到话题存在
+- [x] 两类底盘默认拥有相同传感器、话题与 TF；
+- [x] 所有公开话题位于 `/car` 命名空间；
+- [x] 四向测距均通过实际障碍物验证；
+- [x] 云台限位、非法输入和换模恢复均已自动验证；
+- [x] Task-03、Task-04 无回归。

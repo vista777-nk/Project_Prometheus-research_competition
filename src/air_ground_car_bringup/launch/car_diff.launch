@@ -41,8 +41,16 @@
   <node name="car_controller_spawner"
         pkg="controller_manager" type="spawner"
         args="--namespace /car --timeout 60
-              joint_state_controller diff_drive_controller"
+              joint_state_controller gimbal_pan_controller
+              gimbal_tilt_controller diff_drive_controller"
         output="screen"/>
+
+  <node name="gimbal_controller"
+        pkg="air_ground_car_bringup" type="gimbal_controller.py"
+        output="screen">
+    <rosparam command="load"
+              file="$(find air_ground_car_bringup)/config/car_sensors.yaml"/>
+  </node>
 
   <node name="car_robot_state_publisher"
         pkg="robot_state_publisher" type="robot_state_publisher"

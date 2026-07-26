@@ -11,6 +11,14 @@ car:
     type: joint_state_controller/JointStateController
     publish_rate: 30
 
+  gimbal_pan_controller:
+    type: position_controllers/JointPositionController
+    joint: gimbal_pan_joint
+
+  gimbal_tilt_controller:
+    type: position_controllers/JointPositionController
+    joint: gimbal_tilt_joint
+
   diff_drive_controller:
     type: diff_drive_controller/DiffDriveController
     left_wheel: [left_wheel_joint]

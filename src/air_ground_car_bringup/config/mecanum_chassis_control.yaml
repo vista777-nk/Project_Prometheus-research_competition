@@ -13,6 +13,14 @@ car:
     type: joint_state_controller/JointStateController
     publish_rate: 30
 
+  gimbal_pan_controller:
+    type: position_controllers/JointPositionController
+    joint: gimbal_pan_joint
+
+  gimbal_tilt_controller:
+    type: position_controllers/JointPositionController
+    joint: gimbal_tilt_joint
+
   front_left_wheel_controller:
     type: velocity_controllers/JointVelocityController
     joint: front_left_wheel_joint
