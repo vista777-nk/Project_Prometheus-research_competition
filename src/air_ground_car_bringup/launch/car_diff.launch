@@ -1,0 +1,60 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="world"
+       default="$(find air_ground_car_bringup)/worlds/empty.world"/>
+  <arg name="model_name" default="diff_car"/>
+  <arg name="gui" default="false"/>
+  <!-- Kept for compatibility with downstream launch files; Gazebo 11 treats
+       this argument as a no-op, while gui=false suppresses gzclient. -->
+  <arg name="headless" default="true"/>
+  <arg name="paused" default="false"/>
+  <arg name="verbose" default="false"/>
+  <arg name="x" default="0.0"/>
+  <arg name="y" default="0.0"/>
+  <arg name="z" default="0.0"/>
+  <arg name="R" default="0.0"/>
+  <arg name="P" default="0.0"/>
+  <arg name="Y" default="0.0"/>
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(arg world)"/>
+    <arg name="gui" value="$(arg gui)"/>
+    <arg name="headless" value="$(arg headless)"/>
+    <arg name="paused" value="$(arg paused)"/>
+    <arg name="verbose" value="$(arg verbose)"/>
+    <arg name="use_sim_time" value="true"/>
+  </include>
+
+  <param name="/robot_description"
+         command="$(find xacro)/xacro
+                  $(find air_ground_car_bringup)/urdf/diff_chassis.urdf.xacro"/>
+
+  <rosparam command="load"
+            file="$(find air_ground_car_bringup)/config/diff_chassis_control.yaml"/>
+
+  <node name="spawn_car" pkg="gazebo_ros" type="spawn_model"
+        args="-param /robot_description -urdf -model $(arg model_name)
+              -x $(arg x) -y $(arg y) -z $(arg z)
+              -R $(arg R) -P $(arg P) -Y $(arg Y)"
+        output="screen"/>
+
+  <node name="car_controller_spawner"
+        pkg="controller_manager" type="spawner"
+        args="--namespace /car --timeout 60
+              joint_state_controller diff_drive_controller"
+        output="screen"/>
+
+  <node name="car_robot_state_publisher"
+        pkg="robot_state_publisher" type="robot_state_publisher"
+        ns="car" output="screen">
+    <remap from="joint_states" to="/car/joint_states"/>
+  </node>
+
+  <!-- Stable project topics hide ros_control's controller-name subnamespace. -->
+  <node name="relay_car_cmd_vel" pkg="topic_tools" type="relay"
+        args="/car/cmd_vel /car/diff_drive_controller/cmd_vel"
+        output="screen"/>
+  <node name="relay_car_odom" pkg="topic_tools" type="relay"
+        args="/car/diff_drive_controller/odom /car/odom"
+        output="screen"/>
+</launch>

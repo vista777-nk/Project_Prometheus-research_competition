@@ -13,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   sensor_msgs
   std_msgs
+  topic_tools
 )
 
 catkin_package(
@@ -28,9 +29,16 @@ catkin_package(
   rospy
   sensor_msgs
   std_msgs
+  topic_tools
 )
 
 install(
-  DIRECTORY config launch scripts urdf worlds
+  PROGRAMS
+    scripts/test_diff.sh
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+install(
+  DIRECTORY config launch urdf worlds
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )
