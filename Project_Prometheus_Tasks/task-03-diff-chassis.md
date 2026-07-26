@@ -376,9 +376,21 @@ install(DIRECTORY worlds/
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/worlds)
 ```
 
-并创建空世界：
-```bash
-cp ~/air_ground_sim_ws/src/air_ground_drone_bringup/worlds/empty.world ~/air_ground_sim_ws/src/air_ground_car_bringup/worlds/empty.world
+Task-02 使用 PX4 自带世界，不再维护无人机包内的 `empty.world`。因此在车包中独立创建
+`worlds/empty.world`：
+
+```xml
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <world name="default">
+    <include>
+      <uri>model://sun</uri>
+    </include>
+    <include>
+      <uri>model://ground_plane</uri>
+    </include>
+  </world>
+</sdf>
 ```
 
 ## 交付产物

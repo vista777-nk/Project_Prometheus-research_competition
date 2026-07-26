@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="config_file"
+       default="$(find air_ground_drone_bringup)/config/drone_sensors.yaml"/>
+
+  <arg name="camera_rgb_source" default="/iris/camera/rgb/image_raw"/>
+  <arg name="camera_depth_source" default="/iris/camera/depth/image_raw"/>
+  <arg name="camera_points_source" default="/iris/camera/depth/points"/>
+  <arg name="gps_source" default="/mavros/global_position/global"/>
+
+  <arg name="camera_rgb_output" default="/drone/camera/rgb/image_raw"/>
+  <arg name="camera_depth_output" default="/drone/camera/depth/image_raw"/>
+  <arg name="camera_points_output"
+       default="/drone/camera/depth/points_downsampled"/>
+  <arg name="gps_output" default="/drone/gps/local_pose"/>
+
+  <node pkg="topic_tools" type="relay" name="relay_drone_rgb"
+        args="$(arg camera_rgb_source) $(arg camera_rgb_output)"
+        output="screen"/>
+
+  <node pkg="topic_tools" type="relay" name="relay_drone_depth"
+        args="$(arg camera_depth_source) $(arg camera_depth_output)"
+        output="screen"/>
+
+  <node pkg="nodelet" type="nodelet" name="drone_pcl_manager"
+        args="manager" output="screen"/>
+
+  <node pkg="nodelet" type="nodelet" name="depth_downsample"
+        args="load pcl/VoxelGrid drone_pcl_manager" output="screen">
+    <rosparam command="load" file="$(arg config_file)"/>
+    <remap from="~input" to="$(arg camera_points_source)"/>
+    <remap from="~output" to="$(arg camera_points_output)"/>
+  </node>
+
+  <node pkg="air_ground_drone_bringup" type="gps_converter.py"
+        name="gps_converter" output="screen">
+    <rosparam command="load" file="$(arg config_file)"/>
+    <param name="input_topic" value="$(arg gps_source)"/>
+    <param name="output_topic" value="$(arg gps_output)"/>
+  </node>
+</launch>

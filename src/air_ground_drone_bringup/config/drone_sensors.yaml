@@ -1,0 +1,38 @@
+# PX4 v1.14 iris_depth_camera sensor metadata and project-side processing.
+# These top-level keys are consumed directly by pcl/VoxelGrid.
+leaf_size: 0.05
+filter_field_name: z
+filter_limit_min: 0.2
+filter_limit_max: 8.0
+
+depth_camera:
+  resolution: [848, 480]
+  update_rate: 10.0
+  horizontal_fov_deg: 86.0
+  min_range: 0.001
+  max_range: 65.535
+  frame_id: camera_link
+  source_topics:
+    rgb: /iris/camera/rgb/image_raw
+    depth: /iris/camera/depth/image_raw
+    points: /iris/camera/depth/points
+  project_topics:
+    rgb: /drone/camera/rgb/image_raw
+    depth: /drone/camera/depth/image_raw
+    points: /drone/camera/depth/points_downsampled
+
+gps:
+  update_rate: 5.0
+  home_lat: 47.397742
+  home_lon: 8.545594
+  home_alt: 488.0
+  source_topic: /mavros/global_position/global
+  local_pose_topic: /drone/gps/local_pose
+  local_frame_id: map
+
+imu:
+  source_topic: /mavros/imu/data
+
+mavlink:
+  mavros_bind_port: 14540
+  px4_remote_port: 14557

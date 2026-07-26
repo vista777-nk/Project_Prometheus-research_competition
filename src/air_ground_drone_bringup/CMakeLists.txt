@@ -6,10 +6,13 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   mavros_msgs
   nav_msgs
+  nodelet
+  pcl_ros
   roscpp
   rospy
   sensor_msgs
   std_msgs
+  topic_tools
 )
 
 catkin_package(
@@ -18,13 +21,32 @@ catkin_package(
   geometry_msgs
   mavros_msgs
   nav_msgs
+  nodelet
+  pcl_ros
   roscpp
   rospy
   sensor_msgs
   std_msgs
+  topic_tools
+)
+
+catkin_install_python(
+  PROGRAMS
+    scripts/gps_converter.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
 install(
-  DIRECTORY config launch scripts worlds
+  PROGRAMS
+    scripts/test_drone.sh
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+install(
+  DIRECTORY config launch
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )
+
+if(CATKIN_ENABLE_TESTING)
+  catkin_add_nosetests(test/test_gps_converter.py)
+endif()
