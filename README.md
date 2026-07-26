@@ -6,7 +6,7 @@
 
 [![Status](https://img.shields.io/badge/status-planning-blue)](./Project_Prometheus_Tasks/ROADMAP.md)
 [![ROS](https://img.shields.io/badge/ROS-Noetic-brightgreen)](https://wiki.ros.org/noetic)
-[![Gazebo](https://img.shields.io/badge/Gazebo-9-orange)](http://gazebosim.org/)
+[![Gazebo](https://img.shields.io/badge/Gazebo_Classic-11-orange)](http://gazebosim.org/)
 [![PX4](https://img.shields.io/badge/PX4-v1.14-blueviolet)](https://px4.io/)
 [![Python](https://img.shields.io/badge/Python-3.8+-yellow)](https://www.python.org/)
 
@@ -65,7 +65,7 @@
 |------|------|
 | Ubuntu | 20.04.6 |
 | ROS | Noetic (Python 3.8+) |
-| Gazebo | 9 |
+| Gazebo | Classic 11 |
 | PX4 | v1.14 SITL |
 | Python | 3.8+ |
 

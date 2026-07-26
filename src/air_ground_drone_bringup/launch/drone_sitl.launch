@@ -1,0 +1,55 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- PX4 v1.14 has no gazebo-classic_iris_depth_camera airframe. -->
+  <arg name="vehicle" default="iris"/>
+  <arg name="sdf"
+       default="$(find mavlink_sitl_gazebo)/models/iris_depth_camera/iris_depth_camera.sdf"/>
+  <arg name="world"
+       default="$(find mavlink_sitl_gazebo)/worlds/empty.world"/>
+
+  <arg name="gui" default="false"/>
+  <arg name="debug" default="false"/>
+  <arg name="verbose" default="false"/>
+  <arg name="paused" default="false"/>
+  <arg name="interactive" default="true"/>
+  <arg name="respawn_gazebo" default="false"/>
+  <arg name="respawn_mavros" default="false"/>
+  <arg name="fcu_url" default="udp://:14540@localhost:14557"/>
+
+  <arg name="x" default="0.0"/>
+  <arg name="y" default="0.0"/>
+  <arg name="z" default="0.0"/>
+  <arg name="R" default="0.0"/>
+  <arg name="P" default="0.0"/>
+  <arg name="Y" default="0.0"/>
+
+  <arg name="start_sensors" default="true"/>
+  <arg name="sensor_config"
+       default="$(find air_ground_drone_bringup)/config/drone_sensors.yaml"/>
+
+  <!-- This upstream launch starts PX4, Gazebo Classic and MAVROS once. -->
+  <include file="$(find px4)/launch/mavros_posix_sitl.launch">
+    <arg name="vehicle" value="$(arg vehicle)"/>
+    <arg name="sdf" value="$(arg sdf)"/>
+    <arg name="world" value="$(arg world)"/>
+    <arg name="gui" value="$(arg gui)"/>
+    <arg name="debug" value="$(arg debug)"/>
+    <arg name="verbose" value="$(arg verbose)"/>
+    <arg name="paused" value="$(arg paused)"/>
+    <arg name="interactive" value="$(arg interactive)"/>
+    <arg name="respawn_gazebo" value="$(arg respawn_gazebo)"/>
+    <arg name="respawn_mavros" value="$(arg respawn_mavros)"/>
+    <arg name="fcu_url" value="$(arg fcu_url)"/>
+    <arg name="x" value="$(arg x)"/>
+    <arg name="y" value="$(arg y)"/>
+    <arg name="z" value="$(arg z)"/>
+    <arg name="R" value="$(arg R)"/>
+    <arg name="P" value="$(arg P)"/>
+    <arg name="Y" value="$(arg Y)"/>
+  </include>
+
+  <include if="$(arg start_sensors)"
+           file="$(find air_ground_drone_bringup)/launch/drone_sensors.launch">
+    <arg name="config_file" value="$(arg sensor_config)"/>
+  </include>
+</launch>

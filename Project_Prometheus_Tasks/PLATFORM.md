@@ -96,14 +96,16 @@ STM32F407 / MSPM0G3507 (Layer 1)           Pixhawk 6C (Layer 1)
 ├── air_ground_drone_bringup/               # 无人机启动与配置
 │   ├── launch/
 │   │   ├── drone_sitl.launch    # PX4 SITL + Gazebo
-│   │   └── drone_edge.launch    # 边缘预处理节点
+│   │   ├── drone_sensors.launch # 传感器话题适配
+│   │   └── drone_edge.launch    # 边缘预处理节点（Task-07）
 │   ├── config/
 │   │   └── drone_sensors.yaml
-│   ├── worlds/
-│   │   └── empty.world
-│   └── scripts/
-│       ├── drone_preprocessor.py   # 传感器→Observation
-│       └── gps_converter.py        # NavSatFix→本地ENU
+│   ├── scripts/
+│   │   ├── drone_preprocessor.py   # 传感器→Observation（Task-07）
+│   │   ├── gps_converter.py        # NavSatFix→本地ENU
+│   │   └── test_drone.sh           # Task-02 无头验收
+│   └── test/
+│       └── test_gps_converter.py
 │
 ├── air_ground_car_bringup/                 # 车机启动与配置
 │   ├── launch/
@@ -286,11 +288,10 @@ ssh car-pi    "chronyc tracking | grep 'System time'"
 | AD-07 | World State 暂无 TF 广播 (只发布 topic 不发布 transform) | ⚠️ | 与 §九 TF 树一起规划 |
 | AD-08 | 麦轮 low-friction 近似：Gazebo 不仿真辊子物理 | ℹ️ 设计取舍 | 仿真仅验证控制逻辑；横向运动精度以实机为准 |
 | AD-09 | 底盘检测逻辑依赖 `rostopic list` 探测 (P2-06) | ℹ️ | 仿真可用；实机改用硬件引脚（MSPM0 GPIO）检测 |
-| AD-10 | PX4 SITL airframe ID 4032 尚未在 PX4 官方固件注册 | ℹ️ | 仅影响实机固件烧录，仿真不影响 |
-| AD-11 | `setup_all.sh` 中 PX4 编译参数需在目标机上验证 | ℹ️ | 首次安装时验证；若失败，改用手动步骤 |
-| AD-12 | GPS HOME 坐标硬编码 (P3-06) | ℹ️ | 实机部署时从启动脚本参数读取 |
-| AD-13 | 缺少 CI/CD、性能监控、代码风格强制 | ℹ️ | 项目稳定后引入 |
+| AD-10 | PX4 v1.14 无 `iris_depth_camera` 专用 airframe | ℹ️ 设计约束 | 使用官方 Iris airframe，并以完整路径覆盖深度相机 SDF |
+| AD-11 | GPS HOME 默认值固定在仿真配置中 (P3-06) | ℹ️ | 已从源码移至 YAML；实机部署时通过 ROS 参数覆盖 |
+| AD-12 | 缺少 CI/CD、性能监控、代码风格强制 | ℹ️ | 项目稳定后引入 |
 
 ---
 
-*版本: v6.0 · 日期: 2026-07-25 · 作者: DeepSeek (经 ChatGPT、混元3、豆包、执行端subagent集群审阅后重构) · 与 ICD.md 配套*
+*版本: v6.1 · 日期: 2026-07-26 · 作者: DeepSeek (经 ChatGPT、混元3、豆包、执行端subagent集群审阅后重构) · 与 ICD.md 配套*
