@@ -17,7 +17,8 @@ jobs:
         DEBIAN_FRONTEND: noninteractive
 
     env:
-      WS: /__w/air_ground_sim_ws
+      DEBIAN_FRONTEND: noninteractive
+      WS: ${{ github.workspace }}
 
     steps:
       - name: Install base tools
@@ -29,8 +30,6 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          path: ${{ env.WS }}/src
 
       - name: Setup ROS Noetic
         run: |
@@ -63,28 +62,28 @@ jobs:
       - name: rosdep check
         run: |
           source /opt/ros/noetic/setup.bash
-          cd ${{ env.WS }}
+          cd $WS
           rosdep check --from-paths src --ignore-src -r -y || echo "rosdep check completed (warnings may exist for optional deps)"
 
       - name: Build workspace
         run: |
           source /opt/ros/noetic/setup.bash
-          cd ${{ env.WS }}
+          cd $WS
           catkin build --summarize --no-status
         timeout-minutes: 30
 
       - name: Run unit tests
         run: |
           source /opt/ros/noetic/setup.bash
-          source ${{ env.WS }}/devel/setup.bash || true
-          cd ${{ env.WS }}
+          source $WS/devel/setup.bash || true
+          cd $WS
           catkin test --no-status || echo "Tests completed (check summary above)"
         timeout-minutes: 15
 
       - name: Test summary
         if: always()
         run: |
-          cd ${{ env.WS }}
+          cd $WS
           if ls build/test_results/*/pytest.xml 2>/dev/null; then
             echo "=== Test Results ==="
             cat build/test_results/*/pytest.xml 2>/dev/null | grep -E 'testsuite|testcase' | head -50
