@@ -1,0 +1,22 @@
+# Task-07 laboratory-server configuration.
+tcp:
+  listen_backlog: 4
+  max_clients: 8
+
+world_model:
+  publish_rate: 5.0
+  state_timeout: 3.0
+
+slam:
+  statistics_interval: 5.0
+
+eqa:
+  target_robot: car
+  mission_type: explore
+  priority: 128
+  max_query_length: 1024
+
+coordinator:
+  allowed_robots: [car, drone]
+  allowed_mission_types:
+    [navigate, search, inspect, return_home, follow, explore, takeoff, land]
