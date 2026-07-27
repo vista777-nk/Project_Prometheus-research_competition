@@ -8,6 +8,7 @@ find_package(catkin REQUIRED COMPONENTS
   air_ground_interfaces
   controller_manager
   controller_manager_msgs
+  cv_bridge
   gazebo_msgs
   gazebo_ros
   gazebo_ros_control
@@ -29,6 +30,7 @@ catkin_package(
   air_ground_interfaces
   controller_manager
   controller_manager_msgs
+  cv_bridge
   gazebo_msgs
   gazebo_ros
   gazebo_ros_control
@@ -61,6 +63,7 @@ target_link_libraries(
 
 catkin_install_python(
   PROGRAMS
+    scripts/car_preprocessor.py
     scripts/chassis_swapper.py
     scripts/gimbal_controller.py
     scripts/mecanum_controller.py
@@ -86,6 +89,7 @@ install(
 )
 
 if(CATKIN_ENABLE_TESTING)
+  catkin_add_nosetests(test/test_car_preprocessor.py)
   catkin_add_nosetests(test/test_gimbal_controller.py)
   catkin_add_nosetests(test/test_mecanum_controller.py)
 endif()

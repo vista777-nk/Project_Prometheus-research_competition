@@ -5,14 +5,19 @@ import json
 import math
 import struct
 import sys
+import threading
 from pathlib import Path
 from unittest import TestCase
+
+import rospy
+from air_ground_interfaces.msg import Observation, RobotState
 
 
 SCRIPT_DIRECTORY = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPT_DIRECTORY))
 
 from edge_server_bridge import (  # noqa: E402
+    EdgeServerBridge,
     TokenBucket,
     decode_server_command,
     encode_json_frame,
@@ -85,3 +90,38 @@ class EdgeProtocolTest(TestCase):
         self.assertTrue(bucket.consume(32))
         self.assertTrue(bucket.consume(32))
         self.assertFalse(bucket.consume(1))
+
+    def test_drone_icd_snapshot_serializes_for_task07(self):
+        observation = Observation()
+        observation.header.stamp = rospy.Time.from_sec(10.0)
+        observation.modalities = ["rgb", "imu"]
+        observation.rgb.data = b"\xff\xd8test"
+        observation.angular_velocity.z = 0.2
+        observation.linear_acceleration.z = 9.81
+
+        state = RobotState()
+        state.header.stamp = rospy.Time.from_sec(11.0)
+        state.robot_id = "drone"
+        state.pose.position.z = 3.0
+        state.pose.orientation.w = 1.0
+        state.mode = "OFFBOARD"
+        state.chassis_type = "none"
+        state.is_armed = True
+        state.is_connected = True
+
+        bridge = EdgeServerBridge.__new__(EdgeServerBridge)
+        bridge.latest_lock = threading.Lock()
+        bridge.latest = {
+            "ultrasonic": {},
+            "drone_observation": observation,
+            "drone_state": state,
+        }
+        bridge.throttle_config = {"max_image_freq": 2.0}
+        bridge.last_drone_image_time = 0.0
+
+        payload = bridge.serialize_drone()
+        self.assertEqual(payload["source"], "drone")
+        self.assertEqual(payload["timestamp"], 11.0)
+        self.assertEqual(payload["mode"], "OFFBOARD")
+        self.assertAlmostEqual(payload["pose"]["z"], 3.0)
+        self.assertIn("image_jpeg_b64", payload)

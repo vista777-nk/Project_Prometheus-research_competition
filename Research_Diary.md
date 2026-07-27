@@ -111,3 +111,28 @@
 
     5.下一步：Task-07 —— 边缘预处理器（drone/car preprocessor）+ 服务器 TCP 接收器 + SLAM/EQA/Coordinator 占位节点。
           同步启动 Task-06 合并到 main 分支的 PR 流程。
+
+###### 2026/7/27（Task-07 补记）
+    1.发现：a) Task-07 旧草案混用了已弃用的 SensorFusion 与稳定 Observation，且 TCP 接收只调用一次 recv(4)，
+             无法保证获得完整长度头。
+          b) 旧 Coordinator 直接发布 MAVROS setpoint 和具体 diff_drive_controller 话题，违反 Layer 4
+             只依赖抽象接口的架构约束。
+          c) Task-06 与 drone_preprocessor 都需要提供 /drone/state。通过 /drone/state_owner 协调所有权，
+             保留 Task-06 单独运行兼容性的同时，避免集成场景出现双发布者竞争。
+
+    2.完成：1) 实现无人机和车机 Edge preprocessor，统一发布 Observation、RobotState、Capability。
+          2) 扩展 Task-06 TCP bridge，以轮询方式传输 car/drone 双 agent 抽象遥测。
+          3) 实现严格长度帧 TCP server、带新鲜度过滤和查询服务的 World Model。
+          4) 实现 SLAM、EQA、Coordinator 抽象占位节点；Mission 只通过稳定接口分发。
+          5) Task-07 自动验收 15/15；工作空间单元测试 56/56。
+          6) Task-02~06 回归分别为 9/9、7/7、17/17、28/28、11/11。
+
+    3.问题与修复：a) TCP 解码纯函数首次测试时提前求值 rospy.Time.now，脱离 ROS master 会失败；
+                   改为零时间戳并由 World Model 按接收时间兜底。
+                b) 直接调用 CMake 安装目标时未加载 ROS 环境，catkin 环境模块不可见；
+                   显式 source ROS 与 devel 后安装验证通过。
+
+    4.小结：服务器侧首次形成完整的“Edge TELL → World Model → Research ASK → Mission”闭环，
+          研究层不再触碰 MAVLink、Gazebo 和具体底盘控制器。
+
+    5.下一步：Task-08 —— 集成总装 Launch、分场景入口和 Makefile。

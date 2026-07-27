@@ -15,7 +15,11 @@ from typing import Dict, Optional
 import cv2
 import rospy
 import yaml
-from air_ground_interfaces.msg import ServerCommand
+from air_ground_interfaces.msg import (
+    Observation,
+    RobotState,
+    ServerCommand,
+)
 from cv_bridge import CvBridge, CvBridgeError
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry
@@ -196,6 +200,8 @@ class EdgeServerBridge:
         self.max_payload_bytes = int(network["max_payload_bytes"])
         self.last_empty_heartbeat = 0.0
         self.last_image_time = 0.0
+        self.last_drone_image_time = 0.0
+        self.next_source = "car"
         self.bridge = CvBridge()
 
         self.latest = {
@@ -205,6 +211,9 @@ class EdgeServerBridge:
             "image": None,
             "ultrasonic": {},
             "drone_pose": None,
+            "drone_observation": None,
+            "drone_state": None,
+            "car_state": None,
         }
         self.latest_lock = threading.Lock()
         self.socket_lock = threading.Lock()
@@ -262,6 +271,24 @@ class EdgeServerBridge:
                 "/drone/pose",
                 PoseStamped,
                 self.cache_callback("drone_pose"),
+                queue_size=5,
+            ),
+            rospy.Subscriber(
+                "/drone/observation",
+                Observation,
+                self.cache_callback("drone_observation"),
+                queue_size=3,
+            ),
+            rospy.Subscriber(
+                "/drone/state",
+                RobotState,
+                self.cache_callback("drone_state"),
+                queue_size=5,
+            ),
+            rospy.Subscriber(
+                "/car/state",
+                RobotState,
+                self.cache_callback("car_state"),
                 queue_size=5,
             ),
         ]
@@ -532,6 +559,16 @@ class EdgeServerBridge:
                 "z": self.safe_number(drone_pose.pose.position.z),
             }
 
+        car_state = latest["car_state"]
+        if car_state is not None:
+            output["mode"] = str(car_state.mode)
+            output["chassis_type"] = str(car_state.chassis_type)
+            output["battery_voltage"] = self.safe_number(
+                car_state.battery_voltage, 11.1
+            )
+            output["is_armed"] = bool(car_state.is_armed)
+            output["is_connected"] = bool(car_state.is_connected)
+
         has_telemetry = any(
             key in output
             for key in ("pose", "imu", "scan", "image_jpeg_b64")
@@ -542,6 +579,101 @@ class EdgeServerBridge:
             output["kind"] = "heartbeat"
         return output
 
+    def serialize_drone(self) -> Optional[Dict]:
+        """Serialize the drone ICD snapshot for the Task-07 server."""
+        latest = self.snapshot()
+        observation = latest["drone_observation"]
+        state = latest["drone_state"]
+        if observation is None and state is None:
+            return None
+
+        timestamp = 0.0
+        output = {
+            "protocol_version": 1,
+            "kind": "telemetry",
+            "timestamp": timestamp,
+            "source": "drone",
+        }
+        if state is not None:
+            if state.header.stamp.to_sec() > 0.0:
+                output["timestamp"] = state.header.stamp.to_sec()
+            output["pose"] = {
+                "x": self.safe_number(state.pose.position.x),
+                "y": self.safe_number(state.pose.position.y),
+                "z": self.safe_number(state.pose.position.z),
+                "qw": self.safe_number(state.pose.orientation.w, 1.0),
+                "qx": self.safe_number(state.pose.orientation.x),
+                "qy": self.safe_number(state.pose.orientation.y),
+                "qz": self.safe_number(state.pose.orientation.z),
+            }
+            output["twist"] = {
+                "vx": self.safe_number(state.velocity.linear.x),
+                "vy": self.safe_number(state.velocity.linear.y),
+                "vz_linear": self.safe_number(
+                    state.velocity.linear.z
+                ),
+                "vz": self.safe_number(state.velocity.angular.z),
+            }
+            output["mode"] = str(state.mode)
+            output["chassis_type"] = str(state.chassis_type)
+            output["battery_voltage"] = self.safe_number(
+                state.battery_voltage, 11.1
+            )
+            output["is_armed"] = bool(state.is_armed)
+            output["is_connected"] = bool(state.is_connected)
+
+        if observation is not None:
+            if (
+                state is None
+                and observation.header.stamp.to_sec() > 0.0
+            ):
+                output["timestamp"] = observation.header.stamp.to_sec()
+            if "imu" in observation.modalities:
+                output["imu"] = {
+                    "wx": self.safe_number(
+                        observation.angular_velocity.x
+                    ),
+                    "wy": self.safe_number(
+                        observation.angular_velocity.y
+                    ),
+                    "wz": self.safe_number(
+                        observation.angular_velocity.z
+                    ),
+                    "ax": self.safe_number(
+                        observation.linear_acceleration.x
+                    ),
+                    "ay": self.safe_number(
+                        observation.linear_acceleration.y
+                    ),
+                    "az": self.safe_number(
+                        observation.linear_acceleration.z
+                    ),
+                }
+            image_period = 1.0 / float(
+                self.throttle_config["max_image_freq"]
+            )
+            if (
+                "rgb" in observation.modalities
+                and observation.rgb.data
+                and time.monotonic() - self.last_drone_image_time
+                >= image_period
+            ):
+                output["image_jpeg_b64"] = base64.b64encode(
+                    bytes(observation.rgb.data)
+                ).decode("ascii")
+        return output
+
+    def select_payload(self) -> Dict:
+        """Round-robin car and drone telemetry without changing Task-06 fallback."""
+        drone_payload = self.serialize_drone()
+        if drone_payload is not None and self.next_source == "drone":
+            self.next_source = "car"
+            return drone_payload
+        self.next_source = (
+            "drone" if drone_payload is not None else "car"
+        )
+        return self.serialize_sensors()
+
     def transmit_callback(self, _event: rospy.timer.TimerEvent) -> None:
         connection = self.current_socket()
         if connection is None:
@@ -549,7 +681,7 @@ class EdgeServerBridge:
         if not self.transmit_lock.acquire(blocking=False):
             return
         try:
-            payload = self.serialize_sensors()
+            payload = self.select_payload()
             is_heartbeat = payload["kind"] == "heartbeat"
             if (
                 is_heartbeat
@@ -572,6 +704,11 @@ class EdgeServerBridge:
             connection.sendall(frame)
             if is_heartbeat:
                 self.last_empty_heartbeat = time.monotonic()
+            if (
+                payload["source"] == "drone"
+                and "image_jpeg_b64" in payload
+            ):
+                self.last_drone_image_time = time.monotonic()
         except (OSError, TypeError, ValueError) as error:
             rospy.logwarn(
                 "[edge_server_bridge] transmit failed: %s", error

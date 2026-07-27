@@ -551,7 +551,11 @@ class DroneCarBridge:
                 base_mode & MAV_MODE_FLAG_SAFETY_ARMED
             )
             state.is_connected = True
-            self.state_publisher.publish(state)
+            if (
+                rospy.get_param("/drone/state_owner", "bridge")
+                != "preprocessor"
+            ):
+                self.state_publisher.publish(state)
             rospy.logdebug(
                 "[drone_car_bridge] heartbeat sys=%d mode=%d",
                 system_id,
