@@ -1,0 +1,19 @@
+# 空地联合具身智能研究平台 — 总入口 requirements.txt
+# 安装全部 Python 依赖：
+#   pip install -r requirements.txt
+#
+# 注意：ROS 系统包（rospy, cv_bridge, tf2_ros, mavros_msgs, sensor_msgs 等）
+# 需通过 apt 安装，不在本文件中列出。详见 task-01-env-setup.md。
+
+# === 通信协议 ===
+pymavlink>=2.4.39,<3.0.0
+
+# === 图像处理 ===
+opencv-python-headless>=4.8.0,<5.0.0
+Pillow>=9.0.0,<11.0.0
+
+# === 数值计算 ===
+numpy>=1.22.0,<2.0.0
+
+# === 配置解析 ===
+PyYAML>=6.0,<7.0
