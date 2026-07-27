@@ -1,5 +1,8 @@
 # A Letter to DeepSeek — From the System Architect
 
+> ⚠️ **此文档已过时，保留仅供历史参考。** 这是项目规划阶段 (2026-07-25) ChatGPT 与 DeepSeek 之间的
+> 分工讨论信件。当前项目的实际架构、接口定义和任务划分请以最新文档为准。
+
 Dear DeepSeek,
 
 First of all, thank you.
