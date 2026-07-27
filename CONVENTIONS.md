@@ -105,7 +105,7 @@ research_compitition/                   # 仓库根目录 (Git root)
 ├── Research_Diary.md                   # 科研日记 (持续更新)
 ├── Memo_on_Division_of_Labor_Suggestions.md  # 备忘录类文档
 │
-├── Project_Prometheus_Tasks/           # 📁 核心项目文档
+├── project-prometheus-tasks/           # 📁 核心项目文档
 │   ├── 00-OVERVIEW.md                  #   总索引
 │   ├── RESEARCH_PHILOSOPHY.md          #   设计哲学 (宪法)
 │   ├── PLATFORM.md                     #   平台架构
@@ -120,7 +120,7 @@ research_compitition/                   # 仓库根目录 (Git root)
 │   └── experiments/                    #   实验记录 (未来)
 │       └── ...
 │
-├── Obsolete_or_Outdated_Documentation/ # 📁 归档 (历史文档，只读)
+├── obsolete-documentation/             # 📁 归档 (历史文档，只读)
 │
 └── src/                                # 📁 源代码 (未来，ROS workspace 映射)
     └── ...
@@ -135,7 +135,7 @@ research_compitition/                   # 仓库根目录 (Git root)
 | **不以数字开头** | ❌ `1-docs/` → ✅ `docs/` | |
 | **不嵌套过深** | 最大深度 3 层 | `docs/decisions/ADR-0001.md` ✅ |
 
-> **注意**：当前仓库中 `Project_Prometheus_Tasks/` 和 `Obsolete_or_Outdated_Documentation/` 使用了混合命名风格。这是历史遗留，将在合适时机（例如 v1.0.0 发布前）统一重命名。**在新创建的目录中，严格遵守 kebab-case。**
+> **注意**：当前仓库中 `Project_Prometheus_Tasks/` 和 `Obsolete_or_Outdated_Documentation/` 使用了混合命名风格。已于 2026-07-27 统一重命名为 `project-prometheus-tasks/` 和 `obsolete-documentation/`。**在新创建的目录中，严格遵守 kebab-case。**
 
 ### 2.3 ROS 工作空间映射
 
@@ -355,8 +355,8 @@ class ObservationAggregator:
 
 ### 4.5 文档规范
 
-- **ADR 不可变**：已采纳的 ADR 永远不修改，只由新 ADR 替代。详见 [RESEARCH_PHILOSOPHY.md §二](./Project_Prometheus_Tasks/RESEARCH_PHILOSOPHY.md#二architecture-decision-records-adr)。
-- **Obsolete 不删除**：过时的文档移入 `Obsolete_or_Outdated_Documentation/`，保留历史。
+- **ADR 不可变**：已采纳的 ADR 永远不修改，只由新 ADR 替代。详见 [RESEARCH_PHILOSOPHY.md §二](./project-prometheus-tasks/RESEARCH_PHILOSOPHY.md#二architecture-decision-records-adr)。
+- **Obsolete 不删除**：过时的文档移入 `obsolete-documentation/`，保留历史。
 - **日记持续更新**：`Research_Diary.md` 记录关键决策、遇到的问题、解决思路。格式自由，但**必须写日期**。
 
 ### 4.6 代码审查清单

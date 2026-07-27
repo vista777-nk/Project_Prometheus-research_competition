@@ -4,9 +4,9 @@
 >
 > 不是"最厉害的本科项目"。是一套能够持续演进五年以上的机器人研究平台。
 
-[![Phase](https://img.shields.io/badge/phase-sim__framework-brightgreen)](./Project_Prometheus_Tasks/ROADMAP.md)
-[![Tasks](https://img.shields.io/badge/tasks-6/9-blue)](./Project_Prometheus_Tasks/00-OVERVIEW.md)
-[![Tests](https://img.shields.io/badge/tests-28/28-brightgreen)](./Project_Prometheus_Tasks/task-06-com-bridge.md)
+[![Phase](https://img.shields.io/badge/phase-sim__framework-brightgreen)](./project-prometheus-tasks/ROADMAP.md)
+[![Tasks](https://img.shields.io/badge/tasks-7/9-blue)](./project-prometheus-tasks/00-OVERVIEW.md)
+[![Tests](https://img.shields.io/badge/tests-56/56-brightgreen)](./project-prometheus-tasks/task-07-edge-server.md)
 [![ROS](https://img.shields.io/badge/ROS-Noetic-brightgreen)](https://wiki.ros.org/noetic)
 [![Gazebo](https://img.shields.io/badge/Gazebo_Classic-11-orange)](http://gazebosim.org/)
 [![PX4](https://img.shields.io/badge/PX4-v1.14-blueviolet)](https://px4.io/)
@@ -29,13 +29,13 @@
 
 | 阶段 | 状态 | 内容 |
 |------|:---:|------|
-| **Phase 0: 仿真框架** | 🟢 进行中 (6/9) | 无人机 SITL ✅ · 差速底盘 ✅ · 麦轮底盘 ✅ · 传感器 ✅ · 通信桥 ✅ · 边缘服务器 🔵 · 集成总装 ⬜ · 验证 ⬜ |
+| **Phase 0: 仿真框架** | 🟢 进行中 (7/9) | 无人机 SITL ✅ · 差速底盘 ✅ · 麦轮底盘 ✅ · 传感器 ✅ · 通信桥 ✅ · 边缘服务器 ✅ · 集成总装 🔵 · 验证 ⬜ |
 | Phase 1: 实机调试 | 🔴 2026.08 | 组装 F450/S500 + 树莓派 + 传感器套件 |
 | Phase 2: EQA 论文 | 🔴 2026.09~12 | VLM + SLAM + 空地联合探索 |
 | Phase 3: 竞赛季 | 🔴 2027.01~08 | 全国电赛 + CRAIC2027 |
 | Phase 4: 毕设 | 🔴 2027~2028 | World Model · 3DGS · Dreamer |
 
-📋 详见 [00-OVERVIEW.md](./Project_Prometheus_Tasks/00-OVERVIEW.md) 和 [ROADMAP.md](./Project_Prometheus_Tasks/ROADMAP.md)
+📋 详见 [00-OVERVIEW.md](./project-prometheus-tasks/00-OVERVIEW.md) 和 [ROADMAP.md](./project-prometheus-tasks/ROADMAP.md)
 
 ---
 
@@ -43,12 +43,12 @@
 
 | 你想…… | 去看 |
 |---------|------|
-| 理解这个项目的"为什么" | [RESEARCH_PHILOSOPHY.md](./Project_Prometheus_Tasks/RESEARCH_PHILOSOPHY.md) |
-| 理解系统架构 | [PLATFORM.md](./Project_Prometheus_Tasks/PLATFORM.md) |
-| 查看模块间接口 | [ICD.md](./Project_Prometheus_Tasks/ICD.md) |
-| 了解研究路线和时间线 | [ROADMAP.md](./Project_Prometheus_Tasks/ROADMAP.md) |
-| 查看当前任务进度 | [00-OVERVIEW.md](./Project_Prometheus_Tasks/00-OVERVIEW.md) |
-| 搭建仿真环境 | [task-01-env-setup.md](./Project_Prometheus_Tasks/task-01-env-setup.md) |
+| 理解这个项目的"为什么" | [RESEARCH_PHILOSOPHY.md](./project-prometheus-tasks/RESEARCH_PHILOSOPHY.md) |
+| 理解系统架构 | [PLATFORM.md](./project-prometheus-tasks/PLATFORM.md) |
+| 查看模块间接口 | [ICD.md](./project-prometheus-tasks/ICD.md) |
+| 了解研究路线和时间线 | [ROADMAP.md](./project-prometheus-tasks/ROADMAP.md) |
+| 查看当前任务进度 | [00-OVERVIEW.md](./project-prometheus-tasks/00-OVERVIEW.md) |
+| 搭建仿真环境 | [task-01-env-setup.md](./project-prometheus-tasks/task-01-env-setup.md) |
 | 了解命名/编码/提交流程规范 | [CONVENTIONS.md](./CONVENTIONS.md) |
 | 查看架构决策记录 | [docs/decisions/](./docs/decisions/) |
 | 阅读科研日记 | [Research_Diary.md](./Research_Diary.md) |
@@ -116,7 +116,7 @@ research_compitition/
 ├── Memo_on_Division_of_Labor_Suggestions.md  ← AI 分工备忘录
 ├── docs/
 │   └── decisions/                      ← ADR (架构决策记录)
-├── Project_Prometheus_Tasks/           ← 核心项目文档
+├── project-prometheus-tasks/           ← 核心项目文档
 │   ├── 00-OVERVIEW.md                  ← 总索引 + 任务清单
 │   ├── RESEARCH_PHILOSOPHY.md          ← 设计哲学与宪法
 │   ├── PLATFORM.md                     ← 平台架构
@@ -129,7 +129,7 @@ research_compitition/
 │   ├── air_ground_car_bringup/         ← 车机仿真
 │   ├── air_ground_com_bridge/          ← 通信桥
 │   └── air_ground_lab_server/          ← 实验室服务器
-└── Obsolete_or_Outdated_Documentation/ ← 历史文档归档
+└── obsolete-documentation/ ← 历史文档归档
 ```
 
 ---
@@ -142,7 +142,7 @@ research_compitition/
 4. **Simulation is the First Robot** — Gazebo 是第一台机器人，不是"假的"
 5. **Every Module Must Be Replaceable** — 稳定的是 Capability，不是 Algorithm
 
-详见 [RESEARCH_PHILOSOPHY.md](./Project_Prometheus_Tasks/RESEARCH_PHILOSOPHY.md)。
+详见 [RESEARCH_PHILOSOPHY.md](./project-prometheus-tasks/RESEARCH_PHILOSOPHY.md)。
 
 ---
 
@@ -154,12 +154,12 @@ git clone https://github.com/vista777-nk/research_compitition.git
 cd research_compitition
 
 # 2. 在 Ubuntu 20.04 上搭建环境
-# 详见 Project_Prometheus_Tasks/task-01-env-setup.md
+# 详见 project-prometheus-tasks/task-01-env-setup.md
 
 # 3. 编译全部 5 个包
 cd ~/air_ground_sim_ws && catkin_make
 
-# 4. 运行测试 (28/28 passed)
+# 4. 运行测试 (56/56 passed)
 cd src/air_ground_car_bringup/scripts && bash test_diff.sh && bash test_mecanum.sh && bash test_sensors.sh
 cd src/air_ground_com_bridge/scripts && bash test_bridge.sh
 
