@@ -2,7 +2,7 @@
 
 > 本文档是项目入口。详细内容已拆分为四个专题文件。
 >
-> **当前进度**：仿真框架 6/9 tasks ✅ · 28/28 测试通过 · 5 个 ROS package 全部可编译
+> **当前进度**：仿真框架 8/9 tasks ✅ · 56/56 单元测试通过 · 6 个 ROS package 全部可编译
 
 ## 📖 必读文件
 
@@ -26,7 +26,7 @@
 | [task-05](./task-05-sensors.md) | 车载传感器与二维云台 | task-03,04 | 1.5h | ✅ |
 | [task-06](./task-06-com-bridge.md) | 空地通信桥（MAVLink + TCP） | task-02,03 | 2h | ✅ |
 | [task-07](./task-07-edge-server.md) | 边缘预处理 + 服务器节点 | task-02~06 | 2h | ✅ |
-| [task-08](./task-08-integration.md) | 集成总装 Launch + Makefile | task-02~07 | 1.5h | 🔵 可开始 |
+| [task-08](./task-08-integration.md) | 集成总装 Launch + Makefile | task-02~07 | 1.5h | ✅ |
 | [task-09](./task-09-validation.md) | 仿真验证 + 测试脚本 | task-08 | 1h | ⬜ |
 
 ### 依赖拓扑
@@ -50,8 +50,8 @@ cd ~/air_ground_sim_ws && make build
 # 一键启动
 make launch-full
 
-# 端到端测试
-bash src/e2e_test.sh
+# Task-02~07 全量回归
+make test-all
 ```
 
 ## 🔧 给 Subagent 的通用规范

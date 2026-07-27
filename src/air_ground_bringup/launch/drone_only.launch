@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="gui" default="false"/>
+  <arg name="headless" default="true"/>
+  <arg name="interactive" default="false"/>
+  <arg name="x" default="0.0"/>
+  <arg name="y" default="0.0"/>
+  <arg name="z" default="0.0"/>
+
+  <include file="$(find air_ground_drone_bringup)/launch/drone_sitl.launch">
+    <arg name="gui" value="$(arg gui)"/>
+    <arg name="headless" value="$(arg headless)"/>
+    <arg name="interactive" value="$(arg interactive)"/>
+    <arg name="x" value="$(arg x)"/>
+    <arg name="y" value="$(arg y)"/>
+    <arg name="z" value="$(arg z)"/>
+  </include>
+  <include file="$(find air_ground_drone_bringup)/launch/drone_edge.launch"/>
+</launch>

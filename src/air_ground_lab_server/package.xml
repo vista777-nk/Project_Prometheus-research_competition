@@ -21,6 +21,7 @@
   <exec_depend>rosnode</exec_depend>
   <exec_depend>rosservice</exec_depend>
   <exec_depend>rostopic</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
 
   <test_depend>python3-nose</test_depend>
   <test_depend>sensor_msgs</test_depend>
