@@ -9,6 +9,7 @@ export PX4_AUTOPILOT_DIR := $(PX4_ROOT)
 
 .PHONY: build clean rebuild test-unit test-drone test-car test-diff \
 	test-mecanum test-sensors test-bridge test-server test-all \
+	test-e2e quick-smoke test-smoke \
 	launch-drone launch-car launch-car-mecanum launch-server launch-full \
 	launch-full-mecanum kill status help
 
@@ -45,6 +46,14 @@ test-server: build
 	@bash "$(WS)/src/air_ground_lab_server/scripts/test_server.sh"
 
 test-all: test-unit test-drone test-diff test-mecanum test-sensors test-bridge test-server
+
+test-e2e: build
+	@bash "$(WS)/src/e2e_test.sh"
+
+quick-smoke: build
+	@bash "$(WS)/src/quick_smoke.sh"
+
+test-smoke: quick-smoke
 
 launch-drone: build
 	@xvfb-run -a -s '-screen 0 1280x1024x24 -nolisten tcp' bash -c 'export LIBGL_ALWAYS_SOFTWARE=1; source "$(WS)/scripts/setup_runtime.sh" px4 && roslaunch air_ground_bringup drone_only.launch gui:=false headless:=true'
@@ -89,6 +98,8 @@ help:
 	@echo "  make test-unit             Run all unit tests"
 	@echo "  make test-<name>           Run drone/car/bridge/server runtime tests"
 	@echo "  make test-all              Run Task 02-07 unit and runtime tests"
+	@echo "  make test-e2e              Run the full Task-09 E2E validation"
+	@echo "  make quick-smoke           Run the short Task-09 smoke test"
 	@echo "  make launch-drone          Launch PX4 drone simulation"
 	@echo "  make launch-car            Launch the differential-drive car"
 	@echo "  make launch-car-mecanum    Launch the mecanum car"

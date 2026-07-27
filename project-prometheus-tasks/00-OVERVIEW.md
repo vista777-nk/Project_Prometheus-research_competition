@@ -2,7 +2,7 @@
 
 > 本文档是项目入口。详细内容已拆分为四个专题文件。
 >
-> **当前进度**：仿真框架 8/9 tasks ✅ · 56/56 单元测试通过 · 6 个 ROS package 全部可编译
+> **当前进度**：仿真框架 9/9 tasks ✅ · 56/56 单元测试通过 · E2E 33/33 通过 · 6 个 ROS package 全部可编译
 
 ## 📖 必读文件
 
@@ -27,7 +27,7 @@
 | [task-06](./task-06-com-bridge.md) | 空地通信桥（MAVLink + TCP） | task-02,03 | 2h | ✅ |
 | [task-07](./task-07-edge-server.md) | 边缘预处理 + 服务器节点 | task-02~06 | 2h | ✅ |
 | [task-08](./task-08-integration.md) | 集成总装 Launch + Makefile | task-02~07 | 1.5h | ✅ |
-| [task-09](./task-09-validation.md) | 仿真验证 + 测试脚本 | task-08 | 1h | ⬜ |
+| [task-09](./task-09-validation.md) | 仿真验证 + 测试脚本 | task-08 | 1h | ✅ |
 
 ### 依赖拓扑
 
@@ -52,6 +52,10 @@ make launch-full
 
 # Task-02~07 全量回归
 make test-all
+
+# Task-09 快速冒烟与完整 E2E
+make quick-smoke
+make test-e2e
 ```
 
 ## 🔧 给 Subagent 的通用规范

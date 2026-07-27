@@ -5,7 +5,7 @@
 > 不是"最厉害的本科项目"。是一套能够持续演进五年以上的机器人研究平台。
 
 [![Phase](https://img.shields.io/badge/phase-sim__framework-brightgreen)](./project-prometheus-tasks/ROADMAP.md)
-[![Tasks](https://img.shields.io/badge/tasks-8/9-blue)](./project-prometheus-tasks/00-OVERVIEW.md)
+[![Tasks](https://img.shields.io/badge/tasks-9/9-brightgreen)](./project-prometheus-tasks/00-OVERVIEW.md)
 [![Tests](https://img.shields.io/badge/tests-56/56-brightgreen)](./project-prometheus-tasks/task-08-integration.md)
 [![ROS](https://img.shields.io/badge/ROS-Noetic-brightgreen)](https://wiki.ros.org/noetic)
 [![Gazebo](https://img.shields.io/badge/Gazebo_Classic-11-orange)](http://gazebosim.org/)
@@ -29,7 +29,7 @@
 
 | 阶段 | 状态 | 内容 |
 |------|:---:|------|
-| **Phase 0: 仿真框架** | 🟢 进行中 (8/9) | 无人机 SITL ✅ · 差速底盘 ✅ · 麦轮底盘 ✅ · 传感器 ✅ · 通信桥 ✅ · 边缘服务器 ✅ · 集成总装 ✅ · 验证 ⬜ |
+| **Phase 0: 仿真框架** | ✅ 完成 (9/9) | 无人机 SITL ✅ · 差速底盘 ✅ · 麦轮底盘 ✅ · 传感器 ✅ · 通信桥 ✅ · 边缘服务器 ✅ · 集成总装 ✅ · 验证 ✅ |
 | Phase 1: 实机调试 | 🔴 2026.08 | 组装 F450/S500 + 树莓派 + 传感器套件 |
 | Phase 2: EQA 论文 | 🔴 2026.09~12 | VLM + SLAM + 空地联合探索 |
 | Phase 3: 竞赛季 | 🔴 2027.01~08 | 全国电赛 + CRAIC2027 |
@@ -164,7 +164,11 @@ make build
 # 4. 运行全部已有测试
 make test-all
 
-# 5. 一键启动完整仿真
+# 5. 快速冒烟和完整 E2E 验证
+make quick-smoke
+make test-e2e
+
+# 6. 一键启动完整仿真
 make launch-full
 ```
 
