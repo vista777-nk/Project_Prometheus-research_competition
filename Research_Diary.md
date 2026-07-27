@@ -97,8 +97,8 @@
           · PX4/MAVROS 联合验证：3 passed, 0 failed
           · Task-03 回归测试：7/7 passed
           · Task-04 回归测试：17/17 passed
-          · 全工作空间构建：5 个包全部成功（air_ground_interfaces, air_ground_drone_sitl,
-            air_ground_car_sim, air_ground_com_bridge, air_ground_drone_bringup）
+          · 全工作空间构建：5 个包全部成功（air_ground_interfaces, air_ground_drone_sitl[^1],
+            air_ground_car_sim[^2], air_ground_com_bridge, air_ground_drone_bringup）
           · rosdep check、安装空间运行验证、静态检查：全部通过
 
     3.失败：无。Task-04/05/06 均一次性通过验收，所有回归测试绿灯。
@@ -136,3 +136,12 @@
           研究层不再触碰 MAVLink、Gazebo 和具体底盘控制器。
 
     5.下一步：Task-08 —— 集成总装 Launch、分场景入口和 Makefile。
+
+
+---
+
+## 历史名称脚注
+
+[^1]: **air_ground_drone_sitl** 是 `air_ground_drone_bringup` 的早期命名。2026-07-25 全局重构中统一改名，旧名称保留在日记中仅供历史追溯。
+
+[^2]: **air_ground_car_sim** 是 `air_ground_car_bringup` 的早期命名。同上，于 2026-07-25 重构中统一为 `air_ground_car_bringup`。
