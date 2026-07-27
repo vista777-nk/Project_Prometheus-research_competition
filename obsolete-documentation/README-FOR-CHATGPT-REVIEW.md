@@ -1,5 +1,9 @@
 # 空地联合 EQA 仿真孪生 — 分发给 Subagent 的使用说明
 
+> ⚠️ **此文档已过时，保留仅供历史参考。** 当前项目已迁至 `research_compitition/`，
+> 目录结构、ROS package 命名、接口定义均已发生重大变化。
+> 请以 [`project-prometheus-tasks/`](../project-prometheus-tasks/) 下的最新文档为准。
+
 > 本文档供 ChatGPT 校阅。目标读者：AI 编程助手 (subagent)。  
 > 项目仓库：`e:\Vista\Pictures\Temp\research_compitition\tasks\`
 

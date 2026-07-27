@@ -151,6 +151,60 @@
     4.小结：仿真框架 9 个任务全部完成，后续进入实机对齐与研究模块迭代。
 
 
+###### 2026/7/28
+    1.发现：a) 项目仓库在 24 小时审查中被发现缺少 LICENSE、依赖冻结、CI/CD 等工程化基础，
+             虽不影响仿真功能但阻碍可复现性和开源合规性。
+          b) CI 中使用的 `apt-key add` 在 Ubuntu 20.04 已被弃用，与 `setup_all.sh` 中的
+             `signed-by` 方式不一致。
+          c) 仓库目录 `Project_Prometheus_Tasks/`、`Obsolete_or_Outdated_Documentation/`
+             自项目创建起一直不符合 CONVENTIONS.md 的 kebab-case 约定。
+
+    2.完成：【工程化基础设施补全】
+          1) 根目录创建 LICENSE（MIT）全文，与 package.xml 声明一致。
+          2) 根目录创建 `requirements.txt`，冻结 pymavlink/opencv/numpy/PyYAML/Pillow 版本。
+          3) 全部 6 个 package.xml 维护者邮箱从 `user@example.com` 更新为真实邮箱。
+          4) GitHub Actions CI 流水线（`.github/workflows/ci.yml`）：
+             容器化 Ubuntu 20.04 + catkin build + catkin test + 结果汇总，
+             经过 4 轮修复（runner → 容器化 → checkout 路径 → bash shell → build-essential）。
+          5) `scripts/setup_runtime.sh`：统一运行时环境加载脚本（ros/px4 双模式）。
+
+          【目录重命名 — 符合 kebab-case 规范】
+          6) `Project_Prometheus_Tasks/` → `project-prometheus-tasks/`
+          7) `Obsolete_or_Outdated_Documentation/` → `obsolete-documentation/`
+          8) 全文更新所有文档中的旧路径引用。
+
+          【Phase 0 收官】
+          9) Task-08 实施：`air_ground_bringup` 包 + 4 个分层 Launch（full/drone/car/server-only）。
+          10) Task-09 实施：E2E 端到端测试 352 行（33/33 通过）+ Quick Smoke 177 行（5/5 通过）。
+          11) `Makefile` 20 个目标：build/clean/rebuild/test-*/launch-*/kill/status。
+          12) `setup_all.sh` 6 步一键安装（ROS → PX4 → Python）。
+          13) 施工完成审查：全量 Python 文件 PEP 8 lint（ruff）All checks passed。
+          14) 归档文档添加"已过时"警告标记。
+          15) CI `apt-key add` 替换为 `gpg --dearmor` + `signed-by` 方式。
+          16) 创建里程碑 Tag：`v0.1.0` + `milestone/sim-framework-done`。
+
+          【数据汇总】
+          · README badges：Phase 0 ✅ · Tasks 9/9 · Tests 56/56
+          · Phase 0 全部 9 个任务：✅✅✅✅✅✅✅✅✅
+          · 6 个 ROS Package 全部可编译
+          · E2E：33/33 通过
+          · 单元测试：56/56 通过
+          · 回归测试：Task-02~07 全部通过
+
+    3.失败：a) CI 配置经历 4 次修复迭代（runner 类型 → 容器化 → checkout 路径 → bash 默认 shell），
+             原因是 GitHub Actions 的 ubuntu-latest (22.04) runner 与 ROS Noetic (20.04) 不兼容。
+             最终方案：`runs-on: ubuntu-22.04` + `container: ubuntu:20.04`。
+          b) 目录重命名后 `git log --follow` 可追溯历史，但 GitHub 的 blame 界面在重命名点会中断。
+
+    4.小结：Phase 0 仿真框架正式收官。从 7/25 规划启动到 7/28 全部完成，历时 4 天，
+          累计约 40 次提交，全部遵循 Conventional Commits + 简体中文规范。
+          平台已具备完整的"传感器→边缘→通信→服务器→决策→执行"数字孪生闭环。
+          下一步：Phase 1 实机调试（F450/S500 组装 + 树莓派 + 传感器套件）。
+
+    5.下一步：Phase 1 准备工作 — 硬件采购清单确认、实机网络拓扑设计、MAVLink 签名配置、
+          SSH 密钥部署方案。
+
+
 ---
 
 ## 历史名称脚注
