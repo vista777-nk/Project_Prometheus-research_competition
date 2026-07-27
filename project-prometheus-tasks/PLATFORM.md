@@ -137,6 +137,14 @@ STM32F407 / MSPM0G3507 (Layer 1)           Pixhawk 6C (Layer 1)
 │       ├── drone_car_bridge.py     # MAVLink ↔ ROS
 │       └── edge_server_bridge.py   # ROS ↔ TCP JSON
 │
+├── air_ground_bringup/                     # 顶层集成启动 (Task-08)
+│   ├── launch/
+│   │   ├── air_ground_sim.launch
+│   │   ├── drone_only.launch
+│   │   ├── car_only.launch
+│   │   └── server_only.launch
+│   └── package.xml
+│
 └── air_ground_lab_server/                  # 实验室服务器 (Layer 4)
     ├── launch/
     │   └── server.launch
@@ -279,7 +287,7 @@ ssh car-pi    "chronyc tracking | grep 'System time'"
 
 | # | 问题 | 状态 | 计划修复 |
 |---|------|:---:|---------|
-| AD-01 | 双 Gazebo 部署（资源翻倍 + 服务冲突） | ⚠️ | Task-08 实施时改为单世界 |
+| AD-01 | 双 Gazebo 部署（资源翻倍 + 服务冲突） | ✅ | Task-08 已改为 PX4 Launch 独占 Gazebo，车模型注入同一世界 |
 | AD-02 | 仿真-实机 MAVLink 桥断层（P1-11） | ⚠️ | 实机部署阶段重写 `drone_car_bridge` |
 | AD-03 | EQA/VLM 图像带宽矛盾：3DR 24KB/s vs JPEG 10KB+ | ⚠️ | ROADMAP 已记录；VLM 必须走 WiFi/4G |
 | AD-04 | TCP JSON 传输不适合生产环境图像流 | ⚠️ | v2 迁移到 ROS2/DDS 或 ZeroMQ |

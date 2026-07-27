@@ -3,6 +3,7 @@
   <arg name="world"
        default="$(find air_ground_car_bringup)/worlds/empty.world"/>
   <arg name="model_name" default="mecanum_car"/>
+  <arg name="start_gazebo" default="true"/>
   <arg name="gui" default="false"/>
   <!-- Gazebo 11 keeps this non-functional argument for compatibility. -->
   <arg name="headless" default="true"/>
@@ -15,7 +16,8 @@
   <arg name="P" default="0.0"/>
   <arg name="Y" default="0.0"/>
 
-  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+  <include if="$(arg start_gazebo)"
+           file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(arg world)"/>
     <arg name="gui" value="$(arg gui)"/>
     <arg name="headless" value="$(arg headless)"/>

@@ -138,6 +138,19 @@
     5.下一步：Task-08 —— 集成总装 Launch、分场景入口和 Makefile。
 
 
+###### 2026/7/27（Task-09 验证）
+    1.完成：新增 `src/e2e_test.sh` 与 `src/quick_smoke.sh`，并在 Makefile 中提供 `test-e2e`、`quick-smoke` 入口。
+          E2E 覆盖总装启动、双模型、传感器、边缘消息、MAVLink/TCP 桥、World Model 和 EQA Mission 分发。
+
+    2.验证：`make build` 成功；单元测试 56/56；Task-02~07 回归 9/9、7/7、17/17、28/28、11/11、15/15；
+          Quick Smoke 5/5；Task-09 E2E 33/33；SensorFusion 自定义消息可用。
+
+    3.修正：将 E2E 命令链按当前 ICD 实现验证为 `/server/eqa/query` → `/car/mission`，并明确底盘切换由
+          麦轮场景的 `chassis_swapper` 与 `make test-mecanum` 覆盖，不在差速总装中调用不存在的服务。
+
+    4.小结：仿真框架 9 个任务全部完成，后续进入实机对齐与研究模块迭代。
+
+
 ---
 
 ## 历史名称脚注

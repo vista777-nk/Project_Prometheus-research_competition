@@ -8,6 +8,8 @@
        default="$(find mavlink_sitl_gazebo)/worlds/empty.world"/>
 
   <arg name="gui" default="false"/>
+  <!-- PX4 v1.14 controls server-only operation through gui=false. -->
+  <arg name="headless" default="true"/>
   <arg name="debug" default="false"/>
   <arg name="verbose" default="false"/>
   <arg name="paused" default="false"/>

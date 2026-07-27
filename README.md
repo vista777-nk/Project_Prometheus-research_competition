@@ -5,8 +5,8 @@
 > 不是"最厉害的本科项目"。是一套能够持续演进五年以上的机器人研究平台。
 
 [![Phase](https://img.shields.io/badge/phase-sim__framework-brightgreen)](./project-prometheus-tasks/ROADMAP.md)
-[![Tasks](https://img.shields.io/badge/tasks-7/9-blue)](./project-prometheus-tasks/00-OVERVIEW.md)
-[![Tests](https://img.shields.io/badge/tests-56/56-brightgreen)](./project-prometheus-tasks/task-07-edge-server.md)
+[![Tasks](https://img.shields.io/badge/tasks-9/9-brightgreen)](./project-prometheus-tasks/00-OVERVIEW.md)
+[![Tests](https://img.shields.io/badge/tests-56/56-brightgreen)](./project-prometheus-tasks/task-08-integration.md)
 [![ROS](https://img.shields.io/badge/ROS-Noetic-brightgreen)](https://wiki.ros.org/noetic)
 [![Gazebo](https://img.shields.io/badge/Gazebo_Classic-11-orange)](http://gazebosim.org/)
 [![PX4](https://img.shields.io/badge/PX4-v1.14-blueviolet)](https://px4.io/)
@@ -29,7 +29,7 @@
 
 | 阶段 | 状态 | 内容 |
 |------|:---:|------|
-| **Phase 0: 仿真框架** | 🟢 进行中 (7/9) | 无人机 SITL ✅ · 差速底盘 ✅ · 麦轮底盘 ✅ · 传感器 ✅ · 通信桥 ✅ · 边缘服务器 ✅ · 集成总装 🔵 · 验证 ⬜ |
+| **Phase 0: 仿真框架** | ✅ 完成 (9/9) | 无人机 SITL ✅ · 差速底盘 ✅ · 麦轮底盘 ✅ · 传感器 ✅ · 通信桥 ✅ · 边缘服务器 ✅ · 集成总装 ✅ · 验证 ✅ |
 | Phase 1: 实机调试 | 🔴 2026.08 | 组装 F450/S500 + 树莓派 + 传感器套件 |
 | Phase 2: EQA 论文 | 🔴 2026.09~12 | VLM + SLAM + 空地联合探索 |
 | Phase 3: 竞赛季 | 🔴 2027.01~08 | 全国电赛 + CRAIC2027 |
@@ -86,9 +86,10 @@
 |---------|:---:|------|:---:|
 | `air_ground_interfaces` | Layer 3 | 10 个自定义消息 + 2 个服务 + 1 个 Action | — |
 | `air_ground_drone_bringup` | Layer 1 | PX4 SITL 无人机 + 深度相机/GPS/IMU | ✅ |
-| `air_ground_car_bringup` | Layer 1 | 差速/麦轮双底盘 + 车载传感器 + 云台 | 24/24 |
-| `air_ground_com_bridge` | Layer 2 | MAVLink UDP 桥 + TCP JSON 桥 | 16/16 |
-| `air_ground_lab_server` | Layer 4 | 服务器占位包（SLAM/EQA/Coordinator 待实现） | — |
+| `air_ground_car_bringup` | Layer 1 | 差速/麦轮双底盘 + 车载传感器 + 云台 | 16/16 |
+| `air_ground_com_bridge` | Layer 2 | MAVLink UDP 桥 + TCP JSON 桥 | 17/17 |
+| `air_ground_lab_server` | Layer 4 | TCP 接收 + World Model + 研究占位节点 | ✅ |
+| `air_ground_bringup` | Orchestration | 单 Gazebo 世界的顶层集成 Launch | ✅ |
 
 ---
 
@@ -128,7 +129,8 @@ research_compitition/
 │   ├── air_ground_drone_bringup/       ← 无人机仿真
 │   ├── air_ground_car_bringup/         ← 车机仿真
 │   ├── air_ground_com_bridge/          ← 通信桥
-│   └── air_ground_lab_server/          ← 实验室服务器
+│   ├── air_ground_lab_server/          ← 实验室服务器
+│   └── air_ground_bringup/             ← 顶层集成启动
 └── obsolete-documentation/ ← 历史文档归档
 ```
 
@@ -156,16 +158,18 @@ cd research_compitition
 # 2. 在 Ubuntu 20.04 上搭建环境
 # 详见 project-prometheus-tasks/task-01-env-setup.md
 
-# 3. 编译全部 5 个包
-cd ~/air_ground_sim_ws && catkin_make
+# 3. 编译全部 6 个包
+make build
 
-# 4. 运行测试 (56/56 passed)
-cd src/air_ground_car_bringup/scripts && bash test_diff.sh && bash test_mecanum.sh && bash test_sensors.sh
-cd src/air_ground_com_bridge/scripts && bash test_bridge.sh
+# 4. 运行全部已有测试
+make test-all
 
-# 5. 一键启动完整仿真 (task-08 完成后可用)
-# make launch-full
-```
+# 5. 快速冒烟和完整 E2E 验证
+make quick-smoke
+make test-e2e
+
+# 6. 一键启动完整仿真
+make launch-full
 ```
 
 ---

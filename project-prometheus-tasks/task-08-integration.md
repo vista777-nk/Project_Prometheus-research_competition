@@ -1,5 +1,7 @@
 # Task-08: 集成总装 Launch + Makefile
 
+> **状态：✅ 已完成（2026-07-27）**
+
 ## 前置条件
 
 - Task-02~07 所有子模块可独立运行
@@ -296,3 +298,34 @@ chmod +x ~/air_ground_sim_ws/setup_all.sh
 2. `make test-all` 运行全部模块测试
 3. `make help` 列出所有可用命令
 4. `setup_all.sh` 可在全新 Ubuntu 20.04 上一键完成环境搭建
+
+## 实施说明
+
+- 新增 `air_ground_bringup`，提供全量、无人机、小车和服务器四个顶层
+  Launch 入口；
+- 全量 Launch 只启动一个 Gazebo：PX4 负责世界生命周期，小车通过
+  `start_gazebo:=false` 注入同一世界；
+- `scripts/setup_runtime.sh` 统一加载 ROS、Gazebo 和 PX4 环境，并隔离
+  Conda/Python 路径污染；
+- 所有无界面的 Gazebo Make 目标使用 Xvfb，支持无 DISPLAY 主机；
+- `make test-all` 覆盖现有 Task-02～07；Task-09 的 E2E 验证不提前纳入。
+
+## 验证记录
+
+2026-07-27 在 Ubuntu 20.04、ROS Noetic、Gazebo 11 和 PX4 v1.14
+环境完成：
+
+| 验证项 | 结果 |
+|--------|------|
+| Shell、XML、Launch 展开检查 | ✅ |
+| Catkin 全工作空间编译 | ✅，6 个包 |
+| 单元测试 | ✅，56 tests |
+| `make test-all` | ✅，Task-02～07 共 87 项运行检查 |
+| `make launch-full` | ✅，单 Gazebo、双模型、MAVROS、TCP、World Model |
+
+## 验收结论
+
+- [x] `make launch-full` 一键启动完整系统；
+- [x] `make test-all` 运行全部现有模块测试；
+- [x] `make help` 列出所有入口；
+- [x] `setup_all.sh` 汇总 ROS、PX4、Python 和工作空间安装步骤。

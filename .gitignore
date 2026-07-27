@@ -84,6 +84,7 @@ CMakeFiles/
 cmake_install.cmake
 CTestTestfile.cmake
 Makefile
+!/Makefile
 !tasks/**/Makefile
 
 # === IDE / Editor ===
