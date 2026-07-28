@@ -29,9 +29,12 @@ CMakeLists.txt  text working-tree-encoding=UTF-8
 *.sh            text working-tree-encoding=UTF-8 eol=lf
 *.bash          text working-tree-encoding=UTF-8 eol=lf
 *.py            text working-tree-encoding=UTF-8
+*.c             text working-tree-encoding=UTF-8
 *.cpp           text working-tree-encoding=UTF-8
 *.h             text working-tree-encoding=UTF-8
 *.hpp           text working-tree-encoding=UTF-8
+# 固件链接脚本 (src/firmware/*/linker/*.ld)
+*.ld            text working-tree-encoding=UTF-8 eol=lf
 
 # ── 配置文件 ──
 .gitignore      text working-tree-encoding=UTF-8

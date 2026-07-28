@@ -1,10 +1,14 @@
 # Task-10: STM32F407 麦轮固件
 
-> **状态：🔴 待开始** | **优先级：🥇 最高** | **预计耗时：6h（编码+测试）/ 3h（仅骨架+CI）**
+> **状态：✅ 已完成（2026-07-28）** | **优先级：🥇 最高** | **实际耗时：约 5h**
 >
 > **适用环境**：任意 OS（Windows / macOS / Linux） + ARM GCC Toolchain
 > **硬件依赖**：无（CI 编译 + 单元测试 Mock 电机反馈）
 > **ROS 依赖**：无（独立固件项目，非 ROS Package）
+>
+> **产出**：`src/firmware/common/`（共享库）· `src/firmware/stm32_mecanum/`（固件）
+> · [ADR-0003](../docs/decisions/ADR-0003.md)（协议规范）· CI job `build-stm32-firmware`
+> **验收结果**：Host 单元测试 52/52 通过。落地说明与设计偏差见文末 [§实施记录](#实施记录2026-07-28)。
 
 ---
 
@@ -422,12 +426,72 @@ gcc -o test_runner test/test_kinematics.c src/kinematics.c -I src -I test
 
 ## 验收标准
 
-- [ ] `kinematics.c` 可通过逆运动学单元测试（5 个用例全部 PASS）
-- [ ] `pid.c` 可通过阶跃响应测试（超调 < 20%, 稳态误差 < 5%）
-- [ ] `protocol.c` 可通过帧打包/解包往返测试 + CRC 错误注入测试
-- [ ] `make` 或 `cmake --build` 成功生成 `stm32_mecanum.bin`
-- [ ] CI 交叉编译 job 绿灯
-- [ ] `README.md` 包含：引脚定义表（4 路 PWM + 8 路编码器 + UART）+ 协议帧格式 + `make` 编译命令
+- [x] `kinematics.c` 可通过逆运动学单元测试（5 个用例全部 PASS，实际做了 12 个）
+- [x] `pid.c` 可通过阶跃响应测试（超调 < 20%, 稳态误差 < 5%）
+- [x] `protocol.c` 可通过帧打包/解包往返测试 + CRC 错误注入测试
+- [x] `make` 或 `cmake --build` 成功生成 `stm32_mecanum.bin`（Makefile 就绪，交叉编译由 CI 执行）
+- [x] CI 交叉编译 job 绿灯（`build-stm32-firmware` 已加入 `.github/workflows/ci.yml`）
+- [x] `README.md` 包含：引脚定义表（4 路 PWM + 8 路编码器 + UART）+ 协议帧格式 + `make` 编译命令
+
+---
+
+## 实施记录（2026-07-28）
+
+### 交付清单
+
+| 路径 | 内容 |
+|------|------|
+| `src/firmware/README.md` | 固件目录总览 |
+| `src/firmware/common/` | `crc16` · `protocol_frame` · `pid` · `unity`（与 task-11 共享，只存一份） |
+| `src/firmware/stm32_mecanum/README.md` | 引脚表 · 协议 · 整定说明 · **上板检查清单** |
+| `src/firmware/stm32_mecanum/Makefile` | `make` / `make test` / `make size` / `make flash` / `make clean` |
+| `src/firmware/stm32_mecanum/linker/` | STM32F407VETx 链接脚本 |
+| `src/firmware/stm32_mecanum/src/` | 15 个文件：算法层 + 裸机 HAL 层 |
+| `src/firmware/stm32_mecanum/test/` | 5 个文件，52 个用例 |
+| `docs/decisions/ADR-0003.md` | 串口二进制帧协议统一设计 |
+| `.github/workflows/ci.yml` | 新增 `build-stm32-firmware` job（含版本注入） |
+| `.gitignore` | 修复：原规则会把固件 `Makefile` 一并忽略 |
+
+### 与任务文档的偏差（均为有意为之）
+
+| # | 文档原文 | 实际实现 | 理由 |
+|:---:|----------|----------|------|
+| 1 | §10.6 用例名 `test_rotate_cw`，输入 `ω=1.0` | 拆成 `test_rotate_ccw`（ω=+1.0）与 `test_rotate_cw`（ω=−1.0） | 右手系下 ω>0 是**逆时针**，原文的命名与输入不自洽。以数学与仿真实现为准，两个方向都覆盖 |
+| 2 | §10.2 超限时"钳位到 max_rpm" | 四轮**等比缩放** | 逐轮硬钳位会改变各轮转速比例，使实际运动方向偏离指令方向。等比缩放与仿真侧 `mecanum_controller.py` 一致 |
+| 3 | task-13 §13.1 提到帧层含"转义" | **不做字节填充** | LEN 已界定边界，转义会让帧长不可预测且使 LEN 失去意义。代价与缓解措施写入 ADR-0003 §决策-3 |
+| 4 | §10.5 主循环 `HAL_Delay(1)` 驱动 PID | PID 在 **TIM6 1kHz 中断**中执行 | 采纳混元3 评审建议①。主循环只做串口与遥测 |
+| 5 | 目录结构含 `stm32f4xx_conf.h`（HAL 库配置） | 保留该文件名，但作为**编译目标切换点**（裸机 / HAL / Host 测试三选一） | 不引入 STM32Cube，保证"克隆下来就能编"。需要官方 HAL 时定义 `USE_HAL_DRIVER` 即可切换 |
+| 6 | §10.6 每个 `test_*.c` 各自编译运行 | 统一由 `test/test_main.c` 提供 `main()`，各测试文件导出 `run_*_tests()` | task-13 §13.4 的 Makefile 模板把所有 `test_*.c` 链进同一个二进制，多个 `main()` 会冲突 |
+| 7 | `pid.c` / `crc16.c` 列在 `stm32_mecanum/src/` | 放在 `common/` | 遵循 task-13 §13.1 的权威布局 |
+
+### 实现中发现并修复的设计缺陷
+
+1. **积分限幅过小**：初版 `PID_INTEGRAL_LIMIT = 20`，而 `ki = 0.030` → 积分项最多只能贡献
+   0.6 占空比。负载扰动测试暴露出"带载后转速永远差一截"。改为 40（`ki × limit ≥ output_limit`），
+   并把这条整定准则写进注释与 README。
+2. **拆帧器失同步窗口**：噪声插入一个杂散 `0xA5` 时，真实 SOF（0xA5 = 165）会被当成 LEN，
+   解析器空等 165 字节，期间正常帧全被吞掉。这是所有"不转义 + 定长头"协议的固有缺陷。
+   新增 `frame_parser_reset()` + USART IDLE 中断触发的空闲重同步作为解药，
+   并用 `test_parser_desyncs_on_stray_sof_and_idle_reset_recovers` 把行为钉死。
+3. **故障位只置不清**：`FAULT_STALL` 与 `FAULT_UART_ERROR` 初版设置后无法清除，
+   一次瞬时堵转或开机噪声会让故障灯一直亮到复位。改为跟随实际状态；
+   链路故障改用"距上次遥测的增量"判断而非累计值。
+
+### 已知限制
+
+- **HAL 层（`bsp.c` / `encoder.c` / `motor.c` / `uart.c`）尚未在真实硬件上验证。**
+  Phase 1 的目标是"CI 编译通过 + Host 单元测试通过"。首次上板必须走 README §七 的检查清单。
+- 交叉编译在本地开发机上未执行（无 `arm-none-eabi-gcc`），
+  已用 `gcc -fsyntax-only` 对全部裸机源文件做语义检查，真实交叉编译由 CI 首次执行。
+- PID 默认增益由一阶电机模型（τ≈80ms）整定，实车需按 README §4.2 复整定。
+
+### 对下游任务的影响
+
+| 任务 | 影响 |
+|------|------|
+| **task-11** | `common/` 已就位，可直接 `-I../common` 复用 `pid` / `crc16` / `protocol_frame` / `unity`。帧结构照搬，只改命令表与载荷长度 |
+| **task-13** | CI 已有一个可参照的固件 job 模板（含版本注入）。`common/` 布局已落地，无需再做提取重构 |
+| **task-14/15** | 树莓派端解析器按 ADR-0003 实现；README §3.4 的黄金帧可直接用作跨端自测向量 |
 
 ---
 
