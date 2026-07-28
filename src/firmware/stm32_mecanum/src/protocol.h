@@ -66,7 +66,9 @@ typedef enum {
  */
 #define FAULT_NONE              0x0000u
 #define FAULT_OVERCURRENT       0x0001u  /**< 任一电机电流超过阈值 */
-#define FAULT_STALL             0x0002u  /**< 有目标转速但轮子不转 (堵转/断线) */
+#define FAULT_STALL             0x0002u  /**< 有目标转速但轮子不转 (堵转/断线)。
+                                              注意：FAULT_OVERCURRENT 或 FAULT_ESTOP 置位期间电机已刹停，
+                                              堵转检测停止更新，本位保持旧值。上位机此时应忽略本位。 */
 #define FAULT_CMD_TIMEOUT       0x0004u  /**< 超时未收到 SET_VELOCITY，已自动刹停 */
 #define FAULT_ESTOP             0x0008u  /**< 硬件急停被触发 */
 #define FAULT_KINEMATICS_SAT    0x0010u  /**< 速度指令超出底盘能力，已等比缩放 */
