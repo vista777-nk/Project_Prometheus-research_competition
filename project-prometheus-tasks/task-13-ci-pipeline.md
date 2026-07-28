@@ -32,6 +32,29 @@
 
 ---
 
+## 架构影响
+
+| 维度 | 内容 |
+|------|------|
+| **Affected Capability** | DevOps: CI/CD 验证流水线 — 覆盖 ROS、STM32、MSPM0、Docker、Lint 五大维度 |
+| **Modified Interface** | 新增 `.github/workflows/ci.yml` 中的 4 个独立 job · 新增 `src/firmware/common/` 共享代码目录 |
+| **New Dependency** | `gcc-arm-none-eabi` · `shellcheck` · `yamllint` · `docker/build-push-action` |
+| **ADR Required** | ADR-0007: 选择 GitHub Actions over Jenkins/自建 CI 的理由 · ADR-0008: 固件共享代码目录 (`common/`) 设计 |
+| **Risk Level** | 🟢 Low — CI 是只读验证，不修改任何源码；失败不阻塞其他 job |
+
+> **铁律回顾 (RESEARCH_PHILOSOPHY.md §四「验证先行」)**：  
+> 每个子系统都要有"无硬件可跑"的验证方式。CI 是验证先行的工程基础设施。
+
+## 未来演进
+
+| 维度 | 今天 (Phase 1) | 明天 (Phase 2+) |
+|------|---------------|-----------------|
+| **Replaceable Component** | GitHub Actions (免费 tier) | 自建 GitLab CI / Jenkins (私有仓库) · 硬件在环测试 (HIL) |
+| **Permanent Interface** | CI job 命名约定 (`build-*-firmware`) · 固件 artifact 上传路径 · 单元测试 Makefile target (`make test`) | 保持不变 |
+| **Temporary Implementation** | `ubuntu-latest` runner · apt 安装 arm-gcc · 无性能测试 | v2: 自托管 runner (树莓派 ARM64 原生) · FPGA/GPU CI · 性能回归测试 (cycle-accurate) · 覆盖率报告 (gcov/lcov) |
+
+---
+
 ## 可执行步骤
 
 ### 13.1 共享固件目录 (`src/firmware/common/`)

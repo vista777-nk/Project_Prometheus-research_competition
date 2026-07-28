@@ -36,6 +36,30 @@
 
 ---
 
+## 架构影响
+
+| 维度 | 内容 |
+|------|------|
+| **Affected Capability** | Perception: 相机内参 · IMU 内参 · 相机-IMU 外参 · DevOps: Phase 1 集成验证 |
+| **Modified Interface** | 新增标定输出格式: `camera_intrinsics.yaml` → ROS `camera_info` · 新增 `smoke-test-phase1.sh` 冒烟测试入口 |
+| **New Dependency** | OpenCV (`cv2.calibrateCamera`) · Kalibr (可选, 相机-IMU 外参) · `allan_variance_ros` (可选, IMU 标定) |
+| **ADR Required** | ADR-0011: 标定结果 YAML 格式标准化 · ADR-0012: 标定数据库 (`calibration_db/`) 目录结构设计 |
+| **Risk Level** | 🟢 Low — 标定脚本操作离线数据，不依赖实时硬件 |
+
+> **铁律回顾 (RESEARCH_PHILOSOPHY.md §四「Simulation is the First Robot」)**：  
+> 标定脚本在仿真 bag 和实机 bag 上运行完全相同的代码。  
+> 换一个相机型号，只需重新采集标定数据，脚本不变。
+
+## 未来演进
+
+| 维度 | 今天 (Phase 1) | 明天 (Phase 2+) |
+|------|---------------|-----------------|
+| **Replaceable Component** | OpenCV 棋盘格标定 · 手动标定数据采集 | Kalibr (AprilGrid) · OpenVINS 在线标定 · Kimera 语义标定 · Visual-Inertial Foundation Model 自标定 |
+| **Permanent Interface** | `camera_intrinsics.yaml` 输出格式 · `validate-calibration.py` 合理性检查项 · `smoke-test-phase1.sh` 冒烟测试框架 | 保持不变 — 换标定算法只改采集+解算，不改验证和输出格式 |
+| **Temporary Implementation** | 离线 Python 脚本 · 手动触发标定 · 无标定报告自动生成 | v2: ROS 节点内在线标定 · 标定报告自动 PDF 生成 (含 K Matrix / Distortion / RMS / Allan Variance / 日期 / 序列号) · `calibration_db/` 标定历史数据库 (不覆盖, 可对比长期漂移) |
+
+---
+
 ## Part A: 标定脚本
 
 ### 15A.1 目录位置
@@ -579,6 +603,8 @@ echo "========================================="
 - [ ] `validate-calibration.py` 对标定结果做合理性检查（5 项全部通过）
 - [ ] 标定脚本在 CI 中可用离线样本数据测试（不需要 ROS）
 - [ ] `record-calib-bag.sh` 有明确的操作指南（提示用户如何移动标定板）
+- [ ] **标定报告自动生成**：`generate-calib-report.py` 将 YAML 转换为 PDF 报告，包含 K Matrix / Distortion Coefficients / RMS Reprojection Error / Allan Variance (IMU) / Calibration Date / Sensor Serial Number
+- [ ] **标定数据库**：`calibration_db/` 目录结构建立，历史标定结果永不覆盖（按日期 + 传感器序列号归档）
 
 ### Part B 集成验证
 
@@ -586,6 +612,7 @@ echo "========================================="
 - [ ] `test-observation-pipeline.py` 3 个测试用例通过
 - [ ] `smoke-test-phase1.sh` 可检查所有 Phase 1 文件存在性 + CI job 存在性
 - [ ] Phase 1 冒烟测试在 GitHub Actions 中可运行
+- [ ] **三问检查** (每完成一个 Task)：Platform 是否更稳定？ / Research 是否更自由？ / 未来替换硬件是否更简单？
 
 ---
 

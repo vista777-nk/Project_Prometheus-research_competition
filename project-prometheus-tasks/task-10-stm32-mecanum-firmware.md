@@ -53,6 +53,30 @@ STM32F407VET6 (Layer 1 Hardware)  ← 本任务
 
 ---
 
+## 架构影响
+
+| 维度 | 内容 |
+|------|------|
+| **Affected Capability** | Locomotion: 麦轮逆运动学 + 四轮独立速度PID |
+| **Modified Interface** | 新增 Layer 1 内部接口: UART 二进制帧协议 (CMD_SET_VELOCITY / TELEMETRY) |
+| **New Dependency** | `arm-none-eabi-gcc` (交叉编译工具链) · Unity Test (单元测试框架) |
+| **ADR Required** | ADR-0003: 串口二进制帧协议统一设计 (与 MSPM0 共享帧结构) |
+| **Risk Level** | 🟢 Low — 纯固件，不影响已有 ROS 系统 |
+
+> **铁律回顾 (RESEARCH_PHILOSOPHY.md §五)**：  
+> 真正稳定的是 Capability (麦轮运动控制)，不是 Algorithm (STM32 或未来的其他 MCU)。  
+> 换 MCU 时，`kinematics.c` 的数学逻辑不变，`protocol.c` 的帧结构不变。
+
+## 未来演进
+
+| 维度 | 今天 (Phase 1) | 明天 (Phase 2+) |
+|------|---------------|-----------------|
+| **Replaceable Component** | STM32F407VET6 | ESP32-S3 / Teensy 4.1 / 其他 Cortex-M4/M7 MCU |
+| **Permanent Interface** | 串口二进制帧协议 (SOF/CMD/CRC/EOF) · 运动学输入 `{vx, vy, ω}` | 保持不变 — 换 MCU 只需重新实现 HAL 层 (`encoder.c`, `motor.c`, `uart.c`) |
+| **Temporary Implementation** | STM32 HAL 库 (`stm32f4xx_hal`) · 手动 PID 整定 | v2: FreeRTOS 任务调度 · 自动 PID 整定 (Ziegler-Nichols) · CAN 总线替代 UART |
+
+---
+
 ## 可执行步骤
 
 ### 10.1 创建固件项目骨架

@@ -46,6 +46,30 @@
 
 ---
 
+## 架构影响
+
+| 维度 | 内容 |
+|------|------|
+| **Affected Capability** | Perception: 2D LiDAR / IMU / Ultrasonic / OpenMV 实机驱动 · Communication: MAVLink 2 签名安全 |
+| **Modified Interface** | 新增 `HardwareInterface` ABC (UART/I2C/GPIO) — 定义 Layer 1↔Layer 2 的硬件抽象边界 · 新增 MAVLink 签名配置层 |
+| **New Dependency** | `pymavlink` (签名自测) · OpenCV (RPLIDAR 可选) · `openssl` (密钥生成) |
+| **ADR Required** | ADR-0009: 引入 HardwareInterface ABC 抽象层的设计理由 · ADR-0010: MAVLink 2 签名启用时机选择 |
+| **Risk Level** | 🟡 Medium — 传感器驱动涉及真实硬件时序，但骨架 + Mock 已将风险隔离在 HardwareInterface 层 |
+
+> **铁律回顾 (RESEARCH_PHILOSOPHY.md §三「Everything Produces Knowledge」)**：  
+> 传感器驱动输出的是 `Observation` (Knowledge)，不是 `Image` (Raw Data)。  
+> 换一个 LiDAR 型号，只要实现了同一个 `HardwareInterface`，`car_preprocessor.py` 无需改动。
+
+## 未来演进
+
+| 维度 | 今天 (Phase 1) | 明天 (Phase 2+) |
+|------|---------------|-----------------|
+| **Replaceable Component** | RPLIDAR A1 · ICM42688 · HC-SR04 · OpenMV | RPLIDAR S2 · BMI270 · TFmini Plus · OAK-D Lite |
+| **Permanent Interface** | `HardwareInterface` ABC · `/car/scan` (LaserScan) · `/car/imu` (Imu) · `/car/ultrasonic/*` (Range) · `/car/openmv/detections` (String) | 保持不变 — 换传感器只需写新的 Driver，不改 Preprocessor |
+| **Temporary Implementation** | 骨架代码中硬件访问留空 (Mock only) · MAVLink 签名仅自测 | v2: 真实 UART/I2C/GPIO 实现 · MAVLink 签名在实机上启用 · 传感器时间戳硬件同步 (PTP) |
+
+---
+
 ## Part A: 传感器驱动骨架
 
 ### 14A.1 目录位置

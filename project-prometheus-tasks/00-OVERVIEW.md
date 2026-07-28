@@ -2,7 +2,7 @@
 
 > 本文档是项目入口。详细内容已拆分为四个专题文件。
 >
-> **当前进度**：Phase 0 仿真框架 9/9 ✅ · Phase 1 固件+部署 0/6 🔴 · 56/56 单元测试通过 · E2E 33/33 通过 · 6 个 ROS package 全部可编译
+> **当前进度**：Phase 0 仿真框架 9/9 ✅ · Phase 1 基础设施 0/6 🔴 · 56/56 单元测试通过 · E2E 33/33 通过 · 6 个 ROS package 全部可编译
 
 ## 📖 必读文件
 
@@ -29,8 +29,10 @@
 | [task-08](./task-08-integration.md) | 集成总装 Launch + Makefile | task-02~07 | 1.5h | ✅ |
 | [task-09](./task-09-validation.md) | 仿真验证 + 测试脚本 | task-08 | 1h | ✅ |
 
-### Phase 1: 固件 + 部署先行（当前 🔴）
+### Phase 1: 基础设施 (Infrastructure Phase) — 当前 🔴
 
+> **定位**：不是"固件阶段"，也不是"部署阶段"，而是在建设整个研究平台的 Infrastructure。  
+> Phase 2 起开始 Robot Intelligence · Phase 3 起开始 Embodied Intelligence。  
 > **总原则**：先固件，后上机；先接口，后算法；先可复现，后联调。  
 > **环境要求**：80% 代码工作不需要 Ubuntu 20.04，CI + Docker 替代本地环境。
 

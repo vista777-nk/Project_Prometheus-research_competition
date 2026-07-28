@@ -57,6 +57,29 @@ MSPM0G3507 (Layer 1 Hardware)  ← 本任务
 
 ---
 
+## 架构影响
+
+| 维度 | 内容 |
+|------|------|
+| **Affected Capability** | Locomotion: 差速运动学 + 双轮独立速度PID |
+| **Modified Interface** | 新增 Layer 1 内部接口: UART 二进制帧协议 (CMD_SET_VELOCITY / TELEMETRY) — 与 STM32 帧结构一致 |
+| **New Dependency** | `arm-none-eabi-gcc` (Cortex-M0+ 工具链) · `src/firmware/common/pid.c` (共享 PID) · TI 电赛合规约束 |
+| **ADR Required** | ADR-0003: 串口二进制帧协议统一设计 · ADR-0004: TI 电赛合规主控选型理由 |
+| **Risk Level** | 🟢 Low — 纯固件，独立于 ROS |
+
+> **铁律回顾 (RESEARCH_PHILOSOPHY.md §五)**：  
+> 换 MCU 时，差速运动学公式不变，PID 算法不变，帧结构不变。MSPM0 是电赛合规选择。
+
+## 未来演进
+
+| 维度 | 今天 (Phase 1) | 明天 (Phase 2+) |
+|------|---------------|-----------------|
+| **Replaceable Component** | MSPM0G3507 (Cortex-M0+, 80MHz) | STM32G4 / TMS320F280039C (C2000) / 其他 TI 合规 MCU |
+| **Permanent Interface** | 串口二进制帧协议 · 运动学输入 `{v, ω}` | 保持不变 — 换 MCU 只需改 HAL 层 |
+| **Temporary Implementation** | MSPM0 DriverLib · 软件浮点 (`-mfloat-abi=soft`) | v2: 硬件浮点 MCU 升级 · 电流环 + 速度环级联 PID · CAN/RS485 替代 UART |
+
+---
+
 ## 可执行步骤
 
 ### 11.1 创建固件项目骨架

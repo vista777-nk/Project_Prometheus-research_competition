@@ -55,6 +55,30 @@
 
 ---
 
+## 架构影响
+
+| 维度 | 内容 |
+|------|------|
+| **Affected Capability** | DevOps: 容器化部署 · 开机自启 · 网络管理 · SSH 安全 · 健康检查 |
+| **Modified Interface** | 新增部署层接口: 环境变量注入 (`AIR_GROUND_ROLE`, `CHASSIS`, `ROS_MASTER_URI`) · systemd unit 依赖声明 |
+| **New Dependency** | Docker + Docker Compose · systemd · chrony (NTP) · fail2ban · NetworkManager |
+| **ADR Required** | ADR-0005: 选择 Docker over 裸机部署的理由 · ADR-0006: 树莓派静态 IP 分配方案 |
+| **Risk Level** | 🟡 Medium — 部署配置错误会导致实机无法启动，但可通过 Docker CI build 预先验证 |
+
+> **铁律回顾 (RESEARCH_PHILOSOPHY.md §四)**：  
+> 部署方案的切换 (Docker ↔ 裸机) 不应该影响 Research Layer 的任何代码。  
+> 换硬件平台（树莓派5 → Jetson Orin）时，Dockerfile 只需改 base image。
+
+## 未来演进
+
+| 维度 | 今天 (Phase 1) | 明天 (Phase 2+) |
+|------|---------------|-----------------|
+| **Replaceable Component** | 树莓派5 (ARM64) | Jetson Orin Nano / 香橙派5 / x86 工控机 |
+| **Permanent Interface** | Docker Compose 环境变量注入 · systemd unit 模板 · 标准化日志目录 `/var/log/air-ground/` | 保持不变 — 换硬件只需改 Dockerfile base image |
+| **Temporary Implementation** | 静态 IP 手动配置 · SSH 密钥手动分发 · 单机 Docker Compose | v2: DHCP 预留 + mDNS · Ansible 自动化部署 · Kubernetes (K3s) 集群编排 · Watchtower 自动镜像更新 |
+
+---
+
 ## 可执行步骤
 
 ### 12.1 目录结构
