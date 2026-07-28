@@ -4,13 +4,13 @@
 >
 > 不是"最厉害的本科项目"。是一套能够持续演进五年以上的机器人研究平台。
 
-[![Phase](https://img.shields.io/badge/phase-sim__framework-brightgreen)](./project-prometheus-tasks/ROADMAP.md)
-[![Tasks](https://img.shields.io/badge/tasks-9/9-brightgreen)](./project-prometheus-tasks/00-OVERVIEW.md)
-[![Tests](https://img.shields.io/badge/tests-56/56-brightgreen)](./project-prometheus-tasks/task-08-integration.md)
+[![Phase](https://img.shields.io/badge/phase1-firmware__deployment-blue)](./project-prometheus-tasks/ROADMAP.md)
+[![Phase0](https://img.shields.io/badge/phase0_tasks-9/9-brightgreen)](./project-prometheus-tasks/00-OVERVIEW.md)
+[![Phase1](https://img.shields.io/badge/phase1_tasks-0/6-lightgrey)](./project-prometheus-tasks/00-OVERVIEW.md)
+[![Tests](https://img.shields.io/badge/tests-56/56-brightgreen)](./project-prometheus-tasks/task-09-validation.md)
 [![ROS](https://img.shields.io/badge/ROS-Noetic-brightgreen)](https://wiki.ros.org/noetic)
-[![Gazebo](https://img.shields.io/badge/Gazebo_Classic-11-orange)](http://gazebosim.org/)
 [![PX4](https://img.shields.io/badge/PX4-v1.14-blueviolet)](https://px4.io/)
-[![Python](https://img.shields.io/badge/Python-3.8+-yellow)](https://www.python.org/)
+[![CI](https://img.shields.io/badge/CI-passing-brightgreen)](./.github/workflows/ci.yml)
 
 ---
 
@@ -29,11 +29,14 @@
 
 | 阶段 | 状态 | 内容 |
 |------|:---:|------|
-| **Phase 0: 仿真框架** | ✅ 完成 (9/9) | 无人机 SITL ✅ · 差速底盘 ✅ · 麦轮底盘 ✅ · 传感器 ✅ · 通信桥 ✅ · 边缘服务器 ✅ · 集成总装 ✅ · 验证 ✅ |
-| Phase 1: 实机调试 | 🔴 2026.08 | 组装 F450/S500 + 树莓派 + 传感器套件 |
+| **Phase 0: 仿真框架** | ✅ 完成 (9/9) | 无人机 SITL · 差速底盘 · 麦轮底盘 · 传感器 · 通信桥 · 边缘服务器 · 集成总装 · 验证 |
+| **Phase 1: 固件+部署先行** | 🔴 进行中 (0/6) | STM32 麦轮固件 · MSPM0 差速固件 · 树莓派部署 (无人机+车机) · CI 流水线 · 传感器驱动 · 标定脚本 |
 | Phase 2: EQA 论文 | 🔴 2026.09~12 | VLM + SLAM + 空地联合探索 |
 | Phase 3: 竞赛季 | 🔴 2027.01~08 | 全国电赛 + CRAIC2027 |
 | Phase 4: 毕设 | 🔴 2027~2028 | World Model · 3DGS · Dreamer |
+
+> **Phase 1 策略**：先固件，后上机；先接口，后算法；先可复现，后联调。80% 代码工作不需要硬件，CI + Docker 替代本地环境。
+> 详见 [Phase 1 Pre-Departure Brief](./docs/experiments/phase1-pre-departure-brief.md)。
 
 📋 详见 [00-OVERVIEW.md](./project-prometheus-tasks/00-OVERVIEW.md) 和 [ROADMAP.md](./project-prometheus-tasks/ROADMAP.md)
 
@@ -47,8 +50,10 @@
 | 理解系统架构 | [PLATFORM.md](./project-prometheus-tasks/PLATFORM.md) |
 | 查看模块间接口 | [ICD.md](./project-prometheus-tasks/ICD.md) |
 | 了解研究路线和时间线 | [ROADMAP.md](./project-prometheus-tasks/ROADMAP.md) |
-| 查看当前任务进度 | [00-OVERVIEW.md](./project-prometheus-tasks/00-OVERVIEW.md) |
-| 搭建仿真环境 | [task-01-env-setup.md](./project-prometheus-tasks/task-01-env-setup.md) |
+| 查看全部任务进度 | [00-OVERVIEW.md](./project-prometheus-tasks/00-OVERVIEW.md) |
+| 🆕 开始 Phase 1 固件开发 | [task-10](./project-prometheus-tasks/task-10-stm32-mecanum-firmware.md) · [task-11](./project-prometheus-tasks/task-11-mspm0-diff-firmware.md) |
+| 🆕 搭建树莓派部署 | [task-12](./project-prometheus-tasks/task-12-rpi-deployment.md) |
+| 搭建仿真环境 (Phase 0) | [task-01-env-setup.md](./project-prometheus-tasks/task-01-env-setup.md) |
 | 了解命名/编码/提交流程规范 | [CONVENTIONS.md](./CONVENTIONS.md) |
 | 查看架构决策记录 | [docs/decisions/](./docs/decisions/) |
 | 阅读科研日记 | [Research_Diary.md](./Research_Diary.md) |
@@ -75,6 +80,7 @@
 │  Layer 1: Hardware (硬件/仿真层)    [✅ 已实现] │
 │  PX4 SITL · Gazebo · ros_control · Sensors   │
 │  drone_bringup · car_bringup                   │
+│  🆕 Phase 1: STM32/MSPM0 固件 (待合入)        │
 └──────────────────────────────────────────────┘
 ```
 
@@ -124,13 +130,25 @@ research_compitition/
 │   ├── ICD.md                          ← 接口控制文档
 │   ├── ROADMAP.md                      ← 研究路线
 │   └── task-01~09-*.md                 ← 实施任务
-├── src/                                ← ROS Package 源代码
+├── src/                                ← 源代码
 │   ├── air_ground_interfaces/          ← 自定义消息/服务
 │   ├── air_ground_drone_bringup/       ← 无人机仿真
 │   ├── air_ground_car_bringup/         ← 车机仿真
 │   ├── air_ground_com_bridge/          ← 通信桥
 │   ├── air_ground_lab_server/          ← 实验室服务器
-│   └── air_ground_bringup/             ← 顶层集成启动
+│   ├── air_ground_bringup/             ← 顶层集成启动
+│   ├── firmware/                       ← 🆕 下位机固件 (非 ROS)
+│   │   ├── common/                     ← 共享模块 (PID/CRC/Unity)
+│   │   ├── stm32_mecanum/              ← STM32F407 麦轮固件
+│   │   └── mspm0_diff/                 ← MSPM0G3507 差速固件
+│   └── deployment/                     ← 🆕 部署配置 (非 ROS)
+│       ├── docker/                     ← Docker 镜像
+│       ├── systemd/                    ← 自启服务
+│       ├── network/                    ← 网络 + 3DR 数传
+│       ├── ssh/                        ← SSH 加固
+│       ├── mavlink/                    ← MAVLink 签名
+│       ├── calibration/                ← 标定脚本
+│       └── healthcheck/                ← 健康检查
 └── obsolete-documentation/ ← 历史文档归档
 ```
 
@@ -170,6 +188,16 @@ make test-e2e
 
 # 6. 一键启动完整仿真
 make launch-full
+
+# --- Phase 1 (无需 Ubuntu 20.04) ---
+# 7. 编译 STM32 麦轮固件 (任意 OS + ARM GCC)
+cd src/firmware/stm32_mecanum && make
+
+# 8. 编译 MSPM0 差速固件 (任意 OS + ARM GCC)
+cd src/firmware/mspm0_diff && make
+
+# 9. 构建树莓派 Docker 镜像
+cd src/deployment && docker build -f docker/Dockerfile.edge -t air-ground-edge:v1 .
 ```
 
 ---
@@ -180,4 +208,4 @@ make launch-full
 
 ---
 
-*维护者: @vista777-nk · 项目阶段: 规划完成，仿真搭建中*
+*维护者: @vista777-nk · Phase 0 仿真完成 ✅ · Phase 1 固件+部署进行中 🔴*
