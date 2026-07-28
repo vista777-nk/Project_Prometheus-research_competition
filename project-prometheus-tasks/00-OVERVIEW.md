@@ -2,7 +2,7 @@
 
 > 本文档是项目入口。详细内容已拆分为四个专题文件。
 >
-> **当前进度**：仿真框架 9/9 tasks ✅ · 56/56 单元测试通过 · E2E 33/33 通过 · 6 个 ROS package 全部可编译
+> **当前进度**：Phase 0 仿真框架 9/9 ✅ · Phase 1 基础设施 0/6 🔴 · 56/56 单元测试通过 · E2E 33/33 通过 · 6 个 ROS package 全部可编译
 
 ## 📖 必读文件
 
@@ -15,7 +15,7 @@
 
 ## 📋 实施任务清单
 
-以下 9 个 task 是仿真框架的搭建步骤，按依赖顺序排列。
+### Phase 0: 仿真框架（已完成 ✅）
 
 | 任务 | 内容 | 依赖 | 预计耗时 | 状态 |
 |------|------|------|---------|:---:|
@@ -29,7 +29,23 @@
 | [task-08](./task-08-integration.md) | 集成总装 Launch + Makefile | task-02~07 | 1.5h | ✅ |
 | [task-09](./task-09-validation.md) | 仿真验证 + 测试脚本 | task-08 | 1h | ✅ |
 
-### 依赖拓扑
+### Phase 1: 基础设施 (Infrastructure Phase) — 当前 🔴
+
+> **定位**：不是"固件阶段"，也不是"部署阶段"，而是在建设整个研究平台的 Infrastructure。  
+> Phase 2 起开始 Robot Intelligence · Phase 3 起开始 Embodied Intelligence。  
+> **总原则**：先固件，后上机；先接口，后算法；先可复现，后联调。  
+> **环境要求**：80% 代码工作不需要 Ubuntu 20.04，CI + Docker 替代本地环境。
+
+| 任务 | 内容 | 战线 | 预计耗时 | 状态 |
+|------|------|:---:|---------|:---:|
+| [task-10](./task-10-stm32-mecanum-firmware.md) | STM32F407 麦轮固件（逆运动学 + PID + 串口协议） | 🥇 固件先行 | 6h | 🔴 |
+| [task-11](./task-11-mspm0-diff-firmware.md) | MSPM0G3507 差速固件（编码器 + PID + 电赛合规） | 🥇 固件先行 | 5h | 🔴 |
+| [task-12](./task-12-rpi-deployment.md) | 树莓派部署方案（Docker + systemd + 网络 + SSH） | 🥈 部署先行 | 4h | 🔴 |
+| [task-13](./task-13-ci-pipeline.md) | CI 交叉编译流水线（ARM + MSPM0 + Docker + Lint） | 🥉 验证先行 | 3h | 🔴 |
+| [task-14](./task-14-sensor-drivers-mavlink.md) | 实机传感器驱动骨架 + MAVLink 2 签名 | 🥉 验证先行 | 4h | 🔴 |
+| [task-15](./task-15-calibration-validation.md) | IMU/相机标定脚本 + Phase 1 集成验证 | 🥉 验证先行 | 3h | 🔴 |
+
+### 依赖拓扑 (Phase 0)
 
 ```
 task-01 ──┬── task-02 ─────────────┬── task-06 ── task-07 ──┐
@@ -37,6 +53,20 @@ task-01 ──┬── task-02 ─────────────┬──
                          ├── task-04 ──┐                    ├── task-08 ── task-09
                          └─────────────┴── task-05 ─────────┘
 ```
+
+### 依赖拓扑 (Phase 1)
+
+```
+task-10 (STM32 固件) ─────────────┐
+                                   ├── task-13 (CI 流水线) ── task-15 (集成验证)
+task-11 (MSPM0 固件) ─────────────┘
+
+task-12 (树莓派部署) ── (独立，无强依赖) ── task-15
+
+task-14 (传感器 + MAVLink) ── (独立) ── task-15
+```
+
+> **并行策略**：task-10、task-11、task-12、task-14 可同时分发给 4 个 subagent。task-13 在 task-10/11 固件目录就位后启动。task-15 在所有任务完成后执行集成验证。
 
 ## 🚀 快速开始
 
