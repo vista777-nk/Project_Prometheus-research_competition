@@ -269,6 +269,27 @@ void main(void) {
 }
 ```
 
+> **ⓘ 实现注意事项（混元3 评审建议）**：
+>
+> **① 编码器接口方案**：使用 MSPM0 TimerA 的编码器模式 (Quadrature Encoder Mode) 采集 AB 相编码器。编码器线数 (PPR) 和减速比通过 `#define` 配置，计算公式：`RPM = (delta_count / (4 * PPR * gear_ratio)) * 60 * control_freq`。参数从 `chassis_params.yaml` 对应值提取。
+>
+> **② 电赛扩展接口预留**：竞赛场景常需接入循迹模块、避障模块等外设。在串口协议中预留 CMD `0x10`（自定义扩展命令），在硬件上预留 ADC 通道 (PA0~PA3) 和 GPIO (PB0~PB7) 扩展引脚，供竞赛期间快速接入外设。
+>
+> **③ 命令集对照表（STM32 vs MSPM0）**：
+>
+> | CMD | STM32 (麦轮) | MSPM0 (差速) | 通用? |
+> |-----|-------------|-------------|:---:|
+> | `0x01` SET_VELOCITY | vx,vy,ω (12B) | v,ω (8B) | 数据长度不同 |
+> | `0x02` EMERGENCY_STOP | ✓ | ✓ | ✅ |
+> | `0x03` PING | ✓ (PONG 5B, board=0x01, chassis=0x01) | ✓ (PONG 5B, board=0x02, chassis=0x02) | ✅ |
+> | `0x10` (预留扩展) | — | 竞赛外设 | — |
+> | `0x11` TELEMETRY | 4轮RPM+电流 (34B) | 2轮RPM+电流 (18B) | 数据长度不同 |
+> | `0x12` ACK | ✓ | ✓ | ✅ |
+> | `0x13` PONG | ✓ | ✓ | ✅ |
+> | `0xFF` ERROR | ✓ | ✓ | ✅ |
+>
+> **④ 低功耗设计**：电池供电场景下，可配置 MSPM0 在无指令 5 秒后进入 Sleep 模式（TIMER 仍运行以维持 PID），收到串口数据时通过 UART RX 中断唤醒。此功能为 Phase 2 优化项，Phase 1 保持全速运行即可。
+
 ### 11.6 单元测试
 
 | 测试用例 | 输入 | 期望输出 |

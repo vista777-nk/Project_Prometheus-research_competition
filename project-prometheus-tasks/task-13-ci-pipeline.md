@@ -335,6 +335,16 @@ clean:
 
 ---
 
+## ⓘ 优化建议（混元3 评审）
+
+1. **版本注入机制**：CI 构建时自动将 `git rev-parse --short HEAD` 和 `date -u +%Y%m%d-%H%M` 注入固件版本号，写入 `version.h`（`#define FW_COMMIT_HASH "..."` 和 `#define FW_BUILD_TIME "..."`），使 PONG 帧能追溯构建来源。
+2. **静态检查维度扩展**：在 `lint-scripts` job 中增加 `cppcheck`（C 代码静态分析）和 `flake8`（Python 代码风格检查），进一步提升代码质量基线。
+3. **CI 缓存优化**：ARM GCC 工具链安装使用 `actions/cache` 缓存 apt 包；Docker 构建使用 `type=gha` cache；固件 `make` 使用 `ccache` 加速重复编译。
+4. **补充工具链说明**：`gcc-arm-none-eabi` 可满足 MSPM0 编译验证，但 TI 官方推荐 `ti-cgt-armclang`。GCC 用于 CI 快速验证，正式发布固件建议用 TI 官方工具链做最终校验。
+5. **ROS 包验证纳入**：在现有 `build-and-test` ROS job 中增加 Phase 0 的 6 个 ROS package 编译 + `catkin test`，保障全代码库持续验证。
+
+---
+
 ## 给 Subagent 的执行建议
 
 1. **不要动已有的 `build-and-test` ROS job**：它已经在跑 56 个单元测试 + 33 个 E2E

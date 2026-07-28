@@ -752,6 +752,16 @@ mavlink_secret.key
 
 ---
 
+## ⓘ 优化建议（混元3 评审）
+
+1. **参数配置外置化**：传感器量程、频率、I2C 地址等参数从硬编码迁移至 YAML 配置文件（`config/real_sensors.yaml`），与仿真端 `car_sensors.yaml` 格式对齐，方便不同硬件型号快速适配。
+2. **时间同步机制**：多传感器时钟不同步是实机感知的核心痛点。建议明确时间戳基准统一为 ROS 系统时间（`rospy.Time.now()`），未来若需硬件同步可引入 PPS（Pulse Per Second）信号。
+3. **异常恢复机制**：UART 断开、I2C 挂死等硬件异常场景下，驱动应实现自动重连（UART: 间隔 2s 重试 `open()`；I2C: 发送 STOP 条件后重新 START），并 `rospy.logwarn_throttle` 告警，不静默失败。
+4. **OpenMV 协议字段明确**：目标检测 JSON 的字段定义需与 ICD Observation 语义对齐：`{"objects":[{"label":str, "x":int, "y":int, "w":int, "h":int, "conf":float}]}`。坐标系：图像左上角为原点，x 向右，y 向下。
+5. **MAVLink 密钥分发流程**：密钥通过 SSH 安全复制到 Pi（`scp mavlink_secret.key pi@192.168.1.x:/etc/air-ground/`），chmod 600；Pixhawk 端通过 QGroundControl 安全通道设置 `MAV_0_SIGN_KEY` 参数。密钥定期轮换（建议每季度）需同步更新所有节点。
+
+---
+
 ## 给 Subagent 的执行建议
 
 1. **驱动骨架的核心价值在接口设计**，不在硬件访问代码。把 `HardwareInterface` ABC 做好就是成功

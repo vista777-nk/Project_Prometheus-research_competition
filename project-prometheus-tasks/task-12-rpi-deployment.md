@@ -630,6 +630,20 @@ if __name__ == "__main__":
 
 ---
 
+## ⓘ 优化建议（混元3 评审）
+
+1. **收敛 Docker 权限范围**：当前 `privileged: true` 为开发便利选项，生产部署建议改为逐个挂载具体设备文件（`--device /dev/ttyAMA0 --device /dev/i2c-1`），仅授予必要的硬件访问权限，符合最小权限原则。
+
+2. **明确时钟同步主从关系**：chrony 配置中，**车机树莓派 (192.168.1.10) 作为局域网 NTP 服务器**（stratum 10, 以 GPS/PPS 为参考源），**无人机树莓派 (192.168.1.20) 和实验室服务器 (192.168.1.100) 向车机同步**。车机 GPS 信号优于无人机（地面更稳定），且空地通信拓扑中车机是 MAVLink 中继节点。
+
+3. **镜像更新方案**：Phase 1 采用离线刷入（`docker save/load` 通过 U 盘），Phase 2 引入 Watchtower 自动拉取 Docker Hub 新镜像并滚动重启。注意：自动更新应避开飞行/实验期间。
+
+4. **网络降级策略**：WiFi 断开时，NetworkManager 自动切换至 4G 热点（通过 `nmcli con add` 预配置备用连接）。边缘节点检测到 ROS Master 不可达时进入「本地缓存模式」：将 Observation/RobotState 写入本地 SQLite，周期性重试 TCP 连接。此功能为 Phase 2 规划。
+
+5. **多架构构建**：树莓派 ARM64 镜像构建需 Docker buildx + qemu-user-static 模拟。CI 中增加非阻塞 `--platform linux/arm64` 构建验证（参考 task-13）。
+
+---
+
 ## 给 Subagent 的执行建议
 
 1. **所有工作都在 `src/deployment/` 下进行**，不污染 ROS Package

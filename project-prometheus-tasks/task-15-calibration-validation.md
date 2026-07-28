@@ -649,6 +649,15 @@ echo "========================================="
 
 ---
 
+## ⓘ 优化建议（混元3 评审）
+
+1. **细化 IMU 标定输出规范**：IMU 标定输出 YAML 应包含以下字段：`gyro_bias` (rad/s), `accel_bias` (m/s²), `gyro_noise_density` (rad/s/√Hz), `accel_noise_density` (m/s²/√Hz), `gyro_random_walk` (rad/s²/√Hz), `accel_random_walk` (m/s³/√Hz)。与 IMU 驱动、robot_localization 滤波器的输入格式对齐。
+2. **相机-IMU 外参的 Phase 1 边界**：Kalibr 标定依赖完整 ROS 环境，无法在纯 CI 中运行。Phase 1 仅完成 `calibrate-cam-imu-extrinsic.py` 的接口定义与输出 YAML 格式规范，实际标定待实机数据采集后执行。
+3. **升级冒烟测试维度**：`smoke-test-phase1.sh` 在文件存在检查之外，增加一级「接口冒烟」：Python 语法检查 (`python3 -m py_compile`)、模块导入测试 (`python3 -c "import scripts.*"`)、YAML 格式校验 (`yamllint`)。
+4. **标定报告模板**：`generate-calib-report.py` 输出的 Markdown 报告应包含以下固定章节：标定时间、硬件序列号、K Matrix、畸变系数、重投影误差 RMS、重投影误差分布图 (ASCII art)、Allan 方差曲线数据 (IMU)、质量评估结论 (PASS/FAIL/NEED_RECALIBRATE)。
+
+---
+
 ## 给 Subagent 的执行建议
 
 1. **标定脚本的核心价值在流程自动化**，不在标定算法本身（OpenCV 已经做完了）
