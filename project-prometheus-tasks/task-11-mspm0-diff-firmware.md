@@ -35,7 +35,7 @@
 ```
 树莓派5 (Layer 2 Edge Node)
   │  rosnode: car_preprocessor.py
-  │  发布 /car/observation, /car/robot_state
+  │  发布 /car/observation, /car/state
   │
   │  UART (/dev/ttyAMA1 或 USB-UART, 115200 8N1)
   │  协议: 二进制帧 + CRC16 (与 STM32 帧格式高度相似)
@@ -182,8 +182,11 @@ int diff_inverse(const DiffVelocity *cmd, float *rpm_left, float *rpm_right);
 ```
 ┌────────┬────────┬──────────┬──────────────────┬──────────┬────────┐
 │  SOF   │  LEN   │   CMD    │      DATA        │  CRC16   │  EOF   │
-│ 0xA5   │ n+4    │  1 byte  │   0~252 bytes    │ 2 bytes  │  0x5A  │
+│ 0xA5   │ n+4    │  1 byte  │   0~251 bytes    │ 2 bytes  │  0x5A  │
 └────────┴────────┴──────────┴──────────────────┴──────────┴────────┘
+LEN = CMD(1) + DATA(n) + CRC(2) + EOF(1), n ∈ [0, 251], LEN ∈ [4, 255]
+CRC 覆盖: CMD + DATA (不含 SOF/LEN/EOF) — CRC-16/CCITT-FALSE, 测试向量 0x29B1
+详见 task-10 §10.4 CRC 实现 (ARM/MSPM0/Python 三方共用同一算法)
 ```
 
 | CMD | 方向 | 名称 | DATA | 响应 |
@@ -193,13 +196,15 @@ int diff_inverse(const DiffVelocity *cmd, float *rpm_left, float *rpm_right);
 | `0x03` | Pi→MSPM0 | `PING` | 无 | `PONG` |
 | `0x11` | MSPM0→Pi | `TELEMETRY` | 左RPM(f32) 右RPM(f32) 左电流(f32) 右电流(f32) 故障码(u16) = 18 bytes | — |
 | `0x12` | MSPM0→Pi | `ACK` | 被确认 CMD(u8) | — |
-| `0x13` | MSPM0→Pi | `PONG` | major(u8).minor(u8).patch(u8) | — |
+| `0x13` | MSPM0→Pi | `PONG` | major(u8).minor(u8).patch(u8) + board_type(u8=0x02) + chassis_type(u8=0x02) = 5 bytes | — |
 | `0xFF` | MSPM0→Pi | `ERROR` | 错误码(u8) + 详情 | — |
 
 **关键区别 vs STM32**：
 - `SET_VELOCITY` 数据长度 8 bytes (差分) vs 12 bytes (麦轮)
 - `TELEMETRY` 数据长度 18 bytes (差分) vs 34 bytes (麦轮)
+- `PONG` 中 `board_type=0x02` (MSPM0) · `chassis_type=0x02` (差速) vs STM32 的 `0x01/0x01`
 - 帧结构、CRC、SOF/EOF 完全一致 → 树莓派端可用统一的帧解析器
+- **Pi 端启动校验**：发送 PING → 检查 PONG 中 board_type + chassis_type 是否与 `CHASSIS` 环境变量一致，不匹配则拒绝启动
 
 ### 11.5 主循环逻辑
 
@@ -259,7 +264,7 @@ void main(void) {
         // 6. 故障检测
         fault_code = check_faults();
 
-        __delay_cycles(80000);  // ~1ms @ 80MHz
+        DL_Common_delayCycles(80000);  // ~1ms @ 80MHz (MSPM0 DriverLib API)
     }
 }
 ```

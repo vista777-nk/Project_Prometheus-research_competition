@@ -74,7 +74,11 @@
 
 ### 14A.1 目录位置
 
-> **重要**：驱动骨架属于 Layer 2 Bridge，放在 `air_ground_car_bringup` 包中（与现有仿真节点同包，通过 launch 参数切换仿真/实机模式）。
+> **重要**：驱动骨架属于 Layer 2 Bridge（协议翻译层）——将硬件传感器协议翻译为 ROS 标准话题。  
+> 存放于 `air_ground_car_bringup` 包中（与现有仿真节点同包，通过 launch 参数切换仿真/实机模式）。  
+> **注意与 ICD 的关系**：ICD §五 声明 Layer 1 原始话题 (`/car/scan`, `/car/imu`) "不在接口稳定承诺范围内"。  
+> 驱动骨架发布的是 Layer 1 话题，`car_preprocessor.py` 将它们聚合为 ICD 承诺稳定的 Layer 3 `Observation.msg`。  
+> 因此换传感器时，`car_preprocessor.py` 不需改动（它只消费 `Observation`）。
 
 ```
 src/air_ground_car_bringup/
@@ -470,6 +474,16 @@ class HCSR04Driver:
         pass
 ```
 
+> **⚠ 架构决策点 (ADR-0013 待定)**： 上例中 `rospy.sleep(0.000002)` 在 Linux 非实时内核上实际精度为毫秒级（~1-10ms），远不足以产生 10μs 触发脉冲。HC-SR04 的微秒级时序有以下方案：
+>
+> | 方案 | 适用场景 | 决策 |
+> |------|---------|:---:|
+> | **A: pigpio 硬件定时** | Pi GPIO 直接控制，需安装 pigpiod 守护进程 | 🔄 待定 |
+> | **B: 挂到 MCU 上** | 超声波 Trig/Echo 接 STM32/MSPM0，距离值随 TELEMETRY 帧上报（需扩展遥测帧 Data 字段） | 🔄 待定（推荐, 与 task-10/11 的遥测布局联动） |
+> | **C: 专用超声波模块 (I2C/UART)** | 如 JSN-SR04T 通过 UART 输出，无需 GPIO 时序 | 🔄 待定 |
+>
+> **Phase 1 处理**：骨架代码保留 Python 方案示意，实机阶段根据 ADR-0013 决策选择方案 A/B/C。子任务不要求在 Phase 1 解决此问题。
+
 ### 14A.6 OpenMV 云台桥接骨架 (`openmv_bridge.py`)
 
 ```python
@@ -654,14 +668,11 @@ from pymavlink import mavutil
 
 
 def test_signing_roundtrip():
-    """生成密钥 → 签名 → 验签 往返测试."""
+    """生成密钥 → 签名 → 验签 往返测试 (黑盒断言: 签名后帧长增量)."""
     secret_key = os.urandom(32)
 
-    # 创建签名连接 (模拟)
-    mav = mavutil.mavlink.MAVLink(
-        srcSystem=1, srcComponent=1,
-        use_native=False
-    )
+    # 创建签名连接
+    mav = mavutil.mavlink.MAVLink(srcSystem=1, srcComponent=1, use_native=False)
     mav.signing.secret_key = secret_key
 
     # 签名一条心跳消息
@@ -670,16 +681,30 @@ def test_signing_roundtrip():
         autopilot=mavutil.mavlink.MAV_AUTOPILOT_PX4,
         base_mode=0, custom_mode=0, system_status=0
     )
-    msg.pack(mav)
+    # 未签名前帧长
+    unsigned_len = len(msg.pack(mav))
 
-    # 验证签名存在
-    sig = mav.signing.signature
-    assert sig is not None, "Signature missing!"
-    assert len(sig.signature) == 12, f"Signature length {len(sig.signature)} != 12"
+    # 启用签名后帧长
+    mav.signing.secret_key = secret_key
+    signed_msg = msg.pack(mav)
+    signed_len = len(signed_msg)
 
-    print("✓ MAVLink 2 签名往返测试通过")
-    print(f"  密钥: {secret_key.hex()}")
-    print(f"  签名: {sig.signature.hex()}")
+    # 黑盒断言: 签名后帧长 = 原始帧长 + 13 (MAVLink 2 签名开销)
+    assert signed_len == unsigned_len + 13, \
+        f"Signature overhead mismatch: {signed_len} != {unsigned_len} + 13"
+
+    # 验签往返: 用同一密钥解包, 不应报签名错误
+    try:
+        mav2 = mavutil.mavlink.MAVLink(srcSystem=1, srcComponent=1, use_native=False)
+        mav2.signing.secret_key = secret_key
+        decoded = mav2.decode(signed_msg)
+        assert decoded is not None, "Decode failed after signing roundtrip"
+    except Exception as e:
+        assert False, f"Signing roundtrip failed: {e}"
+
+    print("✓ MAVLink 2 签名往返测试通过 (黑盒)")
+    print(f"   未签名帧长: {unsigned_len} bytes")
+    print(f"   签名后帧长: {signed_len} bytes (+13)")
     return True
 
 
@@ -735,6 +760,7 @@ mavlink_secret.key
 4. **MAVLink 签名密钥生成后立即 `.gitignore`**，这是安全红线
 5. **驱动骨架中的 `if __name__ == '__main__'` 段用 Mock，不依赖 ROS**：方便在任意 OS 上快速验证
 6. **OpenMV 的 JSON 协议格式与电赛队伍协商**：目前用通用格式占位，实机需对齐
+7. **CI 归属策略**：驱动骨架测试由 `lint-scripts` job 的子步骤执行 (`python3 -m py_compile` + `python3 -m pytest test/ --mock-rospy`)。**不在** ROS 容器的 `catkin test` 中运行（因为骨架 import rospy 但不依赖 roscore，mock 即可）。`test_rplidar_driver.py` 中的 `unittest.main()` 通过 `--mock-rospy` fixture 在纯 Python 环境执行。
 
 ---
 

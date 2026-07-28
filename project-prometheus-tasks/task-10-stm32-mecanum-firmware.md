@@ -34,7 +34,7 @@
 ```
 树莓派5 (Layer 2 Edge Node)
   │  rosnode: car_preprocessor.py
-  │  发布 /car/observation, /car/robot_state
+  │  发布 /car/observation, /car/state
   │
   │  UART (/dev/ttyAMA0, 115200 8N1)
   │  协议: 二进制帧 + CRC16
@@ -92,31 +92,39 @@ cd src/firmware/stm32_mecanum
 目录结构：
 
 ```
-src/firmware/stm32_mecanum/
-├── README.md                    # 引脚定义表 + 协议帧格式 + 编译命令
-├── Makefile                     # 顶层构建（调用 CMake 或直接 arm-gcc）
-├── CMakeLists.txt               # CMake 构建（arm-none-eabi-gcc）
-├── linker/
-│   └── STM32F407VETx_FLASH.ld   # 链接脚本
-├── src/
-│   ├── main.c                   # 入口：初始化 + 主循环 (1kHz)
-│   ├── kinematics.c/.h          # 麦轮逆运动学解算
-│   ├── pid.c/.h                 # 通用 PID 控制器
-│   ├── encoder.c/.h             # AB 相编码器读取 (TIM 编码器模式)
-│   ├── motor.c/.h               # PWM 输出 + 电机控制
-│   ├── protocol.c/.h            # 串口二进制帧协议 (打包/解包/CRC)
-│   ├── uart.c/.h                # UART DMA 收发
-│   └── stm32f4xx_conf.h        # HAL 库配置
-├── test/
-│   ├── test_kinematics.c        # 运动学解算单元测试 (纯 C, 无 HAL 依赖)
-│   ├── test_pid.c               # PID 单元测试
-│   ├── test_protocol.c          # 协议帧打包/解包测试
-│   └── unity.c/.h               # Unity Test 框架 (单头文件)
-└── .github/
-    └── (CI 由仓库根 .github/workflows/ci.yml 统一管理, 见 Task-13)
+src/firmware/
+├── common/                          ← 共享库 (task-13 §13.1 权威布局, task-10/11 共用)
+│   ├── pid.h / pid.c                # 通用 PID 控制器
+│   ├── crc16.h / crc16.c            # CRC-16/CCITT-FALSE (ADR-0003 标准)
+│   ├── protocol_frame.h / .c        # 帧打包/解包 (SOF/EOF/转义)
+│   └── unity.h / unity.c            # Unity Test 框架
+│
+├── stm32_mecanum/                   ← 本任务目录
+│   ├── README.md                    # 引脚定义表 + 协议帧格式 + 编译命令
+│   ├── Makefile                     # 顶层构建 (arm-gcc, 引用 ../common/)
+│   ├── linker/
+│   │   └── STM32F407VETx_FLASH.ld   # 链接脚本
+│   ├── src/
+│   │   ├── main.c                   # 入口：初始化 + 主循环 (1kHz)
+│   │   ├── kinematics.c/.h          # 麦轮逆运动学解算 (项目特有)
+│   │   ├── encoder.c/.h             # AB 相编码器读取 (TIM 编码器模式, HAL 相关)
+│   │   ├── motor.c/.h               # PWM 输出 + 电机控制 (HAL 相关)
+│   │   ├── protocol.c/.h            # 协议命令分发 + 遥测组装 (引用 common/protocol_frame)
+│   │   ├── uart.c/.h                # UART DMA 收发 (HAL 相关)
+│   │   └── stm32f4xx_conf.h        # HAL 库配置
+│   └── test/
+│       ├── test_kinematics.c        # 运动学解算单元测试 (纯 C, 无 HAL 依赖)
+│       ├── test_pid.c               # PID 单元测试 (引用 common/pid.c + common/unity.c)
+│       ├── test_protocol.c          # 协议帧打包/解包测试 (引用 common/protocol_frame.c)
+│       └── test_crc16.c             # CRC 测试向量验证 (引用 common/crc16.c + 测试向量 b"123456789"→0x29B1)
+└── mspm0_diff/                      ← task-11 项目, 同样引用 ../common/
+    └── ...
 ```
 
-> **注意**：`src/firmware/` 不是 ROS Package，不参与 `catkin build`。它是独立交叉编译项目。
+> **注意**：
+> - `src/firmware/` 不是 ROS Package，不参与 `catkin build`。它是独立交叉编译项目。
+> - `pid.c`、`crc16.c`、`protocol_frame.c`、`unity.c` 在 `common/` 中**只存一份**。task-10 和 task-11 通过 Makefile `-I ../common` 和链接 `../common/*.c` 引用。
+> - 项目特有的 `protocol.c` 只做命令分发（switch-case），底层帧打包/解包调用 `common/protocol_frame.c`。
 
 ### 10.2 逆运动学解算 (`kinematics.c`)
 
@@ -227,11 +235,14 @@ void pid_reset(PIDController *pid);
 ```
 ┌────────┬────────┬──────────┬──────────────────┬──────────┬────────┐
 │  SOF   │  LEN   │   CMD    │      DATA        │  CRC16   │  EOF   │
-│ 1 byte │ 1 byte │  1 byte  │   0~252 bytes    │ 2 bytes  │ 1 byte │
+│ 1 byte │ 1 byte │  1 byte  │   0~251 bytes    │ 2 bytes  │ 1 byte │
 │  0xA5  │ n+4    │          │                  │ (LSB→MSB)│  0x5A  │
 └────────┴────────┴──────────┴──────────────────┴──────────┴────────┘
 SOF = 0xA5, EOF = 0x5A
-LEN  = CMD(1) + DATA(n) + CRC(2) + EOF(1) = n + 4
+LEN  = CMD(1) + DATA(n) + CRC(2) + EOF(1) = n + 4, n ∈ [0, 251], LEN ∈ [4, 255]
+
+CRC 覆盖范围: CMD + DATA (即紧接 LEN 之后、CRC 之前的 payload 字节)
+SOF / LEN / CRC / EOF 本身不参与 CRC 计算
 ```
 
 #### 命令定义
@@ -240,20 +251,47 @@ LEN  = CMD(1) + DATA(n) + CRC(2) + EOF(1) = n + 4
 |-----|------|------|------|------|
 | `0x01` | Pi→STM32 | `SET_VELOCITY` | `vx(f32) vy(f32) ω(f32)` = 12 bytes | `ACK` |
 | `0x02` | Pi→STM32 | `EMERGENCY_STOP` | 无 (0 bytes) | `ACK` |
-| `0x03` | Pi→STM32 | `PING` | 无 | `PONG` (含固件版本) |
+| `0x03` | Pi→STM32 | `PING` | 无 | `PONG` (含固件版本+板卡类型) |
 | `0x11` | STM32→Pi | `TELEMETRY` | 四轮 RPM(f32×4) + 电流(f32×4) + 故障码(u16) = 34 bytes | — |
 | `0x12` | STM32→Pi | `ACK` | 被确认的 CMD(u8) = 1 byte | — |
-| `0x13` | STM32→Pi | `PONG` | 固件版本 major(u8).minor(u8).patch(u8) = 3 bytes | — |
+| `0x13` | STM32→Pi | `PONG` | 固件版本 major(u8).minor(u8).patch(u8) + board_type(u8=0x01) + chassis_type(u8=0x01) = 5 bytes | — |
 | `0xFF` | STM32→Pi | `ERROR` | 错误码(u8) + 错误详情(变长) | — |
 
 > **TELEMETRY 上报频率**：STM32 每 50ms (20Hz) 主动上报一次。Pi 不需轮询。
+>
+> **board_type 编码**: `0x01`=STM32F407 · `0x02`=MSPM0G3507  
+> **chassis_type 编码**: `0x01`=麦轮(mecanum) · `0x02`=差速(differential)  
+> Pi 端启动时发送 PING，从 PONG 中校验 board_type + chassis_type 是否与 `CHASSIS` 环境变量一致，不匹配则拒绝启动。
 
 #### CRC 实现
 
 ```c
-// CRC16-CCITT (x^16 + x^12 + x^5 + 1), 初始值 0xFFFF
-uint16_t crc16_ccitt(const uint8_t *data, uint8_t len);
+// CRC-16/CCITT-FALSE (非反射)
+// 多项式: x^16 + x^12 + x^5 + 1 = 0x1021
+// 初始值: 0xFFFF
+// 不反射输入/输出, 无输出异或
+//
+// 标准测试向量: crc16_ccitt(b"123456789", 9) == 0x29B1
+// 在线验证: https://crccalc.com/?crc=123456789&method=CRC-16/CCITT-FALSE
+
+#include <stdint.h>
+
+uint16_t crc16_ccitt(const uint8_t *data, uint8_t len) {
+    uint16_t crc = 0xFFFF;
+    for (uint8_t i = 0; i < len; i++) {
+        crc ^= (uint16_t)data[i] << 8;
+        for (uint8_t j = 0; j < 8; j++) {
+            if (crc & 0x8000)
+                crc = (crc << 1) ^ 0x1021;
+            else
+                crc <<= 1;
+        }
+    }
+    return crc;
+}
 ```
+
+> **铁律 (ADR-0003)**：本协议的所有实现——STM32 固件、MSPM0 固件、Pi 端 Python 测试脚本——必须使用完全相同的 CRC 算法和测试向量。task-10/11/15 三方以此为准。
 
 ### 10.5 主循环逻辑 (`main.c`)
 
@@ -378,7 +416,7 @@ gcc -o test_runner test/test_kinematics.c src/kinematics.c -I src -I test
 - [ ] `pid.c` 可通过阶跃响应测试（超调 < 20%, 稳态误差 < 5%）
 - [ ] `protocol.c` 可通过帧打包/解包往返测试 + CRC 错误注入测试
 - [ ] `make` 或 `cmake --build` 成功生成 `stm32_mecanum.bin`
-- [ ] CI 交作业编译 job 绿灯
+- [ ] CI 交叉编译 job 绿灯
 - [ ] `README.md` 包含：引脚定义表（4 路 PWM + 8 路编码器 + UART）+ 协议帧格式 + `make` 编译命令
 
 ---
@@ -390,7 +428,7 @@ gcc -o test_runner test/test_kinematics.c src/kinematics.c -I src -I test
 | `src/air_ground_car_bringup/scripts/mecanum_controller.py` | 仿真版麦轮逆运动学（算法需与固件一致） |
 | `src/air_ground_car_bringup/urdf/mecanum_chassis.urdf.xacro` | 麦轮底盘几何参数 |
 | `src/air_ground_car_bringup/config/chassis_params.yaml` | 底盘运动学参数（轮径、轮距等） |
-| `src/air_ground_bringup/config/mecanum_chassis_control.yaml` | ros_control PID 参数（参考用于 STM32 PID 调参） |
+| `src/air_ground_car_bringup/config/mecanum_chassis_control.yaml` | ros_control PID 参数（参考用于 STM32 PID 调参） |
 | `project-prometheus-tasks/ICD.md` §三 | 控制接口抽象定义 |
 | `project-prometheus-tasks/PLATFORM.md` §三 | 物理部署映射 |
 

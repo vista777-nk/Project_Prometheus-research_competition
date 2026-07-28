@@ -98,7 +98,7 @@ src/deployment/
 ├── README.md                      # 部署总览 + 快速部署命令
 ├── docker/
 │   ├── Dockerfile.edge            # 通用 Edge 节点镜像（drone + car 共用）
-│   ├── Dockerfile.server          # 实验室服务器镜像 (已有, 仅作引用)
+│   ├── Dockerfile.server          # 实验室服务器镜像 (Phase 2 实现, 当前仅占位)
 │   ├── docker-compose.edge.yml    # Edge 节点 Compose
 │   └── .dockerignore
 ├── systemd/
@@ -182,6 +182,7 @@ source /home/airground/catkin_ws/devel/setup.bash
 
 ROLE="${AIR_GROUND_ROLE:-car}"
 CHASSIS="${AIR_GROUND_CHASSIS:-diff}"
+EDGE_MODE="${EDGE_MODE:-sim}"  # sim=仿真 launch | real=实机 launch (task-14 提供)
 ROS_MASTER_URI="${ROS_MASTER_URI:-http://localhost:11311}"
 
 export ROS_MASTER_URI
@@ -194,7 +195,11 @@ echo "==========================="
 
 case "${ROLE}" in
     car)
-        exec roslaunch air_ground_car_bringup car_edge.launch chassis:=${CHASSIS}
+        if [ "${EDGE_MODE}" = "real" ]; then
+            exec roslaunch air_ground_car_bringup car_edge_real.launch chassis:=${CHASSIS}
+        else
+            exec roslaunch air_ground_car_bringup car_edge.launch chassis:=${CHASSIS}
+        fi
         ;;
     drone)
         exec roslaunch air_ground_drone_bringup drone_edge.launch
@@ -206,10 +211,11 @@ case "${ROLE}" in
 esac
 ```
 
-#### docker-compose.edge.yml
+#### docker-compose.edge.yml（公共基础，角色通过 override 文件叠加）
 
 ```yaml
-# docker-compose.edge.yml — 部署在树莓派上的 Edge 节点
+# docker-compose.edge.yml — Edge 节点公共基础 (车机/无人机共用)
+# 角色特定配置由 docker-compose.car.yml / docker-compose.drone.yml 覆盖
 version: '3.8'
 
 services:
@@ -217,32 +223,58 @@ services:
     image: air-ground-edge:v1
     container_name: air_ground_edge
     restart: unless-stopped
-    network_mode: "host"           # ROS 需要 host 网络
-    privileged: true               # 访问 UART/I2C/GPIO
+    network_mode: "host"
+    privileged: true  # 注: 与 systemd 加固并存仅为开发便利, 非安全边界
     environment:
       - AIR_GROUND_ROLE=${ROLE:-car}
       - AIR_GROUND_CHASSIS=${CHASSIS:-diff}
+      - EDGE_MODE=${EDGE_MODE:-real}
       - ROS_MASTER_URI=${ROS_MASTER_URI:-http://192.168.1.100:11311}
     volumes:
-      - /dev:/dev:ro               # 设备节点
-      - /sys:/sys:ro               # 硬件信息
       - /etc/localtime:/etc/localtime:ro
-      - air_ground_logs:/home/airground/.ros/log
-    devices:
-      - /dev/ttyAMA0:/dev/ttyAMA0  # UART: 3DR 数传 (车机/无人机共用)
-      - /dev/ttyAMA1:/dev/ttyAMA1  # UART: STM32/MSPM0 下位机 (仅车机)
-      - /dev/ttyACM0:/dev/ttyACM0  # USB: Pixhawk 6C (仅无人机)
-      - /dev/video0:/dev/video0    # USB: D435i RGB (仅无人机)
-      - /dev/video2:/dev/video2    # USB: D435i Depth (仅无人机)
-      - /dev/i2c-1:/dev/i2c-1      # I2C: ICM42688 (仅车机)
+      - /var/log/air-ground:/home/airground/.ros/log
     logging:
       driver: "json-file"
       options:
         max-size: "50m"
         max-file: "5"
+    # 公共设备: 3DR 数传 (车机/无人机均有)
+    devices:
+      - /dev/ttyAMA0:/dev/ttyAMA0  # UART: 3DR SiK 数传 (Pi 硬件串口)
+```
 
-volumes:
-  air_ground_logs:
+#### docker-compose.car.yml（车机角色 override，仅车机独有设备）
+
+```yaml
+# docker-compose.car.yml — 车机角色覆盖
+# 用法: docker compose -f docker-compose.edge.yml -f docker-compose.car.yml up
+version: '3.8'
+
+services:
+  edge-node:
+    environment:
+      - AIR_GROUND_ROLE=car
+    devices:
+      - /dev/ttyAMA1:/dev/ttyAMA1  # UART: STM32/MSPM0 下位机
+      - /dev/i2c-1:/dev/i2c-1      # I2C: ICM42688 IMU
+      - /dev/ttyUSB0:/dev/ttyUSB0   # USB-UART: RPLIDAR A1
+```
+
+#### docker-compose.drone.yml（无人机角色 override，仅无人机独有设备）
+
+```yaml
+# docker-compose.drone.yml — 无人机角色覆盖
+# 用法: docker compose -f docker-compose.edge.yml -f docker-compose.drone.yml up
+version: '3.8'
+
+services:
+  edge-node:
+    environment:
+      - AIR_GROUND_ROLE=drone
+    devices:
+      - /dev/ttyACM0:/dev/ttyACM0   # USB: Pixhawk 6C
+      - /dev/video0:/dev/video0     # USB: D435i RGB
+      - /dev/video2:/dev/video2     # USB: D435i Depth
 ```
 
 ### 12.3 systemd 自启服务 (`systemd/`)
@@ -372,9 +404,13 @@ WantedBy=timers.target
 #!/bin/bash
 # 配置 3DR SiK 数传电台参数
 # 用法: sudo ./setup-3dr-radio.sh [air|ground]
+# 注意: 本脚本在 PC 端配置 3DR 电台 (USB-UART /dev/ttyUSB0)
+#       部署到树莓派后, 电台连接树莓派硬件串口 /dev/ttyAMA0, 参数已在电台内, 无需重新配置
 
 ROLE="${1:-ground}"
-SERIAL_DEV="/dev/ttyUSB0"
+# PC 端: 电台通过 USB-UART 连接 → /dev/ttyUSB0
+# Pi 端: 电台通过硬件串口连接 → /dev/ttyAMA0 (部署阶段无需再运行本脚本)
+SERIAL_DEV="${2:-/dev/ttyUSB0}"
 BAUD=57600
 
 echo "Configuring 3DR Radio as ${ROLE}..."
@@ -527,18 +563,17 @@ cat "${KEYFILE}.pub"
 
 ```python
 #!/usr/bin/env python3
-"""ROS 节点存活检查 (独立于 ROS 环境运行，通过 TCP 探测 ROS Master)."""
+"""ROS 节点存活检查 (独立于 ROS 环境运行, 通过 TCP 探测 ROS Master).
 
-import socket
+设计意图: 本脚本检查 ROS Master 可达性。容器内节点存活由 systemd + docker restart policy 保障。
+如需检查具体 rosnode 列表, 应在容器内执行 `rosnode list` (不在本脚本职责范围)。
+"""
+
 import sys
 import xmlrpc.client
 from datetime import datetime
 
 ROS_MASTER_URI = "http://192.168.1.100:11311"
-EXPECTED_NODES = {
-    "car":  ["car_preprocessor", "mavlink_bridge", "edge_server_bridge"],
-    "drone": ["drone_preprocessor", "mavlink_bridge"],
-}
 
 def check_ros_master():
     """检查 ROS Master 是否可达."""

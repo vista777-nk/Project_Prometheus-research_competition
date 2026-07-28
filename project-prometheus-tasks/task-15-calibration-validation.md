@@ -43,7 +43,7 @@
 | **Affected Capability** | Perception: 相机内参 · IMU 内参 · 相机-IMU 外参 · DevOps: Phase 1 集成验证 |
 | **Modified Interface** | 新增标定输出格式: `camera_intrinsics.yaml` → ROS `camera_info` · 新增 `smoke-test-phase1.sh` 冒烟测试入口 |
 | **New Dependency** | OpenCV (`cv2.calibrateCamera`) · Kalibr (可选, 相机-IMU 外参) · `allan_variance_ros` (可选, IMU 标定) |
-| **ADR Required** | ADR-0011: 标定结果 YAML 格式标准化 · ADR-0012: 标定数据库 (`calibration_db/`) 目录结构设计 |
+| **ADR Required** | ADR-0011: 标定结果 YAML 格式标准化 (可降级为 §15A.2 的设计段落, 不必独立 ADR) |
 | **Risk Level** | 🟢 Low — 标定脚本操作离线数据，不依赖实时硬件 |
 
 > **铁律回顾 (RESEARCH_PHILOSOPHY.md §四「Simulation is the First Robot」)**：  
@@ -107,6 +107,8 @@ record_camera() {
         /drone/rgb/camera_info \
         /drone/depth/image_raw \
         __name:=calib_recorder
+    # 注意: 仿真话题名为 /drone/rgb/image_raw，实机 D435i 通常为 /drone/color/image_raw
+    # 如话题名不一致，请用 ROS remap 或修改本脚本中的话题名变量
 
     echo "Camera recording saved to: ${BAG_DIR}/camera_calib.bag"
 }
@@ -374,20 +376,28 @@ import serial
 import struct
 import time
 
-def crc16(data):
+def crc16_ccitt(data):
+    """CRC-16/CCITT-FALSE (非反射, poly=0x1021, init=0xFFFF).
+    
+    与 STM32/MSPM0 固件的 CRC 实现完全一致 (ADR-0003 统一标准).
+    测试向量: crc16_ccitt(b'123456789') == 0x29B1
+    """
     crc = 0xFFFF
     for b in data:
-        crc ^= b
+        crc ^= (b << 8)
         for _ in range(8):
-            if crc & 1:
-                crc = (crc >> 1) ^ 0x8408
+            if crc & 0x8000:
+                crc = (crc << 1) ^ 0x1021
             else:
-                crc >>= 1
-    return crc & 0xFFFF
+                crc <<= 1
+            crc &= 0xFFFF
+    return crc
 
 def build_frame(cmd, data=b''):
+    """构建二进制帧 (CRC 覆盖 CMD+DATA, 不含 SOF/LEN/EOF)."""
     payload = bytes([cmd]) + data
-    crc = crc16(payload)
+    crc = crc16_ccitt(payload)
+    # LEN = CMD(1) + DATA(n) + CRC(2) + EOF(1), max 255
     frame = bytes([0xA5, len(payload) + 3]) + payload + struct.pack('<H', crc) + bytes([0x5A])
     return frame
 
@@ -404,15 +414,38 @@ time.sleep(0.5)
 resp = ser.read(64)
 if resp:
     print(f"RX: {resp.hex()}")
-    # Check for PONG (CMD=0x13)
-    idx = resp.find(b'\x5A')
-    if idx >= 3 and resp[idx-3] == 0x13:
-        # Extract version: major, minor, patch
-        fw_ver = resp[idx-2:idx+1] if idx >= 2 else b'unknown'
-        print(f"✓ PONG received! FW version bytes: {fw_ver.hex()}")
-        print("✓ Serial communication OK")
+    # Check for PONG (CMD=0x13) — 5 bytes payload: major, minor, patch, board_type, chassis_type
+    # Frame: SOF(0xA5) LEN(0x08) CMD(0x13) DATA(5 bytes) CRC(2 bytes) EOF(0x5A)
+    if len(resp) >= 9:
+        # Locate SOF
+        sof_idx = resp.find(b'\xa5')
+        if sof_idx >= 0 and sof_idx + 8 < len(resp):
+            cmd = resp[sof_idx + 2]
+            if cmd == 0x13:
+                data_start = sof_idx + 3
+                fw_major, fw_minor, fw_patch = resp[data_start:data_start+3]
+                board_type = resp[data_start + 3]
+                chassis_type = resp[data_start + 4]
+                board_names = {0x01: 'STM32F407', 0x02: 'MSPM0G3507'}
+                chassis_names = {0x01: 'mecanum', 0x02: 'differential'}
+                print(f"✓ PONG received!")
+                print(f"   FW: v{fw_major}.{fw_minor}.{fw_patch}")
+                print(f"   Board: {board_names.get(board_type, f'unknown(0x{board_type:02X})')}")
+                print(f"   Chassis: {chassis_names.get(chassis_type, f'unknown(0x{chassis_type:02X})')}")
+                # Cross-check with expected CHASSIS env var
+                expected = '${CHASSIS:-mecanum}'
+                actual = 'mecanum' if chassis_type == 0x01 else 'differential'
+                if expected == actual:
+                    print("✓ Chassis type matches environment variable")
+                else:
+                    print(f"⚠ WARNING: chassis mismatch! env={expected}, board={actual}")
+                print("✓ Serial communication OK")
+            else:
+                print(f"✗ Expected PONG(0x13), got CMD=0x{cmd:02X}")
+        else:
+            print(f"✗ Frame too short or no SOF found")
     else:
-        print(f"✗ No valid PONG found in response")
+        print(f"✗ Response too short ({len(resp)} bytes, expect >= 9)")
 else:
     print("✗ No response received (timeout)")
 
@@ -603,12 +636,12 @@ echo "========================================="
 - [ ] `validate-calibration.py` 对标定结果做合理性检查（5 项全部通过）
 - [ ] 标定脚本在 CI 中可用离线样本数据测试（不需要 ROS）
 - [ ] `record-calib-bag.sh` 有明确的操作指南（提示用户如何移动标定板）
-- [ ] **标定报告自动生成**：`generate-calib-report.py` 将 YAML 转换为 PDF 报告，包含 K Matrix / Distortion Coefficients / RMS Reprojection Error / Allan Variance (IMU) / Calibration Date / Sensor Serial Number
-- [ ] **标定数据库**：`calibration_db/` 目录结构建立，历史标定结果永不覆盖（按日期 + 传感器序列号归档）
+- [ ] **标定报告自动生成** (Phase 1 交付): `generate-calib-report.py` 将 YAML 转换为 Markdown 报告，包含 K Matrix / Distortion Coefficients / RMS Reprojection Error / Calibration Date
+- [ ] (Stretch) `calibration_db/` 目录结构占位 + README 说明归档规范 (完整历史数据库为 Phase 2 功能)
 
 ### Part B 集成验证
 
-- [ ] `test-serial-loopback.sh` 可发送 PING 并判断是否收到 PONG
+- [ ] `test-serial-loopback.sh` 可发送 PING 并判断是否收到 PONG (含 board_type/chassis_type 校验)
 - [ ] `test-observation-pipeline.py` 3 个测试用例通过
 - [ ] `smoke-test-phase1.sh` 可检查所有 Phase 1 文件存在性 + CI job 存在性
 - [ ] Phase 1 冒烟测试在 GitHub Actions 中可运行

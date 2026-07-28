@@ -67,16 +67,21 @@ mkdir -p src/firmware/common
 cd src/firmware/common
 ```
 
-创建以下共享模块：
+创建以下共享模块（**权威布局 — task-10/11 以此为准**）：
 
 ```
-src/firmware/common/
-├── pid.c / pid.h            # PID 控制器 (task-10 和 task-11 共用)
-├── crc16.c / crc16.h        # CRC16-CCITT (协议帧校验, 两个固件共用)
-├── protocol_frame.c / .h    # 帧打包/解包 (SOF/EOF/转义, 共用)
-└── test/
-    └── unity.c / unity.h    # Unity Test 框架 (单头文件)
+src/firmware/common/               ← 共享库, 无 HAL 依赖的纯 C99
+├── pid.h                          # PID 控制器头文件 (task-10/11 共用)
+├── pid.c                          # PID 控制器实现
+├── crc16.h                        # CRC-16/CCITT-FALSE 头文件
+├── crc16.c                        # CRC 实现 (ADR-0003 标准)
+├── protocol_frame.h               # 帧打包/解包头文件
+├── protocol_frame.c               # SOF/EOF/转义/拆帧 (共用)
+├── unity.h                        # Unity Test 框架 (单头文件, 从 Unity 官方引入)
+└── unity.c                        # Unity Test 框架实现
 ```
+
+> **注意**：`unity.c/.h` 是测试框架，放在 `common/` 下供所有固件项目的 Host 测试引用。固件交叉编译时不链接 `unity.c`。
 
 > **Subagent 注意**：`common/` 的代码应是无 HAL 依赖的纯 C99，能在 Host GCC 和 arm-none-eabi-gcc 下都能编译。如果 task-10 已完成但未提取 common，在此任务中完成提取重构。
 
@@ -202,9 +207,11 @@ src/firmware/common/
       - name: YAML Lint
         run: |
           pip3 install yamllint
+          # globstar 确保 ** 递归生效
+          shopt -s globstar
           yamllint -d "{extends: relaxed, rules: {line-length: disable}}" \
-            src/deployment/docker/docker-compose.edge.yml \
-            src/**/config/*.yaml 2>/dev/null || true
+            src/deployment/docker/docker-compose*.yml \
+            src/**/config/*.yaml 2>/dev/null || echo "(review yamllint warnings above)"
 
       - name: systemd Unit Syntax Check
         if: always()
@@ -245,6 +252,7 @@ on:
 ```makefile
 # src/firmware/stm32_mecanum/Makefile
 # 适用于 arm-none-eabi-gcc, Cortex-M4 (STM32F407)
+# MSPM0 版本: 修改 CPU/FPU/CFLAGS 即可, 结构相同
 
 CROSS_COMPILE ?= arm-none-eabi-
 CC      = $(CROSS_COMPILE)gcc
@@ -259,9 +267,13 @@ CFLAGS  += -DSTM32F407xx -DUSE_HAL_DRIVER
 LDFLAGS = $(CPU) $(FPU) -T linker/STM32F407VETx_FLASH.ld -Wl,--gc-sections
 
 # --- Sources ---
-SRCS  = $(wildcard src/*.c) $(wildcard ../common/*.c)
-OBJS  = $(SRCS:.c=.o)
-TARGET = build/stm32_mecanum
+# 固件自有源文件
+SRCS     = $(wildcard src/*.c)
+# 共享库源文件 (projects 编译时拷贝到 build/common/)
+COMMON_SRCS = $(wildcard ../common/pid.c ../common/crc16.c ../common/protocol_frame.c)
+OBJS     = $(patsubst src/%.c, build/%.o, $(SRCS)) \
+           $(patsubst ../common/%.c, build/common/%.o, $(COMMON_SRCS))
+TARGET   = build/stm32_mecanum
 
 # --- Rules ---
 .PHONY: all clean test
@@ -276,8 +288,15 @@ $(TARGET).elf: $(OBJS)
 $(TARGET).bin: $(TARGET).elf
 	$(OBJCOPY) -O binary $< $@
 
-%.o: %.c
-	$(CC) $(CFLAGS) -c -o $@ $<
+# 固件自有源文件编译
+build/%.o: src/%.c
+	@mkdir -p build
+	$(CC) $(CFLAGS) -I src -I ../common -c -o $@ $<
+
+# 共享库源文件编译 (输出到 build/common/)
+build/common/%.o: ../common/%.c
+	@mkdir -p build/common
+	$(CC) $(CFLAGS) -I ../common -c -o $@ $<
 
 # Host Unit Tests (用 Host gcc 编译, 不交叉编译)
 test:
@@ -322,8 +341,8 @@ clean:
 2. **新增 job 全部设置 `needs: []`**：固件编译不需要 ROS 环境，并行运行可节省时间
 3. **gcc-arm-none-eabi 在 ubuntu-latest (22.04/24.04) 上可直接 apt 安装**，不需要手动下载
 4. **MSPM0 是 Cortex-M0+（无 FPU）**：CFLAGS 必须加 `-mfloat-abi=soft`，否则链接失败
-5. **Docker job 只做 build 验证**（不 push 到 registry），因为 Phase 1 还不需要镜像分发
-6. **shellcheck 首次运行会报大量 warning**：优先修 critical/error 级别，style 级别可暂置
+5. **Docker job 只做 build 验证**（不 push 到 registry），因为 Phase 1 还不需要镜像分发。可增加 `--platform linux/arm64` 非阻塞构建来验证 ARM64 兼容性（qemu-user-static 模拟, 速度较慢）。
+6. **shellcheck 首次运行会报大量 warning**：优先修 error 级别，warning/info/style 级别可暂置。验收标准"无 critical 错误"改为"无 error 级别告警"（shellcheck 无 critical 级别）。
 7. **`systemd-analyze verify` 在非 systemd 主机上有警告是正常的**，用 `|| echo` 容错
 
 ---
