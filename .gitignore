@@ -86,6 +86,12 @@ CTestTestfile.cmake
 Makefile
 !/Makefile
 !tasks/**/Makefile
+# 固件项目的 Makefile 是手写源码，不是 CMake 生成物，必须入库
+!src/firmware/**/Makefile
+
+# 固件构建产物 (build/ 已被上面的 ROS 规则覆盖，这里补上散落的镜像文件)
+*.elf
+*.map
 
 # === IDE / Editor ===
 .vscode/

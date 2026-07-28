@@ -96,3 +96,58 @@ jobs:
             cat build/test_results/*/pytest.xml 2>/dev/null | grep -E 'testsuite|testcase' | head -50
           fi
           catkin_test_results build/test_results 2>/dev/null || echo "Review test output above."
+
+  # ---------------------------------------------------------------------------
+  # Task-10: STM32F407VET6 麦轮固件
+  #
+  # 与 ROS job 完全并行，互不阻塞：固件不需要 ROS 环境，ROS 也不需要 ARM 工具链。
+  # 单元测试用宿主机 gcc 跑，交叉编译只验证固件能链接成 .bin。
+  # Task-13 会在此基础上补齐 MSPM0 / Docker / Lint 三个 job。
+  # ---------------------------------------------------------------------------
+  build-stm32-firmware:
+    name: Build STM32F407 Mecanum Firmware (task-10)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: src/firmware/stm32_mecanum
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install ARM GCC toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi
+        working-directory: .
+
+      - name: Verify toolchain
+        run: arm-none-eabi-gcc --version
+
+      # 先跑测试再编固件：算法错了就没必要浪费时间产出二进制
+      - name: Run host unit tests
+        run: make test
+
+      - name: Cross-compile firmware
+        run: |
+          make -j"$(nproc)" \
+            FW_COMMIT="$(git rev-parse --short HEAD)" \
+            FW_TIME="$(date -u +%Y%m%d-%H%M)"
+
+      - name: Report firmware size
+        run: make size
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: stm32-mecanum-firmware
+          path: |
+            src/firmware/stm32_mecanum/build/*.bin
+            src/firmware/stm32_mecanum/build/*.hex
+            src/firmware/stm32_mecanum/build/*.elf
+            src/firmware/stm32_mecanum/build/*.map
+          retention-days: 30
+          if-no-files-found: error
