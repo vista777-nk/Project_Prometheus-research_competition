@@ -481,8 +481,9 @@ gcc -o test_runner test/test_kinematics.c src/kinematics.c -I src -I test
 
 - **HAL 层（`bsp.c` / `encoder.c` / `motor.c` / `uart.c`）尚未在真实硬件上验证。**
   Phase 1 的目标是"CI 编译通过 + Host 单元测试通过"。首次上板必须走 README §七 的检查清单。
-- 交叉编译在本地开发机上未执行（无 `arm-none-eabi-gcc`），
-  已用 `gcc -fsyntax-only` 对全部裸机源文件做语义检查，真实交叉编译由 CI 首次执行。
+- ~~交叉编译在本地开发机上未执行~~ —— **已解除（2026-07-29）**：CI `build-stm32-firmware` job
+  首次运行即通过，`arm-none-eabi-gcc` 交叉编译 + 链接 + artifact 产出全部绿灯。
+  本地无 `arm-none-eabi-gcc`，交叉编译始终由 CI 承担。
 - PID 默认增益由一阶电机模型（τ≈80ms）整定，实车需按 README §4.2 复整定。
 
 ### 对下游任务的影响
