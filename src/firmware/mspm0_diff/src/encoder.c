@@ -21,7 +21,7 @@
 #include "encoder.h"
 
 #include "board_config.h"
-#include "mspm0_port.h"
+#include "mcu_port.h"
 
 /**
  * 一个窗口计数 → RPM 的换算系数 (编译期常量)。

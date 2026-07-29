@@ -28,7 +28,7 @@ void Reset_Handler(void);
 void Default_Handler(void);
 
 /* --- 异常与中断处理函数 ---------------------------------------------
- * 全部弱定义为死循环。其他翻译单元 (bsp.c / uart.c / main.c) 里的同名强定义
+ * 全部弱定义为死循环。其他翻译单元 (port_stm32f407.c) 里的同名强定义
  * 会在链接时自动覆盖，不需要修改本文件。
  */
 #define WEAK_HANDLER(name) \

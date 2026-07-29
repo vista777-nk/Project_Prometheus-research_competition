@@ -14,7 +14,7 @@
 #include "uart.h"
 
 #include "board_config.h"
-#include "mspm0_port.h"
+#include "mcu_port.h"
 
 /** 缓冲区容量必须是 2 的幂 —— 用掩码取模，Cortex-M0+ 没有硬件除法 */
 #define RX_BUFFER_SIZE      256u
@@ -121,14 +121,26 @@ void uart_write(const uint8_t *data, uint16_t len)
         s_tx_buf[s_tx_head] = data[i];
         s_tx_head = (uint16_t)((s_tx_head + 1u) & TX_BUFFER_MASK);
     }
+    /* 通知移植层有数据要发。怎么发是各板自己的事：
+       MSPM0 就地忙等抽干，STM32 打开 TXE 中断慢慢送 —— 本文件不关心。 */
+    port_uart_tx_start();
 }
 
-void uart_flush(void)
+/**
+ * 移植层取下一个待发字节。
+ *
+ * @note 在 STM32 上本函数运行于 TXE 中断上下文，在 MSPM0 上运行于主循环 ——
+ *       两种情形下 s_tx_tail 都只有一个写者，s_tx_head 只有一个写者 (uart_write)，
+ *       是标准的单生产者单消费者环形缓冲，不需要额外临界区。
+ */
+bool port_uart_tx_next(uint8_t *byte)
 {
-    while (s_tx_tail != s_tx_head) {
-        port_uart_put_byte(s_tx_buf[s_tx_tail]);
-        s_tx_tail = (uint16_t)((s_tx_tail + 1u) & TX_BUFFER_MASK);
+    if (byte == 0 || s_tx_tail == s_tx_head) {
+        return false;
     }
+    *byte = s_tx_buf[s_tx_tail];
+    s_tx_tail = (uint16_t)((s_tx_tail + 1u) & TX_BUFFER_MASK);
+    return true;
 }
 
 uint32_t uart_get_rx_overrun_count(void)

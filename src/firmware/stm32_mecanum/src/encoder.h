@@ -1,8 +1,10 @@
 /**
  * @file encoder.h
- * @brief AB 相编码器读取 (TIM2/3/4/5 编码器模式，4 倍频)
+ * @brief AB 相编码器测速（正交解码 4 倍频 + 窗口测速 + 一阶低通）
  *
- * 只参与交叉编译，不进入 Host 单元测试 —— 测试侧通过 Mock 转速直接驱动 PID。
+ * 本模块**不含任何寄存器访问** —— 计数器读取通过 mcu_port.h 的
+ * port_encoder_read_count() 完成，因此回绕处理、测速窗口与 EMA 滤波
+ * 可以在 Host 上用假编码器直接测（test_encoder.c）。
  */
 #ifndef STM32_MECANUM_ENCODER_H
 #define STM32_MECANUM_ENCODER_H
@@ -11,7 +13,7 @@
 
 #include "kinematics.h"
 
-/** 配置 TIM2/3/4/5 为编码器模式并清零计数。需在 bsp_init() 之后调用。 */
+/** 配置 TIM2/3/4/5 为编码器模式并清零计数。需在 port_system_init() 之后调用。 */
 void encoder_init(void);
 
 /**

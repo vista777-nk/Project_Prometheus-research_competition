@@ -15,7 +15,7 @@
 #include <math.h>
 
 #include "board_config.h"
-#include "mspm0_port.h"
+#include "mcu_port.h"
 
 static float s_duty[NUM_WHEELS];
 

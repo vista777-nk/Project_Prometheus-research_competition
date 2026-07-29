@@ -2,7 +2,7 @@
  * @file motor.h
  * @brief 电机 PWM 输出、方向控制与电流采样
  *
- * 与麦轮固件不同，本模块**不含任何寄存器访问** —— 全部通过 mspm0_port.h 完成。
+ * 与麦轮固件不同，本模块**不含任何寄存器访问** —— 全部通过 mcu_port.h 完成。
  */
 #ifndef MSPM0_DIFF_MOTOR_H
 #define MSPM0_DIFF_MOTOR_H

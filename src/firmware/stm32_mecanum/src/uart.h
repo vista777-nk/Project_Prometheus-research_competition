@@ -1,9 +1,9 @@
 /**
  * @file uart.h
- * @brief USART1 中断收发 + 环形缓冲 (对接树莓派 /dev/ttyAMA0, 115200 8N1)
+ * @brief UART 环形缓冲收发（对接树莓派 /dev/ttyAMA0, 115200 8N1）
  *
- * 只参与交叉编译，不进入 Host 单元测试 —— 协议层通过注入写函数解耦，
- * 测试时用内存缓冲替代本模块。
+ * 本模块**不含任何寄存器访问** —— 字节进出通过 mcu_port.h 完成。
+ * 协议层再通过注入写函数与本模块解耦，因此 Host 测试里两层都可以替换掉。
  */
 #ifndef STM32_MECANUM_UART_H
 #define STM32_MECANUM_UART_H
@@ -11,7 +11,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/** 配置 PA9/PA10、波特率与中断。需在 bsp_init() 之后调用。 */
+/** 配置串口与中断。需在 port_system_init() 之后调用。 */
 void uart_init(void);
 
 /**

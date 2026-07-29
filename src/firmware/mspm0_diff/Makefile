@@ -85,7 +85,7 @@ DEPS  = $(OBJS:.o=.d)
 
 # --- 单元测试 (宿主机) ---
 # 只编译与硬件无关的模块。encoder.c 之所以能进来，是因为它只调用
-# mspm0_port.h 的两个原语，测试里用假编码器替换掉 —— 这正是移植层分离的收益。
+# common/mcu_port.h 的两个原语，测试里用假编码器替换掉 —— 这正是移植层分离的收益。
 # motor.c / uart.c / main.c / port_*.c / startup 不参与。
 TEST_SRCS = test/test_main.c test/test_kinematics.c test/test_protocol.c \
             test/test_encoder.c test/test_faults.c test/test_control_loop.c \

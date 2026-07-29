@@ -1,15 +1,15 @@
 /**
  * @file motor.h
- * @brief 电机 PWM 输出与电流采样 (TIM1 四路 PWM + TB6612 方向控制 + ADC1)
+ * @brief 电机 PWM 输出、方向控制与电流采样
  *
- * 只参与交叉编译，不进入 Host 单元测试。
+ * 本模块**不含任何寄存器访问** —— 全部通过 mcu_port.h 完成。
  */
 #ifndef STM32_MECANUM_MOTOR_H
 #define STM32_MECANUM_MOTOR_H
 
 #include "kinematics.h"
 
-/** 配置 TIM1 PWM、方向 GPIO 与 ADC1。需在 bsp_init() 之后调用。 */
+/** 配置 PWM、方向 GPIO 与电流采样 ADC。需在 port_system_init() 之后调用。 */
 void motor_init(void);
 
 /**

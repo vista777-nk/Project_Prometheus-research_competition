@@ -3,7 +3,7 @@
  * @brief AB 相编码器测速 (正交解码 4 倍频 + 窗口测速 + 一阶低通)
  *
  * 与麦轮固件不同，本模块**不含任何寄存器访问** —— 计数器读取通过
- * mspm0_port.h 的 port_encoder_read_count() 完成。因此测速窗口与滤波这两段
+ * mcu_port.h 的 port_encoder_read_count() 完成。因此测速窗口与滤波这两段
  * 真正容易出错的逻辑可以在 Host 上直接测 (test_encoder.c)。
  */
 #ifndef MSPM0_DIFF_ENCODER_H

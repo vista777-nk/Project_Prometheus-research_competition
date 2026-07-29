@@ -401,7 +401,9 @@ mspm0_diff/
 │   ├── main.c                  1kHz 控制中断 + 主循环
 │   │
 │   ├── mspm0_conf.h            编译剖面开关
-│   ├── mspm0_port.h            ★ 移植层接口 —— 唯一碰寄存器的地方
+│   └── startup_mspm0g3507.c    Cortex-M0+ 向量表 + Reset_Handler
+│
+│   （移植层接口在 ../common/mcu_port.h，与麦轮固件共用同一份）
 │   ├── port_stub.c             空实现 (CI)，但 SysTick 与控制中断是真的
 │   ├── port_driverlib.c        TI DriverLib 实现 (真实硬件)
 │   └── startup_mspm0g3507.c    Cortex-M0+ 向量表 + Reset_Handler
@@ -415,7 +417,7 @@ mspm0_diff/
 
 这里把二者切开后，`encoder.c` 的 11 个 Host 用例（16 位回绕、窗口保持、
 EMA 系数、方向符号）全部是麦轮固件测不了的。换 MCU 时也只需重写
-`mspm0_port.h` 那十几个函数，板级逻辑一行不动。
+`common/mcu_port.h` 那十几个函数，板级逻辑一行不动。
 
 代价是每个控制周期多约 10 次函数调用，@80MHz 约 0.5µs —— 相对 1000µs 的周期可以忽略。
 这个代价是刻意付的。

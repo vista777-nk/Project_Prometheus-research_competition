@@ -22,7 +22,7 @@
 #ifdef MSPM0_PORT_STUB
 
 #include "board_config.h"
-#include "mspm0_port.h"
+#include "mcu_port.h"
 
 /* --- ARMv6-M 内核外设。这些地址由 ARM 架构定义，任何 Cortex-M0+ 都一样。 --- */
 #define SYST_CSR    (*(volatile uint32_t *)0xE000E010uL)
@@ -110,7 +110,21 @@ uint16_t port_encoder_read_count(int wheel)
 }
 
 void port_uart_init(uint32_t baudrate) { (void)baudrate; }
-void port_uart_put_byte(uint8_t byte) { (void)byte; }
+
+/**
+ * 空实现下仍然把发送队列**抽干**，只是把字节丢掉。
+ *
+ * 不这样做的话上层环形缓冲会填满并开始计 tx_drops，
+ * 于是 FAULT_UART_ERROR 常亮 —— 那是个与"移植层没接"无关的假故障，
+ * 会掩盖掉真正想暴露的 FAULT_STALL。
+ */
+void port_uart_tx_start(void)
+{
+    uint8_t byte;
+    while (port_uart_tx_next(&byte)) {
+        /* 丢弃 */
+    }
+}
 
 void port_adc_init(void) {}
 uint16_t port_adc_read(uint8_t channel) { (void)channel; return 0u; }

@@ -20,13 +20,17 @@
 两个固件工程共用，**只存一份**。纯 C99，无 HAL 依赖，
 在 `arm-none-eabi-gcc`（M4F 硬浮点 / M0+ 软浮点）与 Host gcc 下都能编译。
 
-| 模块 | 内容 |
-|------|------|
-| `crc16.c/.h` | CRC-16/CCITT-FALSE（[ADR-0003](../../docs/decisions/ADR-0003.md) 统一标准） |
-| `protocol_frame.c/.h` | 帧打包 / 拆包状态机（SOF/LEN/CRC/EOF） |
-| `pid.c/.h` | 条件积分抗饱和 PID 速度环 |
-| `faults.c/.h` | 故障位图（线上契约，两板逐位一致）+ 故障状态机 |
-| `unity.c/.h` | 极简 Unity 风格测试框架（**仅 Host 测试链接，不进固件**） |
+| 模块 | 内容 | 单元测试位置 |
+|------|------|------|
+| `crc16.c/.h` | CRC-16/CCITT-FALSE（[ADR-0003](../../docs/decisions/ADR-0003.md) 统一标准） | `stm32_mecanum/test/` |
+| `protocol_frame.c/.h` | 帧打包 / 拆包状态机（SOF/LEN/CRC/EOF） | `stm32_mecanum/test/` |
+| `pid.c/.h` | 条件积分抗饱和 PID 速度环 | `stm32_mecanum/test/` |
+| `faults.c/.h` | 故障位图（线上契约，两板逐位一致）+ 故障状态机 | `mspm0_diff/test/` |
+| `mcu_port.h` | **移植层接口** —— 固件里唯一碰寄存器的地方，每块板一份实现 | 各板用假外设替身 |
+| `unity.c/.h` | 极简 Unity 风格测试框架（**仅 Host 测试链接，不进固件**） | — |
+
+> 共享模块的单元测试**只写一遍**，落在哪个工程见上表。同一份代码测两遍不增加信息，
+> 只增加两处要同步维护的用例。
 
 各工程通过 `-I../common` 引用头文件、在 Makefile 里直接编译 `../common/*.c`。
 
@@ -48,21 +52,31 @@
 `STALL` 必须跟随实际状态、`UART_ERROR` 必须按增量判定、
 停机期间 `STALL` 必须保持旧值。抽成纯函数后由 `test_faults.c` 逐条钉死。
 
-**迁移状态**：`mspm0_diff` 已改用 `faults_evaluate_*()`；
-`stm32_mecanum` 目前只共用了位定义，`main.c` 仍是自己那套等价实现，待迁移。
+**迁移状态**：两块板均已改用 `faults_evaluate_*()`，`main.c` 只负责采集输入与执行处置。
 
-## 两个工程的分层差异
+## 分层结构（两个工程已对齐）
+
+```
+kinematics / protocol / encoder / motor / uart / main   ← 板级逻辑，纯 C，可 Host 测试
+                    ↓ 只调用十几个原语
+            common/mcu_port.h                            ← 移植层接口，两板共用
+                    ↓ 每块板一份实现
+port_stm32f407.c            port_driverlib.c · port_stub.c
+```
 
 | | `stm32_mecanum` | `mspm0_diff` |
 |---|---|---|
-| 寄存器访问位置 | 直接写在 `encoder.c` / `motor.c` / `uart.c` | 收拢到 `mspm0_port.h` 的 ~15 个原语 |
-| 故障判定 | `main.c` 内 `static` 函数 | `common/faults.c` 纯函数 |
-| Host 可测范围 | 运动学 + 协议 | 运动学 + 协议 + **编码器测速** + **故障状态机** |
-| Host 用例数 | 52 | 70 |
+| 移植层实现 | `port_stm32f407.c`（裸机寄存器） | `port_driverlib.c`（TI SDK）· `port_stub.c`（CI） |
+| 发送策略 | TXE 中断驱动 | 就地忙等 FIFO |
+| 故障判定 | `common/faults.c` | `common/faults.c` |
+| Host 用例数 | 63 | 70 |
 
-移植层分离与故障状态机外提是 task-11 的两项架构收获：回绕处理、测速窗口、EMA、
-故障位生命周期这些**真正容易出错的逻辑**因此可以脱离硬件验证。
-若日后重构 `stm32_mecanum`，应当照此办理。
+发送策略的差异被完全挡在移植层里：两块板共用同一份 `uart.c` 环形缓冲逻辑，
+差异只体现在各自的 `port_uart_tx_start()` 实现中。
+
+**移植层分离与故障状态机外提最初是 task-11 的架构收获，随后回溯应用到了 task-10。**
+回绕处理、测速窗口、EMA、故障位生命周期这些真正容易出错的逻辑，
+因此在两块板上都能脱离硬件验证。
 
 ## 快速上手
 

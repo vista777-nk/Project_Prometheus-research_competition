@@ -2,7 +2,7 @@
  * @file test_encoder.c
  * @brief 编码器测速逻辑的 Host 单元测试
  *
- * 这组用例是 mspm0_port.h 那层间接调用换来的直接收益：麦轮固件把
+ * 这组用例是 mcu_port.h 那层间接调用换来的直接收益：麦轮固件把
  * 计数器读取写死在 encoder.c 里，导致回绕处理、测速窗口、EMA 这三段
  * **最容易出错的逻辑**只能上板验证；这里用一个假编码器就能全部测掉。
  *
@@ -12,7 +12,7 @@
 #include "board_config.h"
 #include "encoder.h"
 #include "kinematics.h"
-#include "mspm0_port.h"
+#include "mcu_port.h"
 #include "unity.h"
 
 /* --- 假编码器：直接操纵计数器原值 --- */

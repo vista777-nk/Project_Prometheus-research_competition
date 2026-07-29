@@ -26,7 +26,7 @@
 #ifdef USE_TI_DRIVERLIB
 
 #include "board_config.h"
-#include "mspm0_port.h"
+#include "mcu_port.h"
 
 /* SysConfig 生成物提供以下符号，若名字对不上请以生成物为准修改这里：
      MOTOR_PWM_INST, MOTOR_PWM_C0_IDX, MOTOR_PWM_C1_IDX
@@ -169,12 +169,22 @@ void port_uart_init(uint32_t baudrate)
     NVIC_EnableIRQ(UART_COMM_INST_INT_IRQN);
 }
 
-void port_uart_put_byte(uint8_t byte)
+/**
+ * MSPM0 侧选择就地忙等把队列抽干，而不是像 STM32 那样开 TXE 中断。
+ *
+ * 理由：一帧遥测 24 字节 @115200 约 2ms 忙等，而速度环跑在独立的 TIMG 中断里，
+ * 不受主循环阻塞影响。少一个中断源就少一处竞态。
+ * 两块板共用同一份 uart.c 环形缓冲逻辑，差异只在这个函数里。
+ */
+void port_uart_tx_start(void)
 {
-    while (!DL_UART_isTXFIFOEmpty(UART_COMM_INST)) {
-        /* 等发送 FIFO 排空 */
+    uint8_t byte;
+    while (port_uart_tx_next(&byte)) {
+        while (!DL_UART_isTXFIFOEmpty(UART_COMM_INST)) {
+            /* 等发送 FIFO 排空 */
+        }
+        DL_UART_transmitData(UART_COMM_INST, byte);
     }
-    DL_UART_transmitData(UART_COMM_INST, byte);
 }
 
 void UART_COMM_INST_IRQHandler(void)

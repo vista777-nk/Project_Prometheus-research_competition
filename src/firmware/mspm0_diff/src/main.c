@@ -30,7 +30,7 @@
 #include "encoder.h"
 #include "kinematics.h"
 #include "motor.h"
-#include "mspm0_port.h"
+#include "mcu_port.h"
 #include "pid.h"
 #include "protocol.h"
 #include "uart.h"
@@ -286,10 +286,7 @@ int main(void)
             publish_telemetry();
         }
 
-        /* 4. 把应答与遥测真正推给硬件 */
-        uart_flush();
-
-        /* 5. 状态灯 */
+        /* 4. 状态灯 */
         update_status_led(now_ms);
     }
 }
