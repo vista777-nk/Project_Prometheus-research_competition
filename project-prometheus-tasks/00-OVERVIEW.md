@@ -2,7 +2,7 @@
 
 > 本文档是项目入口。详细内容已拆分为四个专题文件。
 >
-> **当前进度**：Phase 0 仿真框架 9/9 ✅ · Phase 1 基础设施 1/6 🟡 · 56/56 ROS 单元测试通过 · E2E 33/33 通过 · 固件 Host 测试 52/52 通过 · 6 个 ROS package 全部可编译
+> **当前进度**：Phase 0 仿真框架 9/9 ✅ · Phase 1 基础设施 2/6 🟡 · 56/56 ROS 单元测试通过 · E2E 33/33 通过 · 固件 Host 测试 101/101 通过（麦轮 52 + 差速 49）· 6 个 ROS package 全部可编译
 
 ## 📖 必读文件
 
@@ -39,7 +39,7 @@
 | 任务 | 内容 | 战线 | 预计耗时 | 状态 |
 |------|------|:---:|---------|:---:|
 | [task-10](./task-10-stm32-mecanum-firmware.md) | STM32F407 麦轮固件（逆运动学 + PID + 串口协议） | 🥇 固件先行 | 6h | ✅ |
-| [task-11](./task-11-mspm0-diff-firmware.md) | MSPM0G3507 差速固件（编码器 + PID + 电赛合规） | 🥇 固件先行 | 5h | 🔴 |
+| [task-11](./task-11-mspm0-diff-firmware.md) | MSPM0G3507 差速固件（编码器 + PID + 电赛合规） | 🥇 固件先行 | 5h | ✅ |
 | [task-12](./task-12-rpi-deployment.md) | 树莓派部署方案（Docker + systemd + 网络 + SSH） | 🥈 部署先行 | 4h | 🔴 |
 | [task-13](./task-13-ci-pipeline.md) | CI 交叉编译流水线（ARM + MSPM0 + Docker + Lint） | 🥉 验证先行 | 3h | 🔴 |
 | [task-14](./task-14-sensor-drivers-mavlink.md) | 实机传感器驱动骨架 + MAVLink 2 签名 | 🥉 验证先行 | 4h | 🔴 |
@@ -68,9 +68,15 @@ task-14 (传感器 + MAVLink) ── (独立) ── task-15
 
 > **并行策略**：task-10、task-11、task-12、task-14 可同时分发给 4 个 subagent。task-13 在 task-10/11 固件目录就位后启动。task-15 在所有任务完成后执行集成验证。
 >
-> **进度更新（2026-07-28）**：task-10 已完成。`src/firmware/common/`（task-13 §13.1 权威布局）已就位，
-> 串口帧协议已由 [ADR-0003](../docs/decisions/ADR-0003.md) 固化，CI 已有一个固件 job 模板。
-> task-11 现在可以直接复用共享库，task-13 不必再做提取重构。
+> **进度更新（2026-07-29）**：task-10、task-11 已完成。`src/firmware/common/`（task-13 §13.1 权威布局）
+> 已就位并**被 task-11 一行未改地复用** —— "帧层/PID/CRC 板无关"至此被证明而非仅被声称。
+> 串口帧协议由 [ADR-0003](../docs/decisions/ADR-0003.md) 固化，
+> TI 电赛合规与移植层分离由 [ADR-0004](../docs/decisions/ADR-0004.md) 固化。
+> CI 已有两个固件 job 模板，task-13 不必再做提取重构。
+>
+> ⚠ task-11 的默认构建产出**不是可烧录固件**（MSPM0 移植层默认空实现，
+> 原因见 ADR-0004 §决策-3）。算法层完整且有 49 个 Host 用例覆盖；
+> 上板需按其 README §7 接入 TI SDK 与 SysConfig。
 
 ## 🚀 快速开始
 
