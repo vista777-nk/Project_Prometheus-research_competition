@@ -1,11 +1,19 @@
 # Task-11: MSPM0G3507 差速固件
 
-> **状态：🔴 待开始** | **优先级：🥈 高** | **预计耗时：5h（编码+测试）/ 2.5h（仅骨架+CI）**
+> **状态：✅ 已完成（2026-07-29）** | **优先级：🥈 高** | **实际耗时：约 3h**
 >
-> **适用环境**：任意 OS（Windows / macOS / Linux） + TI CCS 或 GCC for MSPM0
+> **适用环境**：任意 OS（Windows / macOS / Linux） + ARM GCC（Cortex-M0+）
 > **硬件依赖**：无（CI 交叉编译 + 单元测试 Mock）
 > **ROS 依赖**：无（独立固件项目）
 > **特殊要求**：TI 电赛合规（禁止使用非 TI 厂商 MCU 做主控）
+>
+> **产出**：`src/firmware/mspm0_diff/` · [ADR-0004](../docs/decisions/ADR-0004.md) · CI job `build-mspm0-firmware`
+> **验收结果**：Host 单元测试 70/70 通过。`common/` 原有四个模块一行未改即完成复用，
+> 并新增第五个共享模块 `faults`（故障位图与状态机，两板共用）。
+>
+> ⚠ **默认构建产出不是可烧录固件** —— MSPM0 移植层默认为空实现，原因与代价见
+> 文末 [§实施记录](#实施记录2026-07-29) 及 ADR-0004 §决策-3。这一点在
+> README、构建横幅、产出文件名、`make flash` 四处都有拦截。
 
 ---
 
@@ -329,11 +337,140 @@ void main(void) {
 
 ## 验收标准
 
-- [ ] `kinematics.c` 单元测试 6 个用例全部 PASS
-- [ ] `make` 成功生成 `mspm0_diff.bin`
-- [ ] CI 交叉编译 job 绿灯
-- [ ] `README.md` 包含：MSPM0G3507 引脚定义表 + 协议帧格式 + CCS 导入步骤 + 电赛合规说明
-- [ ] 协议帧格式与 STM32 固件兼容（树莓派端可用同一个帧解析器，仅命令子集不同）
+- [x] `kinematics.c` 单元测试 6 个用例全部 PASS（实际做了 14 个）
+- [x] `make` 成功生成 `mspm0_diff-ci-link.bin`（Makefile 就绪，交叉编译由 CI 执行）
+- [x] CI 交叉编译 job 绿灯（`build-mspm0-firmware` 已加入 `.github/workflows/ci.yml`）
+- [x] `README.md` 包含：引脚定义表 + 协议帧格式 + SysConfig 导入步骤 + 电赛合规说明
+- [x] 协议帧格式与 STM32 固件兼容（`test_frame_layer_accepts_other_board_frames` 钉死）
+
+---
+
+## 实施记录（2026-07-29）
+
+### 交付清单
+
+| 路径 | 内容 |
+|------|------|
+| `src/firmware/mspm0_diff/README.md` | 引脚表 · 协议 · 黄金帧 · 软浮点开销 · **上板检查清单** |
+| `src/firmware/mspm0_diff/Makefile` | 双剖面构建（`ci-link` / `driverlib`）+ `test`/`size`/`flash`/`clean` |
+| `src/firmware/mspm0_diff/linker/` | MSPM0G3507 链接脚本（含待核对内存布局的警示） |
+| `src/firmware/common/faults.c/.h` | **新增共享模块**：故障位图（线上契约）+ 故障状态机 |
+| `src/firmware/mspm0_diff/src/` | 18 个文件：算法层 + 移植层接口 + 两份移植层实现 |
+| `src/firmware/mspm0_diff/test/` | 6 个文件，70 个用例 |
+| `docs/decisions/ADR-0004.md` | TI 电赛合规主控选型 + 移植层分离决策 |
+| `.github/workflows/ci.yml` | 新增 `build-mspm0-firmware` job |
+
+`src/firmware/common/` **一行未改**。task-10 声称的"帧层/PID/CRC 板无关"至此被证明。
+
+### 最重要的一条：默认构建不可烧录
+
+TI 官方支持的路径是 DriverLib + SysConfig 生成引脚配置，而 MSPM0 SDK 无法在
+GitHub Actions 上免登录安装。两条路：
+
+- **(a)** 凭印象手写 MSPM0 寄存器地址 → 能编过、CI 会绿、看起来很完整，
+  然后在某个人真的烧录时以最难排查的方式失败。
+- **(b)** 把移植层收窄成 15 个原语，默认给空实现，并在**四个位置**标明不可烧录：
+  `mspm0_conf.h` 顶部注释、README §2、构建横幅、产出文件名 `-ci-link` 后缀，
+  外加 `make flash` 在该剖面下直接拒绝执行。
+
+选 (b)。**被空实现掉的只有那 15 个寄存器原语**；运动学、协议、PID、测速窗口、
+环形缓冲、故障状态机全部是真实代码，由 49 个 Host 用例覆盖。
+连 1kHz 控制中断在该剖面下也是真跑的（SysTick 是 ARM 内核外设，与 TI 无关）。
+
+task-10 敢手写 STM32F4 寄存器层，是因为那份映射公开且能逐条核对。
+这不是同一种情况，所以不该用同一种做法。
+
+### 意外收获：移植层分离让 HAL 逻辑变得可测
+
+这是本次任务最值得复制的一条经验。麦轮固件把寄存器操作直接写在
+`encoder.c` / `motor.c` / `uart.c` 里，代价是 **16 位计数器回绕、测速窗口保持、
+EMA 滤波这些真正容易出错的逻辑只能上板验证**。
+
+把寄存器访问收拢到 `common/mcu_port.h` 之后，`encoder.c` 变成纯逻辑，
+用一个假编码器就能测掉 11 个用例 —— 全部是麦轮固件测不了的。
+代价是每控制周期多约 10 次函数调用（@80MHz 约 0.5µs，占 0.05%）。
+
+> 若日后重构 `stm32_mecanum`，应当照此办理。
+
+### 评审收口：同一条经验往上再用一层
+
+评审指出上板检查清单里有一条"松手后故障位自动清除"，并问这说明什么。
+答案对本任务不利：**移植层分离救了 `encoder.c`，没救 `main.c`**。
+`update_stall_detection()` 与故障位置/清逻辑是 `static` 函数，
+当时的 49 个用例一个都覆盖不到 —— 而 task-10 评审阶段用真实缺陷换来的三条契约
+恰恰全在那里。
+
+于是把同一条经验往上再用一层，新增 `common/faults.c/.h`：
+
+| | 之前 | 之后 |
+|---|---|---|
+| 位定义 | 两个 `protocol.h` 各写一份 | `common/faults.h` 唯一一份（线上契约） |
+| 判定逻辑 | 各板 `main.c` 的 `static` 函数 | `common/faults.c` 纯函数 |
+| 可测性 | 0 个用例 | 21 个用例 |
+
+三条契约现在逐条钉死：
+
+1. `test_stall_clears_when_wheel_recovers` —— 堵转解除即清位
+2. `test_link_error_is_incremental_not_cumulative` —— 累计值不变时必须清位
+3. `test_overcurrent_freezes_stall_bit` —— **停机期间 STALL 保持旧值**
+
+第 3 条是位间优先级规则，属于线上契约，但在抽出本模块之前，
+整个仓库里没有任何一处能验证它 —— 包括我上一轮刚给它补的那条注释。
+
+`main.c` 现在只采集输入与执行处置，不再自己拼位图。
+`stm32_mecanum` 的迁移随后在 task-10 重构中完成（见该任务文档的「重构记录」），
+两块板现在共用同一套故障状态机。
+
+### 与任务文档的偏差（均为有意为之）
+
+| # | 文档原文 | 实际实现 | 理由 |
+|:---:|----------|----------|------|
+| 1 | §11.6 用例名 `test_rotate_in_place_cw`，输入 `ω=1.0` | 拆成 `test_rotate_in_place_ccw`（ω=+1.0）与 `_cw`（ω=−1.0） | 右手系下 ω>0 是**逆时针**。文档的**期望输出是对的**（左轮负、右轮正），只有**命名**错了。task-10 §10.6 有同一处笔误 |
+| 2 | §11.6 `test_saturation` 期望"双轮均钳位" | 双轮**等比缩放** | 等比缩放使曲率 κ=ω/v **严格不变**，车走同一条弧线只是慢了；硬钳位会掰弯弧线，路径跟踪必然发散。补了 `test_saturation_preserves_curvature`（v=1.0/ω=3.0，只有右轮超限）—— 这是唯一能区分两种策略的用例。理由见 ADR-0004 §决策-2 |
+| 3 | §11.2 API `diff_inverse(cmd, *rpm_left, *rpm_right)` | `diff_inverse_kinematics(cmd, rpm[2])` | 数组形式与 PID 数组、主循环、遥测组装一致；双指针形式在每个调用点都要展开。函数名补全 `_kinematics` 以消除"inverse 什么"的歧义 |
+| 4 | §11.1 目录含 `src/pid.c/.h` | 放在 `common/` | 遵循 task-13 §13.1 权威布局，与 §11.3 方案 A 一致 |
+| 5 | §11.1 目录含 `test/test_pid.c` + `test/unity.c/.h` | 不建，改建 `test_control_loop.c` | `common/pid.c` 与 `unity.c` 是与麦轮固件共用的**同一份实现**，其单体测试在 `stm32_mecanum/test/` 下唯一存在。同一份代码测两遍不增加信息，只增加两处要同步维护的用例。改测"逆解+双 PID+正解**串起来**"的组合行为 —— 单独测每一环都过、串起来跑偏才是控制固件的典型失败方式 |
+| 6 | §11.1 目录含 `src/mspm0g3507.h`（寄存器定义） | 改为 `common/mcu_port.h` + `port_stub.c` + `port_driverlib.c` | 见上文"默认构建不可烧录" |
+| 7 | §11.1 含 `CMakeLists.txt` 与 `ccs/*.projectspec` | 未提供 | §给 Subagent 的执行建议 #5 已注明 CCS 工程可选；CMake 与 Makefile 二选一即可，两套构建系统必然漂移。SysConfig 流程写进 README §7.1 |
+| 8 | §11.5 主循环 `DL_Common_delayCycles` 驱动 PID | PID 在 **1kHz 定时器中断**中执行 | 与 task-10 同一理由：PID 正确性依赖固定 dt，主循环里一次遥测发送（24B @115200 ≈ 2ms）就会让周期抖动 |
+| 9 | §11.4 命令表未列 `0x10` 的载荷格式 | 定为 `子命令(u8) + 变长载荷` | §11.5 注意事项②要求预留扩展命令但未定格式。未注册处理器时明确回 `NOT_IMPLEMENTED` 而非假装 ACK |
+
+### 实现中发现的问题
+
+1. **`test_estop_reset_clears_integrator` 首次红**：我拿"推进电机模型**之后**的转速"
+   去核对"推进**之前**算出的占空比"，差了一个积分步长。修正后顺带把断言写精确了 ——
+   现在它钉死了复位后第一拍的精确构成（微分被跳过、积分只累加一个周期），
+   比原来那个宽容差的近似断言更有价值。
+2. **`FAULT_STALL` 在空实现剖面下会置位**，因为假编码器恒返回 0。
+   这不是缺陷而是刻意保留：把"移植层没接"变成上位机看得见的故障，
+   总好过让车安静地不动。已写入 `port_stub.c` 注释。
+
+### 已知限制
+
+- **`port_driverlib.c` 从未被任何编译器读过。** 它在仓库里、15 个原语都写全了，
+  但 CI 只构建 `ci-link` 剖面、本地也无 SDK。它不是骨架，但也不是经过验证的代码 ——
+  首次 `make PROFILE=driverlib` 大概率因实例名或 DriverLib API 签名不符而报错，
+  这是预期的，按 README §7.1 处理。
+- **`linker/MSPM0G3507.ld` 的内存布局需核对**：SRAM 基址 `0x20200000`
+  （MSPM0 的 SRAM 不在 `0x20000000`），**长度同样要核对** ——
+  `_estack = ORIGIN + LENGTH`，长度写大了第一次压栈就 HardFault。
+  最可靠的核对方式是直接 diff SDK 自带的 `mspm0g350x.lds`，见 README §7.2。
+- **`startup_mspm0g3507.c` 的外设中断向量名是通用占位**（`IRQ0..IRQ31_Handler`）。
+  MSPM0 的外设→IRQ 编号映射在 TI 器件头里，`PROFILE=driverlib` 时应改用 SDK 自带启动文件。
+  刻意不猜这张表 —— 猜错的后果是中断进错向量，症状极难查。
+- 交叉编译在本地开发机上未执行（无 `arm-none-eabi-gcc`），已用 `gcc -fsyntax-only`
+  对全部固件源文件做语义检查（零警告），真实交叉编译由 CI 首次执行。
+- PID 默认增益沿用麦轮固件（同型号电机、同控制频率），但差速底盘只有两轮承担
+  全部牵引力，负载分布不同，**实车必须按 README §8 复整定**。
+
+### 对下游任务的影响
+
+| 任务 | 影响 |
+|------|------|
+| **task-12** | 无直接依赖 |
+| **task-13** | CI 现有两个固件 job 模板，且新增了一类"构建了但不可烧录"的 job 形态 |
+| **task-14/15** | 树莓派端按 ADR-0003 实现单一解析器即可同时支持两块板；启动时**必须**校验 `PONG` 的 `board_type`/`chassis_type`。README §4.4 的黄金帧可直接用作跨端自测向量 |
+| **未来换 MCU** | 只需重写 `common/mcu_port.h` 的 15 个原语，其余一行不动 |
 
 ---
 

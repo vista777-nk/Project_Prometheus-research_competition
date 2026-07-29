@@ -1,36 +1,36 @@
 /**
  * @file main.c
- * @brief STM32F407 麦轮固件入口：初始化、1kHz 速度环中断、主循环
+ * @brief MSPM0G3507 差速固件入口：初始化、1kHz 速度环中断、主循环
  *
- * 任务划分 —— 这是本固件最重要的一条结构约定：
+ * 任务划分 —— 与麦轮固件 (task-10) 保持同一套结构，便于对照阅读：
  *
  *   控制中断 (1kHz，硬实时)      主循环 (软实时)
  *   ├─ 硬件急停检测              ├─ 串口收字节 → 拆帧 → 命令分发
  *   ├─ 编码器采样                ├─ 空闲重同步
- *   ├─ 逆运动学解算              ├─ 电流采样 (ADC 轮询)
- *   ├─ 四路 PID                  ├─ 遥测上报 (20Hz)
- *   ├─ PWM 输出                  └─ 状态灯
- *   └─ 故障评估
+ *   ├─ 差速逆解                  ├─ 发送缓冲下发
+ *   ├─ 两路 PID                  ├─ 电流采样 (ADC 轮询)
+ *   ├─ PWM 输出                  ├─ 遥测上报 (20Hz)
+ *   └─ 堵转/超时检测             └─ 状态灯
  *
  * 速度环放在中断里，是因为 PID 的正确性依赖固定的 dt。如果和串口解析、
- * ADC 轮询挤在同一个主循环里，一次 40 字节的遥测发送就能让控制周期抖动几毫秒，
- * 积分项和微分项会跟着一起失真。task-10 §10.5 的伪代码用 HAL_Delay(1) 只是示意。
+ * ADC 轮询挤在同一个主循环里，一次遥测发送 (24 字节 @115200 ≈ 2ms) 就能让
+ * 控制周期抖动，积分项和微分项会跟着一起失真。
  *
- * 分层：本文件不含任何寄存器访问。硬件操作走 common/mcu_port.h，
- * 由 port_stm32f407.c 实现；故障判定走 common/faults.c。
- * 这样做的直接收益是那两部分逻辑都能在 Host 上测 —— 详见 README §代码结构。
+ * Cortex-M0+ 无 FPU 也无硬件除法，浮点全是库调用。控制中断里的开销估算见 README §5.2：
+ * 约 2000–3000 个周期 @80MHz ≈ 25–38µs，占 1ms 周期的 3–4%，余量充足。
+ * (这是数量级估计，不是实测值 —— 真实数字要等上板后用 GPIO 翻转 + 示波器量。)
  *
  * 铁律：本固件只做运动控制。不做感知、不做决策、不做通信路由。
+ * 电赛合规：主控为 TI MSPM0G3507，运动闭环全部在本芯片内完成 (ADR-0004)。
  */
 #include <stdbool.h>
 #include <string.h>
 
 #include "board_config.h"
 #include "encoder.h"
-#include "faults.h"
 #include "kinematics.h"
-#include "mcu_port.h"
 #include "motor.h"
+#include "mcu_port.h"
 #include "pid.h"
 #include "protocol.h"
 #include "uart.h"
@@ -38,26 +38,27 @@
 
 /* ===================== 共享状态 =====================
  * 主循环写 / 中断读的状态，一律通过 port_irq_disable() 保护整体拷贝。
- * RobotVelocity 是 12 字节，不是单条指令能原子完成的。
+ * DiffVelocity 是 8 字节，不是单条指令能原子完成的 —— 尤其在 Cortex-M0+ 上。
  */
 
-static volatile RobotVelocity s_cmd;              /**< 最新速度指令 */
-static volatile uint32_t      s_last_cmd_ms;      /**< 最近一次 SET_VELOCITY 的时刻 */
-static volatile float         s_actual_rpm[NUM_WHEELS];
+static volatile DiffVelocity s_cmd;               /**< 最新速度指令 */
+static volatile uint32_t     s_last_cmd_ms;       /**< 最近一次 SET_VELOCITY 的时刻 */
+static volatile float        s_actual_rpm[NUM_WHEELS];
 
-/** 故障状态机。判定逻辑在 common/faults.c，本文件只负责采集输入与执行处置。 */
+/** 故障状态机。判定逻辑在 common/faults.c，本文件只负责采集输入与执行处置。
+ *  这样做的直接收益：全部故障状态迁移可在 Host 上表驱动测试 (test_faults.c)，
+ *  而不必依赖 1kHz 中断 + 真实编码器 + ADC。 */
 static FaultMonitor s_faults;
 
 static PIDController s_pid[NUM_WHEELS];
 
 /* ===================== 协议回调 ===================== */
 
-static void handle_set_velocity(const RobotVelocity *cmd, void *ctx)
+static void handle_set_velocity(const DiffVelocity *cmd, void *ctx)
 {
     (void)ctx;
     port_irq_disable();
-    s_cmd.vx = cmd->vx;
-    s_cmd.vy = cmd->vy;
+    s_cmd.v = cmd->v;
     s_cmd.omega = cmd->omega;
     s_last_cmd_ms = port_millis();
     port_irq_enable();
@@ -67,8 +68,7 @@ static void handle_emergency_stop(void *ctx)
 {
     (void)ctx;
     port_irq_disable();
-    s_cmd.vx = 0.0f;
-    s_cmd.vy = 0.0f;
+    s_cmd.v = 0.0f;
     s_cmd.omega = 0.0f;
     port_irq_enable();
 
@@ -78,21 +78,25 @@ static void handle_emergency_stop(void *ctx)
     }
 }
 
+/* 刻意**不**注册 on_extension：Phase 1 还没有任何竞赛外设接上来。
+   不注册时协议层会明确回 ERROR/NOT_IMPLEMENTED，比注册一个假装成功的
+   空回调诚实得多 —— 上位机能立刻知道这块固件不支持扩展。
+   赛场上接入外设时，在这里补一个回调即可，协议不用改。 */
+
 /* ===================== 1kHz 速度环中断 ===================== */
 
 /** 读取一份速度指令的快照，避免在中断中间被主循环改写 */
-static RobotVelocity read_command_snapshot(void)
+static DiffVelocity read_command_snapshot(void)
 {
-    RobotVelocity cmd;
-    cmd.vx = s_cmd.vx;
-    cmd.vy = s_cmd.vy;
+    DiffVelocity cmd;
+    cmd.v = s_cmd.v;
     cmd.omega = s_cmd.omega;
     return cmd;
 }
 
 /**
- * 控制中断回调，由移植层在 TIM6 ISR 上下文中调用。
- * 这样 main.c 不需要知道中断向量叫什么名字。
+ * 控制中断回调，由移植层在定时器 ISR 上下文中调用。
+ * 这样 main.c 不需要知道 MSPM0 的中断向量叫什么名字。
  */
 void port_control_isr_hook(void)
 {
@@ -104,19 +108,18 @@ void port_control_isr_hook(void)
 
     /* --- 2. 指令看门狗：上位机掉线就刹停 --- */
     const uint32_t command_age_ms = port_millis() - s_last_cmd_ms;
-    RobotVelocity cmd = read_command_snapshot();
+    DiffVelocity cmd = read_command_snapshot();
     if (command_age_ms > CMD_TIMEOUT_MS) {
-        cmd.vx = 0.0f;
-        cmd.vy = 0.0f;
+        cmd.v = 0.0f;
         cmd.omega = 0.0f;
     }
 
-    /* --- 3. 逆运动学 --- */
+    /* --- 3. 差速逆解 --- */
     float target_rpm[NUM_WHEELS];
-    const int kin_status = inverse_kinematics(&cmd, target_rpm);
+    const int kin_status = diff_inverse_kinematics(&cmd, target_rpm);
 
     /* --- 4. 故障评估 ---
-       急停锁存、堵转判定、位间优先级（过流/急停期间 STALL 保持旧值）
+       急停锁存、堵转判定、位间优先级 (过流/急停期间 STALL 保持旧值)
        全部由状态机负责，本文件不再自己拼位图。 */
     float actual_snapshot[NUM_WHEELS];
     for (int i = 0; i < NUM_WHEELS; i++) {
@@ -150,7 +153,7 @@ void port_control_isr_hook(void)
         return;
     }
 
-    /* --- 6. 四路独立 PID → PWM --- */
+    /* --- 6. 两路独立 PID → PWM --- */
     for (int i = 0; i < NUM_WHEELS; i++) {
         const float duty = pid_update(&s_pid[i], target_rpm[i],
                                       actual_snapshot[i], CONTROL_DT_S);
@@ -160,7 +163,7 @@ void port_control_isr_hook(void)
 
 /* ===================== 主循环 ===================== */
 
-/** 把协议层的字节输出接到串口 */
+/** 把协议层的字节输出接到串口发送缓冲 */
 static void uart_writer(const uint8_t *data, uint16_t len, void *ctx)
 {
     (void)ctx;
@@ -178,7 +181,7 @@ static void publish_telemetry(void)
     }
     port_irq_enable();
 
-    /* 电流在这里采（ADC 轮询，不进控制中断），但过流的处置由控制中断执行 */
+    /* 电流在这里采 (ADC 轮询，不进控制中断)，但过流的处置动作由控制中断执行 */
     motor_sample_currents(current);
 
     FaultLinkInput link;
@@ -219,16 +222,15 @@ int main(void)
     port_system_init();
     port_gpio_init();
 
-    const MecanumGeometry geometry = {
+    const DiffGeometry geometry = {
         CHASSIS_WHEEL_RADIUS_M,
-        CHASSIS_LX_M,
-        CHASSIS_LY_M,
+        CHASSIS_TRACK_WIDTH_M,
         MOTOR_MAX_RPM
     };
-    (void)kinematics_init(&geometry);
+    (void)diff_kinematics_init(&geometry);
 
     /* 故障判定阈值全部来自 board_config.h。堵转以控制周期计数，
-       因此 FAULT_STALL_TIME_MS 恰好等于所需的评估次数（1kHz ⟹ 1 次/ms）。 */
+       因此 FAULT_STALL_TIME_MS 恰好等于所需的评估次数 (1kHz ⟹ 1 次/ms)。 */
     const FaultConfig fault_cfg = {
         FAULT_STALL_TARGET_RPM,
         FAULT_STALL_RPM_FLOOR,
@@ -244,8 +246,7 @@ int main(void)
         s_actual_rpm[i] = 0.0f;
     }
 
-    s_cmd.vx = 0.0f;
-    s_cmd.vy = 0.0f;
+    s_cmd.v = 0.0f;
     s_cmd.omega = 0.0f;
     /* 上电即视为"刚收到指令"，避免开机第一秒就报超时故障 */
     s_last_cmd_ms = port_millis();
@@ -267,7 +268,7 @@ int main(void)
     uint8_t rx_chunk[64];
 
     while (1) {
-        /* 1. 串口接收 → 拆帧 → 命令分发（应答在 protocol.c 内部完成） */
+        /* 1. 串口接收 → 拆帧 → 命令分发 (应答在 protocol.c 内部完成) */
         const uint16_t received = uart_read(rx_chunk, (uint16_t)sizeof(rx_chunk));
         if (received > 0u) {
             (void)protocol_feed(rx_chunk, received);

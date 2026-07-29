@@ -1,6 +1,6 @@
 /**
  * @file motor.c
- * @brief 占空比 → PWM + 方向 的映射，以及电流采样折算（纯逻辑，不碰寄存器）
+ * @brief 占空比 → PWM + 方向 的映射，以及电流采样折算
  *
  * 这一层唯一的职责是把"带符号的占空比"翻译成"PWM 幅值 + H 桥方向"。
  * 看起来平凡，但它是最容易埋雷的地方之一：
@@ -9,9 +9,6 @@
  *     必须在这里拦下，而不是指望上游永远干净。
  *   · 占空比过零时若不先把方向脚切好再给 PWM，H 桥会短暂直通。
  *     这里的顺序是：先设方向，后设幅值。
- *
- * 功率级假定为 TB6612FNG 双 H 桥 ×2。换功率级（如 DRV8833 / BTS7960）时，
- * 只需改移植层 port_motor_set_direction() 的真值表，本文件不受影响。
  */
 #include "motor.h"
 
@@ -24,10 +21,8 @@ static float s_duty[NUM_WHEELS];
 
 /** ADC 通道映射，索引同轮序号 */
 static const uint8_t s_current_channel[NUM_WHEELS] = {
-    (uint8_t)CURRENT_ADC_CHANNEL_FL,
-    (uint8_t)CURRENT_ADC_CHANNEL_FR,
-    (uint8_t)CURRENT_ADC_CHANNEL_RL,
-    (uint8_t)CURRENT_ADC_CHANNEL_RR
+    (uint8_t)CURRENT_ADC_CHANNEL_LEFT,
+    (uint8_t)CURRENT_ADC_CHANNEL_RIGHT
 };
 
 void motor_init(void)
@@ -103,7 +98,6 @@ void motor_sample_currents(float out[NUM_WHEELS])
         return;
     }
     for (int i = 0; i < NUM_WHEELS; i++) {
-        /* 分流电阻采样得到的是电流幅值，不含方向；方向可由占空比符号推断 */
         const uint16_t raw = port_adc_read(s_current_channel[i]);
         out[i] = (float)raw * CURRENT_ADC_SCALE_A_PER_LSB;
     }

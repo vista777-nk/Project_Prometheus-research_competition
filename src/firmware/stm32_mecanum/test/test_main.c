@@ -14,6 +14,7 @@
 #include "unity.h"
 
 void run_crc16_tests(void);
+void run_encoder_tests(void);
 void run_kinematics_tests(void);
 void run_pid_tests(void);
 void run_protocol_tests(void);
@@ -29,6 +30,7 @@ int main(void)
     UNITY_BEGIN();
     run_crc16_tests();
     run_kinematics_tests();
+    run_encoder_tests();
     run_pid_tests();
     run_protocol_tests();
     return UNITY_END();
