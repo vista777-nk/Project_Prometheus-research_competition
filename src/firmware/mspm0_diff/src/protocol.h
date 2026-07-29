@@ -70,19 +70,13 @@ typedef enum {
 } ProtocolErrorCode;
 
 /**
- * TELEMETRY 帧的故障码位图 (uint16, 小端)。
- * 属于线上契约的一部分，**与麦轮固件逐位一致**：树莓派端只写一套解码逻辑。
- * 改动需同步改 stm32_mecanum/protocol.h 与上位机。
+ * TELEMETRY 帧的故障码位图定义在 `common/faults.h`。
+ *
+ * 位定义是**线上契约**且两块板逐位一致，因此只存一份 —— 分别写在两个
+ * protocol.h 里迟早会漂移。位间的优先级规则（ESTOP/OVERCURRENT 置位期间
+ * STALL 保持旧值）同样在那里，并由 test/test_faults.c 钉死。
  */
-#define FAULT_NONE              0x0000u
-#define FAULT_OVERCURRENT       0x0001u  /**< 任一电机电流超过阈值 */
-#define FAULT_STALL             0x0002u  /**< 有目标转速但轮子不转 (堵转/断线)。
-                                              注意：FAULT_OVERCURRENT 或 FAULT_ESTOP 置位期间电机已刹停，
-                                              堵转检测停止更新，本位保持旧值。上位机此时应忽略本位。 */
-#define FAULT_CMD_TIMEOUT       0x0004u  /**< 超时未收到 SET_VELOCITY，已自动刹停 */
-#define FAULT_ESTOP             0x0008u  /**< 硬件急停被触发 (锁存，只能复位退出) */
-#define FAULT_KINEMATICS_SAT    0x0010u  /**< 速度指令超出底盘能力，已等比缩放 */
-#define FAULT_UART_ERROR        0x0020u  /**< 串口链路错误率异常 (CRC/溢出) */
+#include "faults.h"
 
 /**
  * 字节输出回调：把组好的整帧交给物理层 (实机=UART，测试=内存缓冲)。

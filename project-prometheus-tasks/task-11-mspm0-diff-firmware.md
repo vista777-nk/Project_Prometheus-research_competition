@@ -8,7 +8,8 @@
 > **特殊要求**：TI 电赛合规（禁止使用非 TI 厂商 MCU 做主控）
 >
 > **产出**：`src/firmware/mspm0_diff/` · [ADR-0004](../docs/decisions/ADR-0004.md) · CI job `build-mspm0-firmware`
-> **验收结果**：Host 单元测试 49/49 通过。`common/` 一行未改即完成复用。
+> **验收结果**：Host 单元测试 70/70 通过。`common/` 原有四个模块一行未改即完成复用，
+> 并新增第五个共享模块 `faults`（故障位图与状态机，两板共用）。
 >
 > ⚠ **默认构建产出不是可烧录固件** —— MSPM0 移植层默认为空实现，原因与代价见
 > 文末 [§实施记录](#实施记录2026-07-29) 及 ADR-0004 §决策-3。这一点在
@@ -353,8 +354,9 @@ void main(void) {
 | `src/firmware/mspm0_diff/README.md` | 引脚表 · 协议 · 黄金帧 · 软浮点开销 · **上板检查清单** |
 | `src/firmware/mspm0_diff/Makefile` | 双剖面构建（`ci-link` / `driverlib`）+ `test`/`size`/`flash`/`clean` |
 | `src/firmware/mspm0_diff/linker/` | MSPM0G3507 链接脚本（含待核对内存布局的警示） |
+| `src/firmware/common/faults.c/.h` | **新增共享模块**：故障位图（线上契约）+ 故障状态机 |
 | `src/firmware/mspm0_diff/src/` | 18 个文件：算法层 + 移植层接口 + 两份移植层实现 |
-| `src/firmware/mspm0_diff/test/` | 5 个文件，49 个用例 |
+| `src/firmware/mspm0_diff/test/` | 6 个文件，70 个用例 |
 | `docs/decisions/ADR-0004.md` | TI 电赛合规主控选型 + 移植层分离决策 |
 | `.github/workflows/ci.yml` | 新增 `build-mspm0-firmware` job |
 
@@ -390,6 +392,34 @@ EMA 滤波这些真正容易出错的逻辑只能上板验证**。
 
 > 若日后重构 `stm32_mecanum`，应当照此办理。
 
+### 评审收口：同一条经验往上再用一层
+
+评审指出上板检查清单里有一条"松手后故障位自动清除"，并问这说明什么。
+答案对本任务不利：**移植层分离救了 `encoder.c`，没救 `main.c`**。
+`update_stall_detection()` 与故障位置/清逻辑是 `static` 函数，
+当时的 49 个用例一个都覆盖不到 —— 而 task-10 评审阶段用真实缺陷换来的三条契约
+恰恰全在那里。
+
+于是把同一条经验往上再用一层，新增 `common/faults.c/.h`：
+
+| | 之前 | 之后 |
+|---|---|---|
+| 位定义 | 两个 `protocol.h` 各写一份 | `common/faults.h` 唯一一份（线上契约） |
+| 判定逻辑 | 各板 `main.c` 的 `static` 函数 | `common/faults.c` 纯函数 |
+| 可测性 | 0 个用例 | 21 个用例 |
+
+三条契约现在逐条钉死：
+
+1. `test_stall_clears_when_wheel_recovers` —— 堵转解除即清位
+2. `test_link_error_is_incremental_not_cumulative` —— 累计值不变时必须清位
+3. `test_overcurrent_freezes_stall_bit` —— **停机期间 STALL 保持旧值**
+
+第 3 条是位间优先级规则，属于线上契约，但在抽出本模块之前，
+整个仓库里没有任何一处能验证它 —— 包括我上一轮刚给它补的那条注释。
+
+`main.c` 现在只采集输入与执行处置，不再自己拼位图。
+`stm32_mecanum` 已共用位定义，判定逻辑的迁移属于 task-10 范围，见「已知限制」。
+
 ### 与任务文档的偏差（均为有意为之）
 
 | # | 文档原文 | 实际实现 | 理由 |
@@ -416,14 +446,20 @@ EMA 滤波这些真正容易出错的逻辑只能上板验证**。
 
 ### 已知限制
 
-- **移植层（`port_driverlib.c`）尚未在真实硬件上验证**，且其中的外设实例名
-  必须与 SysConfig 生成的 `ti_msp_dl_config.h` 核对后才能编译通过。
-- **`linker/MSPM0G3507.ld` 的内存布局需核对**：SRAM 基址写的是 `0x20200000`
-  （MSPM0 的 SRAM 不在 `0x20000000`），来源标注在脚本注释里，上板前必须对照
-  数据手册 SLASEZ4 确认。
-- **`startup_mspm0g3507.c` 的外设中断向量名是通用占位** （`IRQ0..IRQ31_Handler`）。
+- **`port_driverlib.c` 从未被任何编译器读过。** 它在仓库里、15 个原语都写全了，
+  但 CI 只构建 `ci-link` 剖面、本地也无 SDK。它不是骨架，但也不是经过验证的代码 ——
+  首次 `make PROFILE=driverlib` 大概率因实例名或 DriverLib API 签名不符而报错，
+  这是预期的，按 README §7.1 处理。
+- **`linker/MSPM0G3507.ld` 的内存布局需核对**：SRAM 基址 `0x20200000`
+  （MSPM0 的 SRAM 不在 `0x20000000`），**长度同样要核对** ——
+  `_estack = ORIGIN + LENGTH`，长度写大了第一次压栈就 HardFault。
+  最可靠的核对方式是直接 diff SDK 自带的 `mspm0g350x.lds`，见 README §7.2。
+- **`startup_mspm0g3507.c` 的外设中断向量名是通用占位**（`IRQ0..IRQ31_Handler`）。
   MSPM0 的外设→IRQ 编号映射在 TI 器件头里，`PROFILE=driverlib` 时应改用 SDK 自带启动文件。
   刻意不猜这张表 —— 猜错的后果是中断进错向量，症状极难查。
+- **`stm32_mecanum` 尚未迁移到 `common/faults.c`**：位定义已统一，
+  但其 `main.c` 仍是自己那套等价实现。两处逻辑等价但独立，存在漂移风险。
+  迁移属于 task-10 范围，需要单独的回归验证，未在本任务中执行。
 - 交叉编译在本地开发机上未执行（无 `arm-none-eabi-gcc`），已用 `gcc -fsyntax-only`
   对全部固件源文件做语义检查（零警告），真实交叉编译由 CI 首次执行。
 - PID 默认增益沿用麦轮固件（同型号电机、同控制频率），但差速底盘只有两轮承担

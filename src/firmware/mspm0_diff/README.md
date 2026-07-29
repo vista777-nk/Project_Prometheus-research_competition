@@ -2,7 +2,7 @@
 
 > **Task-11** · Phase 1 基础设施 · 与 [`stm32_mecanum`](../stm32_mecanum/) 共享 [`common/`](../common/)
 >
-> 状态：算法层完成并测试覆盖（Host 49/49）· HAL 移植层待接 TI SDK 与真实硬件
+> 状态：算法层完成并测试覆盖（Host 70/70）· HAL 移植层待接 TI SDK 与真实硬件
 
 ---
 
@@ -55,7 +55,7 @@
 
 **被空实现掉的只有 `port_stub.c` 里那十几个寄存器原语。**
 运动学、协议、PID、测速窗口、环形缓冲、故障状态机全部是真实代码，
-且被 49 个 Host 用例覆盖。连 1kHz 控制中断本身在 `ci-link` 下也是真跑的
+且被 70 个 Host 用例覆盖。连 1kHz 控制中断本身在 `ci-link` 下也是真跑的
 （SysTick 是 ARM 内核外设，与 TI 无关）。
 
 要得到可烧录固件 → §7。
@@ -213,13 +213,14 @@ make clean
 make help
 ```
 
-### 5.1 测试覆盖（49 个用例）
+### 5.1 测试覆盖（70 个用例）
 
 | 文件 | 用例 | 覆盖 |
 |------|:---:|------|
 | `test_kinematics.c` | 14 | §11.6 的 6 个必测用例 + 曲率保持 + 饱和阈值 + 往返 + NaN/NULL/非法几何 |
 | `test_protocol.c` | 17 | 命令表、载荷布局、错误注入、`0x10` 扩展、黄金帧、跨板帧兼容、空闲重同步 |
 | `test_encoder.c` | 11 | 16 位回绕（正反向）、测速窗口保持、EMA 系数、方向符号、双轮独立 |
+| `test_faults.c` | 21 | 故障状态机全部迁移：三类生命周期 + 位间优先级 + 轮数边界 + NULL 安全 |
 | `test_control_loop.c` | 7 | 逆解+双 PID+正解**整链**：直线 / 弧线 / 原地旋转 / 非对称负载 / 饱和路径 / 急停复位 |
 
 **本工程没有 `test_crc16.c` 与 `test_pid.c`。** `common/crc16.c` 与 `common/pid.c`
@@ -227,6 +228,27 @@ make help
 同一份代码测两遍不增加信息，只增加两处要同步维护的用例。
 本工程改测 `test_control_loop.c` —— 逆解 + 双路 PID + 正解**串起来**的组合行为，
 那才是 task-11 特有的风险（单独测每一环都过、串起来跑偏，是控制固件最典型的失败方式）。
+
+#### 故障状态机为什么在 `common/` 而不是 `main.c`
+
+故障位图是**线上契约**，两块板逐位一致，所以位定义只存一份（`common/faults.h`）——
+分别写在两个 `protocol.h` 里迟早会漂移。
+
+更要紧的是判定逻辑。它原先写在 `main.c` 的 `static` 函数里，结果是
+**一个单元测试都覆盖不到**：依赖 1kHz 中断、真实编码器、ADC 采样。
+而这些逻辑恰恰是 task-10 评审阶段用真实缺陷换来的：
+
+| 契约 | 原始缺陷 |
+|------|----------|
+| `FAULT_STALL` 跟随实际状态 | 只置不清 → 一次瞬时堵转，故障灯亮到复位 |
+| `FAULT_UART_ERROR` 按增量判定 | 用累计计数 → 开机一次噪声，故障位永久挂着 |
+| 停机期间 `STALL` 保持旧值 | 电机已刹停时"轮子不转"不构成堵转证据 |
+
+抽成 `common/faults.c` 纯函数后，三条全部由 `test_faults.c` 逐条钉死。
+**第三条尤其重要** —— 它是位间优先级规则，属于线上契约，但在抽出本模块之前，
+整个仓库里没有任何一处能验证它。
+
+`main.c` 现在只负责采集输入与执行处置（刹停、PID 复位），不再自己拼位图。
 
 ### 5.2 Cortex-M0+ 软浮点开销
 
@@ -272,6 +294,11 @@ M0+ **既没有 FPU，也没有硬件整数除法指令**，浮点全是 `__aeab
 
 ### 7.1 生成 SysConfig 配置
 
+> ⚠ **`port_driverlib.c` 从未被任何编译器读过。** 它在仓库里、15 个原语都写全了，
+> 但 CI 只构建 `ci-link` 剖面，本地也没有 SDK。它不是骨架，但也**不是经过验证的代码** ——
+> 第一次 `make PROFILE=driverlib` 大概率会因为实例名对不上而报一串编译错误。
+> 这是预期的，按下面第 5 步处理即可。
+
 1. 安装 [TI MSPM0 SDK](https://www.ti.com/tool/MSPM0-SDK) 与 CCS（或独立 SysConfig）
 2. 按 §3 的引脚表配置：TIMA0（PWM 双通道）/ TIMG8 + TIMG7（QEI）/ UART0 /
    ADC0 / GPIO / 一个 1kHz 周期定时器
@@ -279,20 +306,36 @@ M0+ **既没有 FPU，也没有硬件整数除法指令**，浮点全是 `__aeab
    漏掉它会让一个杂散字节吞掉最多 257 字节的正常数据
 4. 生成 `ti_msp_dl_config.h` / `.c`
 5. 核对生成的实例名与 `src/port_driverlib.c` 使用的宏名一致
-   （**不一致就改 `port_driverlib.c`，不要改生成物**）
+   （**不一致就改 `port_driverlib.c`，不要改生成物**）。
+   本工程用的宏名：`MOTOR_PWM_INST` / `MOTOR_PWM_C0_IDX` / `MOTOR_PWM_C1_IDX` /
+   `ENCODER_L_INST` / `ENCODER_R_INST` / `CONTROL_TIMER_INST` / `UART_COMM_INST` /
+   `ADC_CURRENT_INST` / `GPIO_MOTOR_PORT` / `GPIO_ESTOP_PORT` / `GPIO_LED_PORT`
+6. DriverLib 的 API 签名可能随 SDK 版本变化（尤其 `DL_ADC12_configConversionMem`
+   的参数个数）。以本机 SDK 的头文件为准，不要以本文件为准。
 
 ### 7.2 核对链接脚本
 
-`linker/MSPM0G3507.ld` 里两个数字错了固件根本起不来：
+`linker/MSPM0G3507.ld` 里的内存布局错了固件根本起不来 —— 这不是"跑偏"那类问题：
 
 ```
-FLASH  0x00000000  128K
-SRAM   0x20200000   32K      ← MSPM0 的 SRAM 不在 0x20000000
+FLASH  ORIGIN 0x00000000  LENGTH 128K
+SRAM   ORIGIN 0x20200000  LENGTH  32K   →  末端 0x20208000，_estack 即在此
 ```
 
-来源：数据手册 SLASEZ4 §Memory Organization，或 SDK 里的
-`ti/devices/msp/m0p/linker_files/mspm0g350x.lds`。
-`PROFILE=driverlib` 时建议直接改用 SDK 自带的链接脚本与启动文件。
+**起始地址与长度都要核对**，尤其长度：`_estack = ORIGIN + LENGTH`，
+长度写大了栈顶会落在不存在的地址上，第一次压栈就 HardFault；
+写小了则白白浪费 SRAM 且可能与 SDK 的假设冲突。
+
+核对方式（按可靠性排序）：
+
+1. **直接 diff SDK 自带的链接脚本** —— 最可靠：
+   ```bash
+   diff <(grep -A4 'MEMORY' $MSPM0_SDK/source/ti/devices/msp/m0p/linker_files/gcc/mspm0g350x.lds) \
+        <(grep -A4 'MEMORY' linker/MSPM0G3507.ld)
+   ```
+2. 数据手册 SLASEZ4 §Memory Organization
+3. `PROFILE=driverlib` 时**直接改用 SDK 自带的链接脚本与启动文件**，
+   本工程自带的这两份只服务于 `ci-link` 剖面
 
 ### 7.3 首次上电检查清单
 
@@ -362,7 +405,7 @@ mspm0_diff/
 │   ├── port_stub.c             空实现 (CI)，但 SysTick 与控制中断是真的
 │   ├── port_driverlib.c        TI DriverLib 实现 (真实硬件)
 │   └── startup_mspm0g3507.c    Cortex-M0+ 向量表 + Reset_Handler
-└── test/                       49 个 Host 用例
+└── test/                       70 个 Host 用例
 ```
 
 ### 移植层为什么值得多一层间接

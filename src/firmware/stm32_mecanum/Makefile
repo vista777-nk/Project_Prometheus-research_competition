@@ -53,7 +53,8 @@ LDFLAGS += -lc -lm -lnosys
 # 固件自有源文件 (含 HAL/裸机层)
 SRCS        = $(wildcard src/*.c)
 # 共享库源文件。unity.c 是测试框架，绝不进固件。
-COMMON_SRCS = $(COMMON)/pid.c $(COMMON)/crc16.c $(COMMON)/protocol_frame.c
+COMMON_SRCS = $(COMMON)/pid.c $(COMMON)/crc16.c $(COMMON)/protocol_frame.c \
+              $(COMMON)/faults.c
 
 OBJS  = $(patsubst src/%.c,$(BUILD)/%.o,$(SRCS))
 OBJS += $(patsubst $(COMMON)/%.c,$(BUILD)/common/%.o,$(COMMON_SRCS))
@@ -66,7 +67,7 @@ TEST_SRCS = test/test_main.c test/test_crc16.c test/test_kinematics.c \
             test/test_pid.c test/test_protocol.c \
             src/kinematics.c src/protocol.c \
             $(COMMON)/crc16.c $(COMMON)/pid.c $(COMMON)/protocol_frame.c \
-            $(COMMON)/unity.c
+            $(COMMON)/faults.c $(COMMON)/unity.c
 TEST_CFLAGS = -std=c99 -O1 -g -Wall -Wextra -Wpedantic -DTEST_HOST \
               -I src -I $(COMMON) -I test
 TEST_BIN = $(BUILD)/test_runner

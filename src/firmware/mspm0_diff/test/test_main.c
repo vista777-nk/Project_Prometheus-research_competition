@@ -22,6 +22,7 @@
 void run_kinematics_tests(void);
 void run_protocol_tests(void);
 void run_encoder_tests(void);
+void run_faults_tests(void);
 void run_control_loop_tests(void);
 
 /* 本套测试的每个用例都自带初始化，不需要公共夹具 */
@@ -36,6 +37,7 @@ int main(void)
     run_kinematics_tests();
     run_protocol_tests();
     run_encoder_tests();
+    run_faults_tests();
     run_control_loop_tests();
     return UNITY_END();
 }

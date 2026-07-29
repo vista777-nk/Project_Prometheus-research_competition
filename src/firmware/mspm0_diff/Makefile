@@ -76,7 +76,8 @@ else
 endif
 
 # 共享库源文件。unity.c 是测试框架，绝不进固件。
-COMMON_SRCS = $(COMMON)/pid.c $(COMMON)/crc16.c $(COMMON)/protocol_frame.c
+COMMON_SRCS = $(COMMON)/pid.c $(COMMON)/crc16.c $(COMMON)/protocol_frame.c \
+              $(COMMON)/faults.c
 
 OBJS  = $(patsubst src/%.c,$(BUILD)/%.o,$(SRCS))
 OBJS += $(patsubst $(COMMON)/%.c,$(BUILD)/common/%.o,$(COMMON_SRCS))
@@ -87,10 +88,10 @@ DEPS  = $(OBJS:.o=.d)
 # mspm0_port.h 的两个原语，测试里用假编码器替换掉 —— 这正是移植层分离的收益。
 # motor.c / uart.c / main.c / port_*.c / startup 不参与。
 TEST_SRCS = test/test_main.c test/test_kinematics.c test/test_protocol.c \
-            test/test_encoder.c test/test_control_loop.c \
+            test/test_encoder.c test/test_faults.c test/test_control_loop.c \
             src/kinematics.c src/protocol.c src/encoder.c \
             $(COMMON)/crc16.c $(COMMON)/pid.c $(COMMON)/protocol_frame.c \
-            $(COMMON)/unity.c
+            $(COMMON)/faults.c $(COMMON)/unity.c
 TEST_CFLAGS = -std=c99 -O1 -g -Wall -Wextra -Wpedantic -DTEST_HOST \
               -I src -I $(COMMON) -I test
 TEST_BIN = $(BUILD)/test_runner

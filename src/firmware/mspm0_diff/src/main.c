@@ -43,12 +43,14 @@
 
 static volatile DiffVelocity s_cmd;               /**< 最新速度指令 */
 static volatile uint32_t     s_last_cmd_ms;       /**< 最近一次 SET_VELOCITY 的时刻 */
-static volatile uint16_t     s_fault;             /**< 故障位图 */
-static volatile bool         s_estop_latched;     /**< 硬件急停已锁死 */
 static volatile float        s_actual_rpm[NUM_WHEELS];
 
+/** 故障状态机。判定逻辑在 common/faults.c，本文件只负责采集输入与执行处置。
+ *  这样做的直接收益：全部故障状态迁移可在 Host 上表驱动测试 (test_faults.c)，
+ *  而不必依赖 1kHz 中断 + 真实编码器 + ADC。 */
+static FaultMonitor s_faults;
+
 static PIDController s_pid[NUM_WHEELS];
-static uint32_t s_stall_ms[NUM_WHEELS];
 
 /* ===================== 协议回调 ===================== */
 
@@ -59,7 +61,6 @@ static void handle_set_velocity(const DiffVelocity *cmd, void *ctx)
     s_cmd.v = cmd->v;
     s_cmd.omega = cmd->omega;
     s_last_cmd_ms = port_millis();
-    s_fault &= (uint16_t)~FAULT_CMD_TIMEOUT;
     port_irq_enable();
 }
 
@@ -93,88 +94,70 @@ static DiffVelocity read_command_snapshot(void)
     return cmd;
 }
 
-/** 堵转判据：给了转速却不转，持续够久就报故障。返回该轮当前是否处于堵转。 */
-static bool update_stall_detection(int wheel, float target, float actual)
-{
-    const float abs_target = (target < 0.0f) ? -target : target;
-    const float abs_actual = (actual < 0.0f) ? -actual : actual;
-
-    if (abs_target > FAULT_STALL_TARGET_RPM && abs_actual < FAULT_STALL_RPM_FLOOR) {
-        s_stall_ms[wheel]++;
-    } else {
-        s_stall_ms[wheel] = 0u;
-    }
-    return s_stall_ms[wheel] >= FAULT_STALL_TIME_MS;
-}
-
 /**
  * 控制中断回调，由移植层在定时器 ISR 上下文中调用。
  * 这样 main.c 不需要知道 MSPM0 的中断向量叫什么名字。
  */
 void port_control_isr_hook(void)
 {
-    /* --- 1. 硬件急停：优先级高于一切，且一旦触发就锁死 --- */
-#if ESTOP_REQUIRE_HARDWARE
-    if (port_estop_asserted()) {
-        s_estop_latched = true;
-    }
-#endif
-    if (s_estop_latched) {
-        motor_brake_all();
-        s_fault |= FAULT_ESTOP;
-        for (int i = 0; i < NUM_WHEELS; i++) {
-            pid_reset(&s_pid[i]);
-            s_actual_rpm[i] = 0.0f;
-        }
-        return;   /* 不可恢复，只能靠复位退出 —— 安全优先于可用性 */
-    }
-
-    /* --- 2. 编码器采样 --- */
+    /* --- 1. 编码器采样 --- */
     encoder_update();
     for (int i = 0; i < NUM_WHEELS; i++) {
         s_actual_rpm[i] = encoder_get_rpm(i);
     }
 
-    /* --- 3. 指令看门狗：上位机掉线就刹停 --- */
+    /* --- 2. 指令看门狗：上位机掉线就刹停 --- */
+    const uint32_t command_age_ms = port_millis() - s_last_cmd_ms;
     DiffVelocity cmd = read_command_snapshot();
-    if ((port_millis() - s_last_cmd_ms) > CMD_TIMEOUT_MS) {
+    if (command_age_ms > CMD_TIMEOUT_MS) {
         cmd.v = 0.0f;
         cmd.omega = 0.0f;
-        s_fault |= FAULT_CMD_TIMEOUT;
     }
 
-    /* --- 4. 差速逆解 --- */
+    /* --- 3. 差速逆解 --- */
     float target_rpm[NUM_WHEELS];
     const int kin_status = diff_inverse_kinematics(&cmd, target_rpm);
-    if (kin_status == KIN_SATURATED) {
-        s_fault |= FAULT_KINEMATICS_SAT;
-    } else {
-        s_fault &= (uint16_t)~FAULT_KINEMATICS_SAT;
+
+    /* --- 4. 故障评估 ---
+       急停锁存、堵转判定、位间优先级 (过流/急停期间 STALL 保持旧值)
+       全部由状态机负责，本文件不再自己拼位图。 */
+    float actual_snapshot[NUM_WHEELS];
+    for (int i = 0; i < NUM_WHEELS; i++) {
+        actual_snapshot[i] = s_actual_rpm[i];
     }
 
-    /* --- 5. 过流已由主循环置位：带电流故障时不再输出 --- */
-    if ((s_fault & FAULT_OVERCURRENT) != 0u) {
+    FaultMotionInput motion;
+#if ESTOP_REQUIRE_HARDWARE
+    motion.estop_asserted = port_estop_asserted();
+#else
+    motion.estop_asserted = false;
+#endif
+    motion.wheel_count = NUM_WHEELS;
+    motion.target_rpm = target_rpm;
+    motion.actual_rpm = actual_snapshot;
+    motion.kinematics_saturated = (kin_status == KIN_SATURATED);
+    motion.command_age_ms = command_age_ms;
+
+    (void)faults_evaluate_motion(&s_faults, &motion);
+
+    /* --- 5. 处置：急停或过流一律刹停并跳过本周期输出 ---
+       急停是不可恢复的，只能靠复位退出 —— 安全优先于可用性。 */
+    if (faults_should_halt(&s_faults)) {
         motor_brake_all();
+        for (int i = 0; i < NUM_WHEELS; i++) {
+            pid_reset(&s_pid[i]);
+            if (faults_estop_latched(&s_faults)) {
+                s_actual_rpm[i] = 0.0f;
+            }
+        }
         return;
     }
 
     /* --- 6. 两路独立 PID → PWM --- */
-    bool any_stalled = false;
     for (int i = 0; i < NUM_WHEELS; i++) {
         const float duty = pid_update(&s_pid[i], target_rpm[i],
-                                      s_actual_rpm[i], CONTROL_DT_S);
+                                      actual_snapshot[i], CONTROL_DT_S);
         motor_set_duty(i, duty);
-        if (update_stall_detection(i, target_rpm[i], s_actual_rpm[i])) {
-            any_stalled = true;
-        }
-    }
-    /* 故障位跟着实际状态走：轮子转起来了就把位清掉，
-       否则一次瞬时堵转会让故障灯一直亮到下次复位。
-       (注意上面两条早退路径不更新本位，语义见 protocol.h 的 FAULT_STALL 说明。) */
-    if (any_stalled) {
-        s_fault |= FAULT_STALL;
-    } else {
-        s_fault &= (uint16_t)~FAULT_STALL;
     }
 }
 
@@ -198,47 +181,18 @@ static void publish_telemetry(void)
     }
     port_irq_enable();
 
+    /* 电流在这里采 (ADC 轮询，不进控制中断)，但过流的处置动作由控制中断执行 */
     motor_sample_currents(current);
 
-    /* 过流判定放在主循环 (ADC 在这里采)，但处置动作由控制中断执行 */
-    bool overcurrent = false;
-    for (int i = 0; i < NUM_WHEELS; i++) {
-        if (current[i] > FAULT_CURRENT_LIMIT_A) {
-            overcurrent = true;
-        }
-    }
-    port_irq_disable();
-    if (overcurrent) {
-        s_fault |= FAULT_OVERCURRENT;
-    } else {
-        s_fault &= (uint16_t)~FAULT_OVERCURRENT;
-    }
-    port_irq_enable();
-
-    /* 链路质量：只看"距上次遥测有没有新增错误"，而不是累计值。
-       用累计值的话，开机时的一次噪声就会让故障位永远挂着。
-       具体错了多少次，上位机可以另行查询统计计数器。 */
-    static uint32_t last_crc_errors;
-    static uint32_t last_rx_overruns;
-    static uint32_t last_tx_drops;
-
-    const uint32_t crc_errors = protocol_get_parser()->stat_err_crc;
-    const uint32_t rx_overruns = uart_get_rx_overrun_count();
-    const uint32_t tx_drops = uart_get_tx_drop_count();
-    const bool link_degraded = (crc_errors != last_crc_errors)
-                            || (rx_overruns != last_rx_overruns)
-                            || (tx_drops != last_tx_drops);
-    last_crc_errors = crc_errors;
-    last_rx_overruns = rx_overruns;
-    last_tx_drops = tx_drops;
+    FaultLinkInput link;
+    link.wheel_count = NUM_WHEELS;
+    link.current_a = current;
+    link.crc_errors = protocol_get_parser()->stat_err_crc;
+    link.rx_overruns = uart_get_rx_overrun_count();
+    link.tx_drops = uart_get_tx_drop_count();
 
     port_irq_disable();
-    if (link_degraded) {
-        s_fault |= FAULT_UART_ERROR;
-    } else {
-        s_fault &= (uint16_t)~FAULT_UART_ERROR;
-    }
-    const uint16_t fault = s_fault;
+    const uint16_t fault = faults_evaluate_link(&s_faults, &link);
     port_irq_enable();
 
     protocol_send_telemetry(rpm, current, fault);
@@ -250,12 +204,12 @@ static void update_status_led(uint32_t now_ms)
     static uint32_t last_toggle_ms;
     static bool led_on;
 
-    if (s_estop_latched) {
+    if (faults_estop_latched(&s_faults)) {
         port_led_set(true);
         led_on = true;
         return;
     }
-    const uint32_t period = (s_fault != FAULT_NONE) ? 100u : 500u;
+    const uint32_t period = (faults_get(&s_faults) != FAULT_NONE) ? 100u : 500u;
     if ((now_ms - last_toggle_ms) >= period) {
         last_toggle_ms = now_ms;
         led_on = !led_on;
@@ -275,17 +229,25 @@ int main(void)
     };
     (void)diff_kinematics_init(&geometry);
 
+    /* 故障判定阈值全部来自 board_config.h。堵转以控制周期计数，
+       因此 FAULT_STALL_TIME_MS 恰好等于所需的评估次数 (1kHz ⟹ 1 次/ms)。 */
+    const FaultConfig fault_cfg = {
+        FAULT_STALL_TARGET_RPM,
+        FAULT_STALL_RPM_FLOOR,
+        FAULT_STALL_TIME_MS,
+        FAULT_CURRENT_LIMIT_A,
+        CMD_TIMEOUT_MS
+    };
+    faults_init(&s_faults, &fault_cfg);
+
     for (int i = 0; i < NUM_WHEELS; i++) {
         pid_init(&s_pid[i], PID_KP_DEFAULT, PID_KI_DEFAULT, PID_KD_DEFAULT,
                  PID_INTEGRAL_LIMIT, PID_OUTPUT_LIMIT);
-        s_stall_ms[i] = 0u;
         s_actual_rpm[i] = 0.0f;
     }
 
     s_cmd.v = 0.0f;
     s_cmd.omega = 0.0f;
-    s_fault = FAULT_NONE;
-    s_estop_latched = false;
     /* 上电即视为"刚收到指令"，避免开机第一秒就报超时故障 */
     s_last_cmd_ms = port_millis();
 
