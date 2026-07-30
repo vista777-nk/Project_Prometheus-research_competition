@@ -570,6 +570,43 @@
           task-14 交付 `car_edge_real.launch` 时，需要把降级判定从状态文件
           迁到 ICD 的 `Capability` 消息，状态文件退化为启动自检记录。
 
+    7.补记（同日 · ARM64 镜像构建首次运行）：
+          build-edge-image 这个 job 之前一直没跑过 —— 它 needs: validate-deployment,
+          而后者一直红着。段归属修好之后它第一次真正执行, 然后挂在
+          `pip3 install pymavlink` 上。
+
+          诊断链条: Focal 的 python3-pip 是 **20.0.2**, 而 PEP 600 的
+          `manylinux_2_XX_<arch>` 轮子标签要 pip 20.3 才认识; PyPI 上 lxml 的
+          aarch64 轮子正是 `manylinux_2_28_aarch64`。老 pip 认不出就退回去编译
+          lxml 源码, 而镜像里没有 libxml2-dev 也没有编译器。lxml 又是 pymavlink
+          的**构建期**依赖 —— pymavlink 只发 sdist, setup.py 会在安装时现场生成
+          MAVLink dialect, 那一步要 lxml。
+
+          本机是 Windows 没有 Docker, 这条链验证不了。所以没有赌单一判断,
+          而是把三条可能的失败路径一起堵上: apt 预装 python3-lxml/python3-future
+          (预编译 arm64 deb, 不存在"编译失败"这条路)、pip 升到 <25
+          (pip 25.0 起不支持 Python 3.8)、版本约束补上 requirements.txt 的上界。
+          **这一点在部署 README §9 里明写了"该修复同样未在本地验证"** ——
+          未验证的修复不该看起来像已验证的。
+
+          顺带发现两件事:
+          a) Dockerfile 的注释写着"与 requirements.txt 对齐", 而上界 `<3.0.0`
+             从没同步过来。又一条"声称做了但没做"。已补交叉校验并做负向测试。
+          b) 更要紧的: drone_car_bridge.py 里 pymavlink 是 **try/except 可选导入**。
+             装不上不报错, 只会退回自己手写的 v1 解析器, 然后把 MAVLink **v2**
+             帧整个丢掉 (只留一条 logwarn_throttle) —— 而 Pixhawk 6C 默认说 v2。
+             也就是说这次 CI 是"幸运地"在构建期挂了; 要是 pip 装了个半成品,
+             这个故障会一路潜伏到实机上, 表现为"飞控接上了但收不到心跳"。
+             因此在 Dockerfile 里加了一条构建期 import 验证 ——
+             **可选依赖的安装失败必须在构建期变成硬错误**, 否则运行期没人看得见。
+             CI 的 ROS job 也改成直接 `pip install -r requirements.txt`,
+             把手抄版本号这个漂移源整个去掉 (原来漏了 numpy<2.0.0,
+             而 numpy 2 会直接搞坏 Noetic 的 cv_bridge)。
+
+          这一条和 5.小结 是同一个模式的两面: 那里说"把 CI 才能发现的错误反向
+          翻译成本机检查", 这里是"把运行期才会暴露的静默降级前移到构建期"。
+          共同点是**不要让失败发生在没人看的地方**。
+
 ---
 
 ## 历史名称脚注

@@ -399,6 +399,7 @@ bash src/deployment/validate.sh
 | systemd `[Unit]`/`[Service]` 段归属自查 | ✓ | ✓ |
 | `systemd-analyze verify` | SKIP | ✓ |
 | 降级状态契约两端一致 | ✓ | ✓ |
+| 镜像 Python 依赖版本 == `requirements.txt` | ✓ | ✓ |
 | `docker build` | SKIP | 另一个 job |
 
 跳过的项**会明确报 SKIP**，不静默略过。
@@ -414,6 +415,12 @@ bash src/deployment/validate.sh
 > 单元照常工作而限流从未生效。已补 §6a 段归属自查，本机也能查（不依赖 systemd）。
 > 同一次还发现 `systemd-analyze verify` 会连带加载依赖单元、把它们的错误算到
 > 被检单元头上——四个单元全红而真实错误只有两处。改为一次性校验全部单元。
+>
+> 第三次是 ARM64 镜像构建首次运行时抓的：`pip3 install pymavlink` 直接失败。
+> 根因是 Focal 的 pip 是 20.0.2，认不出 PEP 600 的 `manylinux_2_28_aarch64`
+> 轮子标签（要 pip 20.3+），于是退回去编译 lxml 源码，而镜像里没有编译器。
+> 详见 `Dockerfile.edge` §Python 依赖的注释。顺带发现 Dockerfile 的注释写着
+> "与 requirements.txt 对齐"而上界 `<3.0.0` 从没同步过来——已补交叉校验。
 
 ---
 
@@ -439,7 +446,10 @@ bash src/deployment/validate.sh
   不要跳步。
 - **`docker build` 未在本地执行过**（开发机是 Windows，无 Docker）。
   由 CI 的 `build-edge-image` job 首次验证。ARM64 构建更是只能在 CI 上做
-  （需要 buildx + qemu）。
+  （需要 buildx + qemu）。首次运行即失败于 `pip3 install pymavlink`，
+  修复见 `Dockerfile.edge` §Python 依赖的注释——**该修复同样未能在本地验证**，
+  是照着"pip 20.0.2 不认 PEP 600 轮子标签"这条推断做的，
+  并同时堵住了另外两条可能的失败路径（apt 预装 lxml/future、pip 升级）。
 - **`systemd-analyze verify` 未在本地执行过**（非 Linux），由 CI 校验。
 - **udev 规则里的 VID/PID 与序列号需上机核对。** 3DR 数传和 RPLIDAR
   都用 CP2102 芯片（`10c4:ea60`），必须靠序列号区分。规则里留的是

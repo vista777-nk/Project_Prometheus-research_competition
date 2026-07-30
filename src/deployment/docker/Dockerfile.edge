@@ -44,6 +44,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3-numpy \
         python3-catkin-tools \
         python3-osrf-pycommon \
+        python3-lxml \
+        python3-future \
         ros-noetic-mavros \
         ros-noetic-mavros-extras \
         ros-noetic-mavros-msgs \
@@ -59,10 +61,42 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # --- Python 依赖 ---
-# 版本与仓库根的 requirements.txt 对齐, 避免"仿真跑的库和实机跑的库不是一个版本"。
-RUN pip3 install --no-cache-dir \
-        "pymavlink>=2.4.39" \
+#
+# 版本与仓库根的 requirements.txt 对齐 (含上界 <3.0.0), 避免"仿真跑的库和实机
+# 跑的库不是一个版本"。上界一度只写在 requirements.txt 里没同步过来 ——
+# validate.sh §7 现在会交叉校验这两处。
+#
+# -----------------------------------------------------------------------------
+# 为什么要先升级 pip (ARM64 构建首次跑就挂在这一步)
+# -----------------------------------------------------------------------------
+# Focal 的 python3-pip 是 **20.0.2**, 而 PEP 600 的 `manylinux_2_XX_<arch>`
+# 轮子标签要 pip 20.3 才认识。现在 PyPI 上 lxml 的 aarch64 轮子正是
+# `manylinux_2_28_aarch64` —— 老 pip 认不出, 就退回去编译 lxml 源码,
+# 而镜像里没有 libxml2-dev / libxslt1-dev / 编译器, 于是 exit 1。
+#
+# lxml 是 pymavlink 的**构建期**依赖: pymavlink 在 PyPI 上只发 sdist,
+# 它的 setup.py 会在安装时现场生成 MAVLink dialect, 那一步要用 lxml。
+# 所以这里两手都做, 哪一环判断错了都不至于再挂一次:
+#   1) 上面 apt 装 python3-lxml / python3-future —— 预编译的 arm64 deb,
+#      不存在"编译失败"这条路径
+#   2) 这里把 pip 升到 <25 (pip 25.0 起不再支持 Python 3.8) —— 万一 pip 走
+#      PEP 517 构建隔离、看不见 apt 装的那份, 至少它能正确识别轮子标签
+#
+# qemu 模拟下网络和 CPU 都慢, 显式给足重试与超时。
+RUN pip3 install --no-cache-dir --upgrade --retries 5 --timeout 120 \
+        "pip<25"
+
+RUN pip3 install --no-cache-dir --retries 5 --timeout 120 \
+        "pymavlink>=2.4.39,<3.0.0" \
         "pyserial>=3.5"
+
+# 装完立刻验证能 import。
+#
+# 这一步不是多余的: drone_car_bridge.py 里 pymavlink 是 **try/except 可选导入**,
+# 装不上不会报错, 只会退回自己手写的 v1 解析器, 然后把 MAVLink **v2** 帧
+# 整个丢掉 (只留一条 logwarn_throttle)。而 Pixhawk 6C 默认就说 v2。
+# 也就是说"装失败"在运行期是**静默降级**, 只有在这里查才查得到。
+RUN python3 -c "import pymavlink, serial; from pymavlink import mavutil; print('OK pymavlink', pymavlink.__version__, '| pyserial', serial.__version__)"
 
 # --- 非 root 用户 ---
 # 说明: 容器内的 dialout/i2c 组 GID 未必与树莓派宿主机一致。

@@ -8,7 +8,7 @@
 > [ADR-0007](../docs/decisions/ADR-0007.md)（`network_mode: host` 的暴露面与重估触发条件）·
 > CI job `validate-deployment` + `build-edge-image`
 >
-> **验收结果**：静态校验 25 项通过（含 45 个 Host 单元测试）。
+> **验收结果**：静态校验 26 项通过（含 45 个 Host 单元测试）。
 > 与本文档共 **14 处偏差，全部是"照抄会失败"的问题**，逐条见
 > [`src/deployment/README.md` §6](../src/deployment/README.md#6-与任务文档task-12的偏差)
 > ——**动手前先看那张表**（本页"可执行步骤"开头也有摘要）。

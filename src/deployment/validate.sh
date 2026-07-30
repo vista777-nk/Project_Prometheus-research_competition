@@ -289,6 +289,30 @@ if [[ ${state_bad} -eq 0 ]]; then
     pass "降级状态契约两端一致 (entrypoint ↔ agcheck ↔ systemd ↔ alert)"
 fi
 
+# 镜像里的 Python 依赖版本必须与仓库根 requirements.txt 一致。
+# Dockerfile 的注释一直写着"与 requirements.txt 对齐", 但上界 <3.0.0 只写在
+# requirements.txt 里、没同步过来 —— 一句声称对齐的注释, 和实际不对齐。
+# 这类漂移不会有任何报错, 只会让"仿真跑的版本"和"实机跑的版本"悄悄分家。
+#
+# 只比对**两边都有**的包: 镜像刻意不装 opencv/Pillow (容器里用 apt 的
+# ros-noetic-cv-bridge 与 python3-numpy, 在 arm64 上 pip 编译 opencv 代价太大)。
+# CI 的 ROS job 已改为直接 pip install -r requirements.txt, 不在这条检查范围内。
+pin_bad=0
+for pkg in pymavlink; do
+    req_pin=$(grep -oE "^${pkg}[><=,.0-9]+" requirements.txt | head -1)
+    img_pin=$(grep -oE "${pkg}[><=,.0-9]+" src/deployment/docker/Dockerfile.edge | head -1)
+    if [[ -z "${req_pin}" || -z "${img_pin}" ]]; then
+        fail "${pkg}: requirements.txt=[${req_pin}] Dockerfile.edge=[${img_pin}] 至少一处找不到"
+        pin_bad=1
+    elif [[ "${req_pin}" != "${img_pin}" ]]; then
+        fail "${pkg} 版本约束不一致: requirements.txt=${req_pin} vs Dockerfile.edge=${img_pin}"
+        pin_bad=1
+    fi
+done
+if [[ ${pin_bad} -eq 0 ]]; then
+    pass "镜像 Python 依赖版本与 requirements.txt 一致"
+fi
+
 if [[ ${xref_bad} -eq 0 ]]; then
     pass "systemd 引用的文件均存在"
 fi

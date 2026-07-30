@@ -60,11 +60,13 @@ jobs:
           apt-get install -y --no-install-recommends \
             ros-noetic-gazebo-ros-pkgs ros-noetic-gazebo-ros || true
 
+      # 直接用仓库根的 requirements.txt, 不再在这里重抄一遍版本号。
+      # 之前是手抄的, 结果上界 (numpy<2.0.0 / pymavlink<3.0.0) 全漏了 ——
+      # numpy 2 会直接搞坏 Noetic 的 cv_bridge。单一来源比对齐检查更省事。
       - name: Install Python dependencies
         run: |
           pip3 install --upgrade pip
-          pip3 install pymavlink>=2.4.39 numpy>=1.22.0 PyYAML>=6.0
-          pip3 install opencv-python-headless>=4.8.0 Pillow>=9.0.0
+          pip3 install -r requirements.txt
 
       - name: rosdep check
         run: |
