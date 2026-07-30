@@ -2,7 +2,7 @@
 
 > 本文档是项目入口。详细内容已拆分为四个专题文件。
 >
-> **当前进度**：Phase 0 仿真框架 9/9 ✅ · Phase 1 基础设施 3/6 🟡 · 56/56 ROS 单元测试通过 · E2E 33/33 通过 · 固件 Host 测试 133/133 通过（麦轮 63 + 差速 70）· 部署静态校验 21/21 通过（含 31 个 Host 用例）· 6 个 ROS package 全部可编译
+> **当前进度**：Phase 0 仿真框架 9/9 ✅ · Phase 1 基础设施 3/6 🟡 · 56/56 ROS 单元测试通过 · E2E 33/33 通过 · 固件 Host 测试 133/133 通过（麦轮 63 + 差速 70）· 部署静态校验 25/25 通过（含 45 个 Host 用例）· 6 个 ROS package 全部可编译
 
 ## 📖 必读文件
 
@@ -80,7 +80,15 @@ task-14 (传感器 + MAVLink) ── (独立) ── task-15
 > **2026-07-30 补充**：task-12 完成。`src/deployment/` 已就位，
 > 容器化部署与地址/时钟分配分别由 [ADR-0005](../docs/decisions/ADR-0005.md) 与
 > [ADR-0006](../docs/decisions/ADR-0006.md) 固化。CI 增至 5 个 job。
-> task-14 需交付 `car_edge_real.launch`，在此之前 entrypoint 会自动降级。
+>
+> **2026-07-31 补充（task-12 评审收口）**：
+> `network_mode: host` 的暴露面与三条 Phase 2 重估触发条件由
+> [ADR-0007](../docs/decisions/ADR-0007.md) 固化，触发条件同时挂在
+> [ROADMAP §待重估的技术决策](./ROADMAP.md)——不指望有人回来读 ADR。
+> 降级运行状态已贯通到健康检查（退出码 4），task-14 交付
+> `car_edge_real.launch` 之前，**车机上机必然处于降级状态且上位机可见**。
+> CI 抓出 `StartLimitIntervalSec` 写错段（systemd 会静默忽略），
+> 已补一条不依赖 systemd 的段归属自查。
 >
 > ⚠ task-11 的默认构建产出**不是可烧录固件**（MSPM0 移植层默认空实现，
 > 原因见 ADR-0004 §决策-3）。算法层完整且有 70 个 Host 用例覆盖；

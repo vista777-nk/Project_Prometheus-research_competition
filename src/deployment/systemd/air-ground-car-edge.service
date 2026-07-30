@@ -37,6 +37,15 @@ Requires=docker.service
 # 同一台 Pi 上两个角色互斥 —— 防止误 enable 了两个 unit 抢同一份 .env
 Conflicts=air-ground-drone-edge.service
 
+# 重启风暴限流。**必须放在 [Unit] 段** —— systemd v230 起
+# StartLimitIntervalSec= / StartLimitBurst= 从 [Service] 移到了 [Unit]。
+# 旧名 StartLimitInterval= 保留了 [Service] 兼容别名, 新名没有。
+# 写错段的表现是 systemd 打一句 "Unknown key name ... ignoring" 然后**静默忽略**:
+# 单元照常工作, 但限流根本没生效 —— 配置错了就是无休止的 10 秒重启循环。
+# (这一条是 CI 的 systemd-analyze verify 抓出来的, 本机 Windows 跳过了该检查。)
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
 [Service]
 Type=simple
 User=airground
@@ -66,9 +75,6 @@ TimeoutStartSec=120
 # 大于 compose 的 stop_grace_period(30s), 留出收尸时间
 TimeoutStopSec=60
 
-# 反复重启说明是配置问题而不是偶发故障, 别把日志刷爆
-StartLimitIntervalSec=300
-StartLimitBurst=5
 
 # --- 加固 (作用范围见文件头第 2 条) ---
 NoNewPrivileges=yes

@@ -13,8 +13,12 @@
 [Unit]
 Description=Air-Ground Edge Node Health Check
 Documentation=file:///opt/air-ground/README.md
-# PartOf 让边缘节点停掉时健康检查也一起停, 不再刷"Master 不可达"的噪声。
-# 两个角色只会有一个真的在跑 (它们互为 Conflicts), 都列上即可。
+# 只排顺序, 不建立依赖: 边缘节点没起来时健康检查照跑, 报"Master 不可达" ——
+# 那正是要知道的事。
+#
+# 停机噪声由 **.timer 上的 PartOf=** 抑制而不是这里: 本单元是 Type=oneshot,
+# 停一个没在运行的 oneshot 是空操作, PartOf 写在这儿不起任何作用。
+# 要让边缘节点停掉时检查也一起停, 必须停掉那个**周期触发它的** timer。
 After=air-ground-car-edge.service air-ground-drone-edge.service
 
 [Service]
@@ -24,9 +28,15 @@ Group=airground
 WorkingDirectory=/opt/air-ground
 EnvironmentFile=/opt/air-ground/.env
 
-# 退出码语义 (见 healthcheck/check_nodes.py):
+# 退出码语义 (见 healthcheck/agcheck.py):
 #   0 = 健康  1 = Master 不可达  2 = Master 在但关键 Topic 缺失
-# SuccessExitStatus 只列 0: 非 0 会在 journal 里留下 failed 记录, 便于事后统计。
+#   3 = 配置错误  4 = 降级运行 (话题齐全, 但能力集不完整)
+#
+# 4 列进 SuccessExitStatus, 其余非 0 不列。理由:
+# 降级是**已知且预期**的状态 (task-14 交付前, 车机必然降级), 每 30 秒把单元
+# 标成 failed 会让 `systemctl --failed` 长期挂红 —— 真出事时反而没人注意。
+# 降级的可见性由 alert.sh 的 warning 级告警和 journal 里的 DEGRADED 行承担。
+SuccessExitStatus=4
 ExecStart=/opt/air-ground/healthcheck/check_nodes.py
 
 # 无论上面成功与否都跑告警脚本, 由它按退出码决定亮灯还是静默。

@@ -26,6 +26,9 @@ case "${EXIT_STATUS}" in
     1) LEVEL="critical"; MESSAGE="ROS Master 不可达" ;;
     2) LEVEL="warning";  MESSAGE="必需话题缺发布者" ;;
     3) LEVEL="warning";  MESSAGE="健康检查配置错误" ;;
+    # 4 = 降级运行。刻意**不**升到 critical: 节点在跑、数据在发, 只是能力不全。
+    # 亮红灯会让现场以为要停飞, 而实际处置是"记下来, 别把结论当全功能实机结果"。
+    4) LEVEL="warning";  MESSAGE="降级运行 (能力集不完整, 见 /var/log/air-ground/edge-state.env)" ;;
     *) LEVEL="warning";  MESSAGE="健康检查异常退出 (status=${EXIT_STATUS}, result=${SERVICE_RESULT})" ;;
 esac
 

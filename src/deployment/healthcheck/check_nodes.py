@@ -10,6 +10,7 @@
     1  ROS Master 不可达
     2  Master 正常但必需话题缺发布者
     3  用法/配置错误
+    4  降级运行（话题齐全, 但 entrypoint 报告能力集不完整）
 
 用法::
 
@@ -19,8 +20,9 @@
 
 环境变量（与 /opt/air-ground/.env 一致）::
 
-    ROS_MASTER_URI    默认 http://192.168.1.100:11311
-    AIR_GROUND_ROLE   默认 car
+    ROS_MASTER_URI          默认 http://192.168.1.100:11311
+    AIR_GROUND_ROLE         默认 car
+    AIR_GROUND_STATE_FILE   默认 /var/log/air-ground/edge-state.env
 """
 
 from __future__ import annotations
@@ -37,10 +39,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from agcheck import (  # noqa: E402  — 必须先补 sys.path
     EXIT_USAGE,
+    STATE_FILE_NAME,
     evaluate,
     extract_published_topics,
     format_report,
     parse_master_uri,
+    parse_state_file,
 )
 
 #: 调用方标识。ROS Master 的 API 要求带一个 caller_id，
@@ -49,6 +53,21 @@ CALLER_ID = "/air_ground_healthcheck"
 
 DEFAULT_MASTER = "http://192.168.1.100:11311"
 DEFAULT_TIMEOUT = 5.0
+
+#: 容器把状态文件写进 bind mount, 宿主机这一侧就是这个路径。
+DEFAULT_STATE_FILE = f"/var/log/air-ground/{STATE_FILE_NAME}"
+
+
+def read_state_file(path: str) -> str | None:
+    """读状态文件。读不到就返回 None —— 见 parse_state_file 的说明。
+
+    刻意吞掉所有 OSError: 状态文件是**附加信息**, 它读不出来不该让健康检查
+    本身失败。真正的故障 (Master 掉线 / 话题缺失) 有各自的判定路径。
+    """
+    try:
+        return Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
 
 
 def probe_master(uri: str, timeout: float) -> tuple[bool, str, list]:
@@ -109,6 +128,11 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"单次 XML-RPC 超时秒数，默认 {DEFAULT_TIMEOUT}",
     )
     parser.add_argument(
+        "--state-file",
+        default=os.environ.get("AIR_GROUND_STATE_FILE", DEFAULT_STATE_FILE),
+        help=f"容器 entrypoint 写下的状态文件，默认 {DEFAULT_STATE_FILE}",
+    )
+    parser.add_argument(
         "--quiet", action="store_true",
         help="不打印，只用退出码表达结果",
     )
@@ -126,6 +150,7 @@ def main(argv: list[str] | None = None) -> int:
         master_error=error,
         role=args.role,
         published=published,
+        degraded=parse_state_file(read_state_file(args.state_file)),
     )
 
     if not args.quiet:

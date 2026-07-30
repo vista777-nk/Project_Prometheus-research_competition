@@ -23,15 +23,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from agcheck import (  # noqa: E402
+    EXIT_DEGRADED,
     EXIT_MASTER_DOWN,
     EXIT_OK,
     EXIT_TOPICS_MISSING,
     EXIT_USAGE,
     REQUIRED_TOPICS,
+    DegradedState,
     evaluate,
     extract_published_topics,
     format_report,
     parse_master_uri,
+    parse_state_file,
     required_topics,
 )
 
@@ -269,9 +272,107 @@ class TestExitCodeContract(unittest.TestCase):
             "topics_missing": EXIT_TOPICS_MISSING,
             "usage": EXIT_USAGE,
         }
+        codes["degraded"] = EXIT_DEGRADED
         self.assertEqual(len(set(codes.values())), len(codes), "退出码不能重复")
-        self.assertEqual(codes, {"ok": 0, "master_down": 1,
-                                 "topics_missing": 2, "usage": 3})
+        # 这组值是**跨端契约**: air-ground-healthcheck.service 的 SuccessExitStatus、
+        # alert.sh 的 case 分支都硬编码了它们。改这里必须同步改那两处。
+        self.assertEqual(codes, {"ok": 0, "master_down": 1, "topics_missing": 2,
+                                 "usage": 3, "degraded": 4})
+
+
+class TestParseStateFile(unittest.TestCase):
+    """entrypoint 写下的状态文件解析。"""
+
+    def test_none_is_not_degraded(self):
+        # 文件不存在 = 老镜像或还没写。判成降级会让所有存量部署一起变黄。
+        self.assertEqual(parse_state_file(None), DegradedState(False, ""))
+
+    def test_empty_is_not_degraded(self):
+        self.assertFalse(parse_state_file("").degraded)
+        self.assertFalse(parse_state_file("\n\n  \n").degraded)
+
+    def test_flag_zero_is_not_degraded(self):
+        self.assertFalse(parse_state_file("AIR_GROUND_DEGRADED=0").degraded)
+
+    def test_flag_one_is_degraded(self):
+        state = parse_state_file(
+            """# 注释行
+AIR_GROUND_ROLE=car
+AIR_GROUND_DEGRADED=1
+AIR_GROUND_DEGRADED_REASON=car_edge_real.launch 未提供
+"""
+        )
+        self.assertTrue(state.degraded)
+        self.assertEqual(state.reason, "car_edge_real.launch 未提供")
+
+    def test_reason_may_contain_equals_and_spaces(self):
+        # 原因里有 "=" 很正常 (贴了个命令行), 不该被截断
+        state = parse_state_file(
+            """AIR_GROUND_DEGRADED=1
+AIR_GROUND_DEGRADED_REASON=跑的是 chassis=diff, 缺 real launch"""
+        )
+        self.assertEqual(state.reason, "跑的是 chassis=diff, 缺 real launch")
+
+    def test_quotes_are_stripped(self):
+        state = parse_state_file(
+            """AIR_GROUND_DEGRADED_REASON="缺驱动"
+AIR_GROUND_DEGRADED="1"
+"""
+        )
+        self.assertTrue(state.degraded)
+        self.assertEqual(state.reason, "缺驱动")
+
+    def test_garbage_lines_are_ignored(self):
+        # 半截写入的文件 (容器被 kill 在 write 中间) 不该让健康检查崩掉
+        self.assertFalse(parse_state_file("""这不是键值对
+=
+AIR_GROUND_DEG""").degraded)
+
+    def test_false_words_are_not_degraded(self):
+        for word in ("no", "false", "False", ""):
+            with self.subTest(word=word):
+                self.assertFalse(parse_state_file(f"AIR_GROUND_DEGRADED={word}").degraded)
+
+
+class TestDegradedPrecedence(unittest.TestCase):
+    """降级与真故障的优先级 —— 这是本次改动最容易搞反的地方。"""
+
+    DEGRADED = DegradedState(True, "car_edge_real.launch 未提供")
+
+    def test_degraded_reported_when_everything_else_ok(self):
+        report = evaluate(master_reachable=True, role="car",
+                          published=CAR_TOPICS, degraded=self.DEGRADED)
+        self.assertEqual(report.exit_code, EXIT_DEGRADED)
+        self.assertFalse(report.healthy)
+        self.assertIn("car_edge_real.launch 未提供", " ".join(report.details))
+
+    def test_master_down_outranks_degraded(self):
+        # Master 掉了还报"降级"是把根因藏起来
+        report = evaluate(master_reachable=False, master_error="timeout",
+                          role="car", published=(), degraded=self.DEGRADED)
+        self.assertEqual(report.exit_code, EXIT_MASTER_DOWN)
+
+    def test_topics_missing_outranks_degraded(self):
+        report = evaluate(master_reachable=True, role="car",
+                          published=("/car/state",), degraded=self.DEGRADED)
+        self.assertEqual(report.exit_code, EXIT_TOPICS_MISSING)
+
+    def test_unknown_role_outranks_degraded(self):
+        report = evaluate(master_reachable=True, role="submarine",
+                          published=CAR_TOPICS, degraded=self.DEGRADED)
+        self.assertEqual(report.exit_code, EXIT_USAGE)
+
+    def test_default_argument_keeps_old_behaviour(self):
+        # 不传 degraded 时行为必须与改动前一致 —— check_topics.py 等调用方没改
+        report = evaluate(master_reachable=True, role="car", published=CAR_TOPICS)
+        self.assertEqual(report.exit_code, EXIT_OK)
+
+    def test_report_marker_is_degraded_not_fail(self):
+        report = evaluate(master_reachable=True, role="car",
+                          published=CAR_TOPICS, degraded=self.DEGRADED)
+        text = format_report(report, "2026-07-31T00:00:00")
+        self.assertIn("DEGRADED:", text)
+        self.assertNotIn("FAIL:", text)
 
 
 if __name__ == "__main__":

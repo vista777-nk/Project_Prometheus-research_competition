@@ -35,6 +35,41 @@ echo "   ROS_IP    : ${ROS_IP:-<unset, 多网卡下有风险>}"
 echo "   Image     : ${AIR_GROUND_BUILD_COMMIT:-local} @ ${AIR_GROUND_BUILD_TIME:-unknown}"
 echo "=========================================="
 
+# --- 降级状态上报 -----------------------------------------------------------
+#
+# 为什么需要这个: 降级发生在 roslaunch **之前**, 此刻一个 ROS 话题都还没有,
+# 一条 echo 只会留在容器日志里, 上位机和健康检查都看不见。
+#
+# 写进 /home/airground/.ros/log/ —— 这是 compose 里 bind 到宿主机
+# /var/log/air-ground 的目录, 于是容器外的 healthcheck/check_nodes.py 读得到。
+#
+# 长期该住在哪: task-14 的 Capability 消息 (见 ICD.md) 才是"我这台车现在有哪些
+# 能力"的正确归宿。在 task-14 落地前, 这个文件是最小可用的替代。
+STATE_DIR="${AIR_GROUND_STATE_DIR:-/home/airground/.ros/log}"
+STATE_FILE="${STATE_DIR}/edge-state.env"
+
+DEGRADED=0
+DEGRADED_REASON=""
+
+# 每次启动都重写, 而不是只在降级时写 —— 否则上一次降级留下的文件会一直
+# 挂在那里, 让一次已经修好的部署永远显示为降级。
+write_state() {
+    mkdir -p "${STATE_DIR}" 2>/dev/null || true
+    {
+        echo "# 由 entrypoint.sh 在每次容器启动时重写。手工改它没有意义。"
+        echo "AIR_GROUND_ROLE=${ROLE}"
+        echo "AIR_GROUND_CHASSIS=${CHASSIS}"
+        echo "AIR_GROUND_LAUNCH=${LAUNCH_FILE:-}"
+        echo "AIR_GROUND_IMAGE=${AIR_GROUND_BUILD_COMMIT:-local}"
+        echo "AIR_GROUND_DEGRADED=${DEGRADED}"
+        echo "AIR_GROUND_DEGRADED_REASON=${DEGRADED_REASON}"
+    } > "${STATE_FILE}" 2>/dev/null || {
+        # 写不进去不该拦住启动 —— 状态文件是附加信息, 不是启动前提。
+        echo "[entrypoint] ⚠ 无法写状态文件 ${STATE_FILE}, 健康检查将看不到降级信息" >&2
+        echo "[entrypoint]   检查 compose 的 volumes: 是否挂了 /var/log/air-ground" >&2
+    }
+}
+
 # --- 前置自检 ---------------------------------------------------------------
 
 die() {
@@ -88,15 +123,20 @@ case "${ROLE}" in
                 echo "[entrypoint]   本次降级为 car_edge.launch (仿真侧同款边缘节点)。" >&2
                 echo "[entrypoint]   实机传感器驱动不会启动, 这是预期行为。" >&2
                 LAUNCH_FILE="car_edge.launch"
+                DEGRADED=1
+                DEGRADED_REASON="car_edge_real.launch 未提供 (task-14 未交付), 已降级为 car_edge.launch —— 实机传感器驱动未启动"
             fi
         else
             LAUNCH_FILE="car_edge.launch"
         fi
+        write_state
         exec roslaunch "${LAUNCH_PKG}" "${LAUNCH_FILE}" "default_chassis:=${CHASSIS}"
         ;;
 
     drone)
-        exec roslaunch air_ground_drone_bringup drone_edge.launch
+        LAUNCH_FILE="drone_edge.launch"
+        write_state
+        exec roslaunch air_ground_drone_bringup "${LAUNCH_FILE}"
         ;;
 
     *)

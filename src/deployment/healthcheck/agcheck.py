@@ -30,6 +30,11 @@ EXIT_OK = 0
 EXIT_MASTER_DOWN = 1
 EXIT_TOPICS_MISSING = 2
 EXIT_USAGE = 3
+#: 节点活着、话题齐全, 但**能力集不完整**(例: 实机传感器 launch 缺失, 已降级)。
+#: 单独给一个码而不是复用 0/2, 是因为它既不是"健康"也不是"故障":
+#: 实验可以继续跑, 但结论不能当成实机全功能下的结论。
+#: systemd unit 里把 4 列进 SuccessExitStatus —— 降级是**预期状态**, 不该刷 failed。
+EXIT_DEGRADED = 4
 
 #: 各角色必须存在发布者的话题。
 #:
@@ -41,6 +46,48 @@ REQUIRED_TOPICS: dict[str, tuple[str, ...]] = {
     "car": ("/car/observation", "/car/state", "/car/capability"),
     "drone": ("/drone/observation", "/drone/state", "/drone/capability"),
 }
+
+
+#: 边缘容器在启动时写下的状态文件名。
+#:
+#: 容器内路径 /home/airground/.ros/log/edge-state.env, 经 compose 的 bind mount
+#: 在宿主机上就是 /var/log/air-ground/edge-state.env —— 健康检查跑在**容器外**,
+#: 靠这个文件跨过容器边界读到 entrypoint 的自检结论。
+#: 用文件而不是 ROS 话题, 是因为降级恰恰发生在 roslaunch **之前**,
+#: 那时还没有任何话题可发。
+STATE_FILE_NAME = "edge-state.env"
+
+
+class DegradedState(NamedTuple):
+    """entrypoint 写下的降级结论。"""
+
+    degraded: bool
+    reason: str
+
+
+def parse_state_file(text: str | None) -> DegradedState:
+    """解析 ``KEY=VALUE`` 形式的状态文件内容。
+
+    传 ``None`` 表示文件不存在 —— 那**不算降级**。老版本镜像不写这个文件,
+    把"没有文件"判成降级会让所有存量部署一起变黄。
+    真正的容器没起来会由话题缺失 (EXIT_TOPICS_MISSING) 报出来, 那条优先级更高。
+    """
+    if not text:
+        return DegradedState(False, "")
+
+    values: dict[str, str] = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        values[key.strip()] = value.strip().strip('"').strip("'")
+
+    flag = values.get("AIR_GROUND_DEGRADED", "0")
+    return DegradedState(
+        degraded=flag not in ("", "0", "no", "false", "False"),
+        reason=values.get("AIR_GROUND_DEGRADED_REASON", "").strip(),
+    )
 
 
 class HealthReport(NamedTuple):
@@ -133,12 +180,16 @@ def evaluate(
     master_error: str = "",
     role: str = "car",
     published: Iterable[str] | None = None,
+    degraded: DegradedState | None = None,
 ) -> HealthReport:
     """综合判定健康状态。
 
     判定顺序是有意的：Master 不可达时**不再检查话题**。
     此时话题列表必然是空的，若一并报出来，一次网络抖动会同时产生
     "Master 不可达" + "三个话题全丢" 四条告警，把真正的根因淹掉。
+
+    降级 (``EXIT_DEGRADED``) 排在最后：它是"功能不全"，不是"坏了"。
+    Master 掉线或话题缺失时，先报那个——降级信息此刻只会分散注意力。
     """
     if not master_reachable:
         return HealthReport(
@@ -176,6 +227,18 @@ def evaluate(
             ),
         )
 
+    if degraded is not None and degraded.degraded:
+        return HealthReport(
+            exit_code=EXIT_DEGRADED,
+            summary=f"降级运行 (role={role}, 话题齐全但能力集不完整)",
+            details=(
+                degraded.reason or "entrypoint 未给出原因",
+                "节点在跑, 数据在发, 但缺失的那部分能力不会有数据 ——",
+                "拿这次实验的结论时要把这一条写进去。",
+                f"来源: /var/log/air-ground/{STATE_FILE_NAME} (由容器 entrypoint 写入)",
+            ),
+        )
+
     return HealthReport(
         exit_code=EXIT_OK,
         summary=f"健康 (role={role}, {len(expected)} 个话题均有发布者)",
@@ -185,7 +248,12 @@ def evaluate(
 
 def format_report(report: HealthReport, timestamp: str) -> str:
     """渲染成一行标题 + 若干缩进详情，供 journald 记录。"""
-    marker = "OK" if report.healthy else "FAIL"
+    if report.healthy:
+        marker = "OK"
+    elif report.exit_code == EXIT_DEGRADED:
+        marker = "DEGRADED"
+    else:
+        marker = "FAIL"
     lines = [f"[{timestamp}] {marker}: {report.summary}"]
     lines.extend(f"  {d}" for d in report.details)
     return "\n".join(lines)

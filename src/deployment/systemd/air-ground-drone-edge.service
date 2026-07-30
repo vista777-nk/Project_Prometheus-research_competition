@@ -41,6 +41,15 @@ After=dev-pixhawk.device
 
 Conflicts=air-ground-car-edge.service
 
+# 重启风暴限流。**必须放在 [Unit] 段** —— systemd v230 起
+# StartLimitIntervalSec= / StartLimitBurst= 从 [Service] 移到了 [Unit]。
+# 旧名 StartLimitInterval= 保留了 [Service] 兼容别名, 新名没有。
+# 写错段的表现是 systemd 打一句 "Unknown key name ... ignoring" 然后**静默忽略**:
+# 单元照常工作, 但限流根本没生效 —— 配置错了就是无休止的 10 秒重启循环。
+# (这一条是 CI 的 systemd-analyze verify 抓出来的, 本机 Windows 跳过了该检查。)
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
 [Service]
 Type=simple
 User=airground
@@ -70,8 +79,6 @@ RestartSec=10
 TimeoutStartSec=180
 TimeoutStopSec=60
 
-StartLimitIntervalSec=300
-StartLimitBurst=5
 
 # --- 加固 (作用范围同车机单元, 见该文件头第 2 条) ---
 NoNewPrivileges=yes

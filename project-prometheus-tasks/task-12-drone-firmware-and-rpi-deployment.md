@@ -2,14 +2,16 @@
 
 > **状态：✅ 已完成（2026-07-30）** | **优先级：🥉 高** | **实际耗时：约 4h**
 >
-> **产出**：`src/deployment/`（8 个子目录 33 个文件）·
+> **产出**：`src/deployment/`（8 个子目录 37 个文件）·
 > [ADR-0005](../docs/decisions/ADR-0005.md)（容器化部署）·
 > [ADR-0006](../docs/decisions/ADR-0006.md)（静态 IP 与时钟主从）·
+> [ADR-0007](../docs/decisions/ADR-0007.md)（`network_mode: host` 的暴露面与重估触发条件）·
 > CI job `validate-deployment` + `build-edge-image`
 >
-> **验收结果**：静态校验 21 项通过（含 31 个 Host 单元测试）。
+> **验收结果**：静态校验 25 项通过（含 45 个 Host 单元测试）。
 > 与本文档共 **14 处偏差，全部是"照抄会失败"的问题**，逐条见
-> [`src/deployment/README.md` §6](../src/deployment/README.md)。
+> [`src/deployment/README.md` §6](../src/deployment/README.md#6-与任务文档task-12的偏差)
+> ——**动手前先看那张表**（本页"可执行步骤"开头也有摘要）。
 >
 > **适用环境**：任意 OS（纯文本/Dockerfile/systemd unit 文件，不需 Ubuntu 20.04）
 > **硬件依赖**：无（Docker build 可在 CI 中验证，systemd 可语法检查）
@@ -89,6 +91,26 @@
 ---
 
 ## 可执行步骤
+
+> ## ⚠ 下面的代码块**不要照抄**
+>
+> 本节写于实现之前。实现过程中发现其中 **14 处照抄会直接失败**——
+> 不是风格问题，是"构建报错""服务起不来""把自己锁在门外"这一类。
+> 权威实现是 `src/deployment/`，偏差逐条附理由列在
+> **[`src/deployment/README.md` §6](../src/deployment/README.md#6-与任务文档task-12的偏差)**。
+>
+> 最容易踩的四条（完整 14 条见上面链接）：
+>
+> | 本节原文 | 照抄的后果 | 正确做法 |
+> |---|---|---|
+> | `FROM ros:noetic-ros-core-focal` | `rosdep install` 直接报错——ros-core 里 rosdep 没初始化过 | 用 `ros-base` |
+> | `roslaunch ... chassis:=${CHASSIS}` | `RLException: unused args`，第一次启动就失败 | `default_chassis:=` |
+> | `ChallengeResponseAuthentication no` | OpenSSH 9.x 已移除该项，`sshd -t` 报错、sshd 起不来——**把自己锁在门外** | `KbdInteractiveAuthentication no` |
+> | `ExecStartPre=docker compose pull` | Phase 1 没有 registry，开机 pull 必然失败 → 整个单元起不来 | `require-image.sh` 查本地镜像 |
+>
+> 本节保留原文不改，是因为它记录的是**当初的设想**；
+> 改掉它就看不出实现过程中学到了什么了。
+
 
 ### 12.1 目录结构
 
@@ -674,8 +696,11 @@ if __name__ == "__main__":
 `systemd` / `sshd` / `udev` / `Dockerfile` 都是**逐行解析**的，CRLF 会让它们
 在 Linux 上直接失效 —— 不是"看起来有点乱"，而是：
 
-* systemd 把 `Type=simple` 里的 `` 当成值的一部分 → 单元加载失败
-* sshd 配置行尾带 `` → 参数非法，sshd 拒绝启动 → **把自己锁在门外**
+* systemd 把 `Type=simple
+` 里的 `
+` 当成值的一部分 → 单元加载失败
+* sshd 配置行尾带 `
+` → 参数非法，sshd 拒绝启动 → **把自己锁在门外**
 * udev 规则静默不匹配 → 符号链接不出现，容器起不来且没有任何报错
 
 这正是 2026-07-25 编码事故的同一类问题，仓库日记里那条教训是
@@ -723,7 +748,8 @@ if __name__ == "__main__":
 前后两项正常红了，**中间那项没有**。
 
 原因：Git for Windows 附带的 MSYS `grep` 在读入时会静默剥掉 CR，
-于是 `grep $''` 在 Windows 上永远匹配不到。而 Linux CI 上 grep 行为正常 ——
+于是 `grep $'
+'` 在 Windows 上永远匹配不到。而 Linux CI 上 grep 行为正常 ——
 结果就是本地永远绿、真出问题时本地反而发现不了，属于最坏的一类假绿灯。
 改用"剥掉 CR 前后字节数是否变化"判断后三项全部正确报红。
 

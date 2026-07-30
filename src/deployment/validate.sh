@@ -174,20 +174,53 @@ fi
 # =============================================================================
 section "6. systemd 单元"
 # =============================================================================
-if command -v systemd-analyze >/dev/null 2>&1; then
-    for unit in src/deployment/systemd/*.service src/deployment/systemd/*.timer; do
-        out="$(systemd-analyze verify "${unit}" 2>&1 || true)"
-        # CI 上 /opt/air-ground 并不存在, "路径找不到"是预期告警, 只看真正的语法错误
-        real="$(echo "${out}" | grep -vE 'Failed to (open|resolve)|does not exist|not found|No such file' || true)"
-        if [[ -z "${real// }" ]]; then
-            pass "$(basename "${unit}")"
-        else
-            fail "$(basename "${unit}")"
-            echo "${real}" | sed 's/^/      /'
-        fi
-    done
+# --- 6a. 段归属自查 (不依赖 systemd, 本机也跑) -------------------------------
+# systemd 对"写错段的键"的处理是**打一行日志然后静默忽略** —— 单元照常启动,
+# 配置却没生效。这类错误只有 systemd-analyze verify 会说, 而它只在 Linux 上有,
+# 于是本机永远看不到。下面这几条把已经踩过的坑固定成本机也能跑的检查。
+#
+# StartLimitIntervalSec/StartLimitBurst: v230 起从 [Service] 移到了 [Unit],
+# 旧名 StartLimitInterval 留了兼容别名、新名没有。(CI 抓出来过一次。)
+misplaced=0
+for unit in src/deployment/systemd/*.service; do
+    bad="$(awk '
+        /^\[/       { sect = $0 }
+        /^StartLimit(IntervalSec|Burst)=/ { if (sect != "[Unit]") print FILENAME ":" FNR ": " $0 " —— 应在 [Unit] 段" }
+    ' "${unit}")"
+    if [[ -n "${bad}" ]]; then
+        misplaced=1
+        echo "${bad}" | sed 's|^.*/systemd/|      |'
+    fi
+done
+if [[ ${misplaced} -eq 0 ]]; then
+    pass "StartLimit* 均在 [Unit] 段"
 else
-    skip "systemd-analyze 不可用 (非 Linux) —— 单元语法由 CI 校验"
+    fail "有 StartLimit* 写在了 [Service] 段 (systemd 会静默忽略)"
+fi
+
+# --- 6b. systemd-analyze verify ----------------------------------------------
+if command -v systemd-analyze >/dev/null 2>&1; then
+    # 一次性校验全部单元, **不按单元归类**。
+    #
+    # 为什么不逐个报: systemd-analyze verify 会连带加载依赖单元, 并把它们的问题
+    # 一起打印。healthcheck.service 有 After=air-ground-*-edge.service, 于是校验
+    # 它时会把两个 edge 单元的错误也带上 —— 同一个错误在四份报告里各出现一次,
+    # 行号还指向别的文件。(CI 首次运行的输出正是如此: 四个单元全红, 真实错误两处。)
+    #
+    # 试过按文件名过滤来归类, 但那样"不带文件名的错误"会被静默丢掉 —— 又一个假绿灯。
+    # 宁可一次报全: systemd 的报错本来就自带 路径:行号。
+    units=(src/deployment/systemd/*.service src/deployment/systemd/*.timer)
+    out="$(systemd-analyze verify "${units[@]}" 2>&1 || true)"
+    # CI 上 /opt/air-ground 并不存在, "路径找不到"是预期告警, 只看真正的语法错误
+    real="$(echo "${out}"         | grep -vE 'Failed to (open|resolve)|does not exist|not found|No such file'         | grep -v '^[[:space:]]*$' || true)"
+    if [[ -z "${real}" ]]; then
+        pass "${#units[@]} 个 systemd 单元语法正确"
+    else
+        fail "systemd 单元有语法问题"
+        echo "${real}" | sed 's|^.*/src/deployment/systemd/|      |' | sort -u
+    fi
+else
+    skip "systemd-analyze 不可用 (非 Linux) —— 完整单元语法由 CI 校验"
 fi
 
 # =============================================================================
@@ -219,6 +252,41 @@ if grep -q 'default_chassis:=' src/deployment/docker/entrypoint.sh; then
 else
     fail "entrypoint 未传 default_chassis"
     xref_bad=1
+fi
+
+# 降级状态文件是一份**跨进程契约**: 容器内的 entrypoint.sh 写, 容器外的
+# agcheck.py 读。两边分属不同语言、不同镜像、不同生命周期, 改一边不会有
+# 任何编译期报错 —— 表现是健康检查永远报"未降级", 而实际正在降级运行。
+# 与固件那边用黄金帧锁串口协议是同一个用意。
+state_bad=0
+for key in AIR_GROUND_DEGRADED AIR_GROUND_DEGRADED_REASON; do
+    in_writer=$(grep -c "${key}" src/deployment/docker/entrypoint.sh || true)
+    in_reader=$(grep -c "${key}" src/deployment/healthcheck/agcheck.py || true)
+    if [[ "${in_writer}" -eq 0 || "${in_reader}" -eq 0 ]]; then
+        fail "降级状态键 ${key} 只在一端出现 (entrypoint=${in_writer}, agcheck=${in_reader})"
+        state_bad=1
+    fi
+done
+# 文件名也得一致, 否则一端写 A 一端读 B, 同样静默失效
+state_name=$(grep -oE 'STATE_FILE_NAME = "[^"]+"' src/deployment/healthcheck/agcheck.py | cut -d'"' -f2)
+if [[ -z "${state_name}" ]]; then
+    fail "agcheck.py 里找不到 STATE_FILE_NAME"
+    state_bad=1
+elif ! grep -q "${state_name}" src/deployment/docker/entrypoint.sh; then
+    fail "agcheck.py 的 STATE_FILE_NAME (${state_name}) 与 entrypoint.sh 写的不一致"
+    state_bad=1
+fi
+# 退出码 4 必须被 systemd 单元和告警脚本都认识
+if ! grep -q 'SuccessExitStatus=4' src/deployment/systemd/air-ground-healthcheck.service; then
+    fail "healthcheck.service 缺 SuccessExitStatus=4 → 降级会被长期标成 failed"
+    state_bad=1
+fi
+if ! grep -qE '^\s*4\)' src/deployment/healthcheck/alert.sh; then
+    fail "alert.sh 没有处理退出码 4 (降级)"
+    state_bad=1
+fi
+if [[ ${state_bad} -eq 0 ]]; then
+    pass "降级状态契约两端一致 (entrypoint ↔ agcheck ↔ systemd ↔ alert)"
 fi
 
 if [[ ${xref_bad} -eq 0 ]]; then

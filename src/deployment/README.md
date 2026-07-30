@@ -142,10 +142,30 @@ docker buildx build --platform linux/arm64 \
     -f src/deployment/docker/Dockerfile.edge \
     -t air-ground-edge:v1 --load .
 docker save air-ground-edge:v1 | gzip > edge-v1.tar.gz
+sha256sum edge-v1.tar.gz > edge-v1.tar.gz.sha256    # 供 Pi 上校验传输完整性
 
-# 拷到 U 盘 → 插到树莓派
-gunzip -c /media/usb/edge-v1.tar.gz | docker load
+# 拷到 U 盘 → 插到树莓派 → 在 Pi 上:
+sudo /opt/air-ground/scripts/update-image.sh
 ```
+
+`update-image.sh` 把这条流程里**容易漏做的四步**变成必然执行：
+
+| 步骤 | 漏做的代价 |
+|------|-----------|
+| 校验 SHA-256 | U 盘中途拔出 → `docker load` 报 `unexpected EOF`，看不出是传输坏了还是镜像坏了 |
+| 查架构 | 开发机忘了 `--platform linux/arm64` → load 成功，容器启动才报 `exec format error` |
+| 查剩余空间 | load 到一半盘满 → 留下无主 layer，还得手工 `docker system prune` |
+| 备份旧镜像 | 新镜像有问题时无法回滚，场地上只能干等 |
+
+```bash
+sudo scripts/update-image.sh                     # 自动找 U 盘上的包
+sudo scripts/update-image.sh /path/to/edge.tar.gz --restart   # 载入并重启（会中断实验）
+sudo scripts/update-image.sh --rollback          # 回到上一个镜像
+sudo scripts/update-image.sh --dry-run           # 只说要做什么
+```
+
+> **默认不重启**。新镜像下次启动才生效——镜像更新常在实验间隙做，
+> 把中断的时机交给人决定。
 
 也可以在树莓派上就地构建（首次约 30–60 分钟）：
 
@@ -251,6 +271,8 @@ CLI 包装进程。
 把这一点写清楚，是因为一串看起来很严肃的加固指令很容易让人以为
 安全问题已经解决了。详见 [ADR-0005](../../docs/decisions/ADR-0005.md) §决策-3。
 
+网络这一侧的边界另有取舍，见 §5.5。
+
 ### 5.2 谁来重启
 
 **systemd 独占。** compose 里是 `restart: "no"`。
@@ -277,6 +299,7 @@ compose 的 `devices:` 里列的设备**不存在时容器直接启动失败**�
 | **ROS Master 可达** | `check_nodes.py`（本任务） |
 | **必需话题有发布者** | `check_nodes.py`（本任务） |
 | 话题上真的有消息在流 | ✗ 需要 rospy，只能在容器内跑 `rostopic hz` |
+| **能力集是否完整（降级运行）** | `check_nodes.py` 读容器写的状态文件 |
 
 第 1 层已经有人管了，重复造轮子没有意义。第 2、3 层挂掉时进程往往还活得
 好好的，重启策略完全看不见 —— 那才是健康检查的价值所在。
@@ -285,7 +308,57 @@ compose 的 `devices:` 里列的设备**不存在时容器直接启动失败**�
 `check_topics.py` 里写明了这个边界，并给出容器内的替代命令。
 **不把发布者存在性叫作"心跳"**。
 
+**第 5 层是"跑着，但不是满配"。** `EDGE_MODE=real` 而
+`car_edge_real.launch` 还没交付（task-14）时，entrypoint 会降级为
+`car_edge.launch`。此时话题全都在发、Master 也正常，前四层**一片绿**，
+但实机传感器驱动根本没起来。
+
+只打一条 echo 是不够的——它留在容器日志里，上位机看不见。所以 entrypoint
+在 roslaunch **之前**把结论写进 `/var/log/air-ground/edge-state.env`
+（bind mount，容器外可读），`check_nodes.py` 读它并以退出码 **4** 报出：
+
+```
+[2026-07-31T12:00:00] DEGRADED: 降级运行 (role=car, 话题齐全但能力集不完整)
+  car_edge_real.launch 未提供 (task-14 未交付), 已降级为 car_edge.launch —— 实机传感器驱动未启动
+```
+
+三处配合，缺一个就静默失效，因此 `validate.sh` §7 会交叉校验：
+
+| 位置 | 作用 |
+|------|------|
+| `entrypoint.sh` | 每次启动重写状态文件（**不是只在降级时写**，否则修好之后旧文件会一直挂着） |
+| `agcheck.py` | `EXIT_DEGRADED = 4`，优先级**低于** Master 掉线和话题缺失——降级不该盖住真故障 |
+| `air-ground-healthcheck.service` | `SuccessExitStatus=4`。降级是已知预期状态，每 30 秒标一次 failed 会让 `systemctl --failed` 长期挂红，真出事时反而没人看 |
+| `alert.sh` | 4 → warning，不是 critical。节点在跑、数据在发，亮红灯会让现场以为要停飞 |
+
+> 这只是过渡方案。"这台车现在有哪些能力"的正确归宿是 ICD 里的
+> `Capability` 消息（task-14 交付）。届时状态文件应退化为 entrypoint
+> 的启动自检记录，判定权交给 `Capability`。
+
 ---
+
+### 5.5 `network_mode: host` 的安全边界与部署纪律
+
+边缘容器与宿主机**共享网络命名空间**。这不是配置疏忽——ROS 1 的节点端口
+由内核随机分配、没有任何配置项能约束成一个范围，`bridge` 模式声明不出
+`ports:`。完整推导与被否决的替代方案见
+[ADR-0007](../../docs/decisions/ADR-0007.md)。
+
+真正新增的风险只有一条：**容器内进程能连到宿主机 `127.0.0.1` 上的服务**。
+（改网络配置、抓包这些仍然做不到——它们由 capability 控制，未授予。）
+
+因此有三条部署纪律，装机时必须遵守：
+
+1. **宿主机上不跑绑定 `0.0.0.0` 的管理服务**——Web 控制台、Jupyter、
+   远程调试端口一律不装，或只绑 `127.0.0.1` 并知道它对容器仍然可达。
+   SSH 是唯一例外，已由 §4.8 的加固覆盖。
+2. **不做端口转发到边缘节点网段**。静态 IP 在内网段（[ADR-0006](../../docs/decisions/ADR-0006.md)），
+   与外网之间隔着实验室路由器。
+3. **同一台 Pi 上不跑互不信任的第三方容器**——host 模式下它们之间
+   没有任何网络隔离。
+
+以下任一情况出现时，**动手之前**先回到 ADR-0007 §决策-3 重估：
+接外网 · 迁 ROS 2 · 同机跑第二个互不信任的负载。
 
 ## 6. 与任务文档（task-12）的偏差
 
@@ -319,11 +392,13 @@ bash src/deployment/validate.sh
 | 检查项 | 本地(Git-Bash) | Linux CI |
 |--------|:---:|:---:|
 | shell 语法 `bash -n` | ✓ | ✓ |
-| Python 语法 + 31 个单元测试 | ✓ | ✓ |
+| Python 语法 + 45 个单元测试 | ✓ | ✓ |
 | compose 结构 + 话题名一致性 | ✓ | ✓ |
 | 行尾必须是 LF | ✓ | ✓ |
 | 私钥 / 明文口令扫描 | ✓ | ✓ |
+| systemd `[Unit]`/`[Service]` 段归属自查 | ✓ | ✓ |
 | `systemd-analyze verify` | SKIP | ✓ |
+| 降级状态契约两端一致 | ✓ | ✓ |
 | `docker build` | SKIP | 另一个 job |
 
 跳过的项**会明确报 SKIP**，不静默略过。
@@ -332,6 +407,13 @@ bash src/deployment/validate.sh
 > 一份假私钥进去，确认三项都会红。第二项一开始**没红** ——
 > Git for Windows 的 grep 会静默剥掉 CR，`grep $'\r'` 在 Windows 上
 > 永远匹配不到。已改用字节数比对，理由写在 `validate.sh` §4 的注释里。
+>
+> 第二次是 CI 抓的：`StartLimitIntervalSec` 写在了 `[Service]` 段，
+> systemd v230 起它属于 `[Unit]`——旧名 `StartLimitInterval` 留了兼容别名、
+> 新名没有，于是 systemd 打一句 "Unknown key name … ignoring" 就**静默忽略**，
+> 单元照常工作而限流从未生效。已补 §6a 段归属自查，本机也能查（不依赖 systemd）。
+> 同一次还发现 `systemd-analyze verify` 会连带加载依赖单元、把它们的错误算到
+> 被检单元头上——四个单元全红而真实错误只有两处。改为一次性校验全部单元。
 
 ---
 
@@ -367,7 +449,12 @@ bash src/deployment/validate.sh
 - **`setup-3dr-radio.py` 未在真实电台上验证。** AT 命令集依据 SiK 固件
   公开文档。默认只读，首次上机先确认能进命令模式再考虑 `--apply`。
 - **`car_edge_real.launch` 尚不存在**（task-14 交付）。`EDGE_MODE=real`
-  时 entrypoint 会检测到并降级为 `car_edge.launch`，同时打印说明。
+  时 entrypoint 会检测到并降级为 `car_edge.launch`，写状态文件，
+  健康检查以退出码 4 报出（见 §5.4）。**上机验收时车机必然处于降级状态**，
+  这是预期的，不是配置错误。
+- **降级状态目前只覆盖 `car_edge_real.launch` 这一种情况。** 传感器掉线、
+  相机没枚举到之类的部分能力缺失还没有对应的判定——那需要 task-14 的
+  `Capability` 消息，不是一个启动期状态文件能表达的。
 - **网络降级（WiFi→4G）与本地缓存模式未实现**，是 Phase 2 规划
   （task-12 评审建议 4）。
 
@@ -380,6 +467,7 @@ bash src/deployment/validate.sh
 | [task-12](../../project-prometheus-tasks/task-12-drone-firmware-and-rpi-deployment.md) | 任务定义与验收标准 |
 | [ADR-0005](../../docs/decisions/ADR-0005.md) | 为什么用 Docker 而不是裸机部署 |
 | [ADR-0006](../../docs/decisions/ADR-0006.md) | 静态 IP 与时钟主从的分配方案 |
+| [ADR-0007](../../docs/decisions/ADR-0007.md) | `network_mode: host` 的暴露面与重估触发条件 |
 | [network/drone-hardware.md](network/drone-hardware.md) | 无人机侧接线与上电顺序 |
 | [PLATFORM.md §三](../../project-prometheus-tasks/PLATFORM.md) | 物理部署映射 |
 | [SECURITY.md](../../SECURITY.md) | 项目安全策略 |

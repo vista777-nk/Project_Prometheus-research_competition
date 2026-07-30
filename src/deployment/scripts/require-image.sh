@@ -35,8 +35,11 @@ Phase 1 用离线分发, 不从 registry 拉取。按下面两步之一处理:
 
   A) 从开发机把镜像拷过来 (推荐, 无需 Pi 上编译):
        开发机> docker save ${IMAGE} | gzip > edge.tar.gz
+       开发机> sha256sum edge.tar.gz > edge.tar.gz.sha256    # 供 Pi 上校验
        # 拷到 U 盘, 插到树莓派上
-       Pi>      gunzip -c /media/usb/edge.tar.gz | docker load
+       Pi>      /opt/air-ground/scripts/update-image.sh
+       # 该脚本会自动找包、验 SHA-256、查架构、备份旧镜像后再载入。
+       # 手工等价命令: gunzip -c /media/usb/edge.tar.gz | docker load
 
   B) 在树莓派上就地构建 (慢, 首次约 30-60 分钟):
        Pi> cd /opt/air-ground/repo
