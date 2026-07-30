@@ -1,0 +1,46 @@
+# =============================================================================
+# air-ground-lan.nmconnection.template — 静态 IP 连接模板
+#
+# ⚠ 这是**模板**。实际使用时拷一份改掉占位符, 生成的 .nmconnection 不入库
+#   (见 .gitignore —— 它会带上具体地址, 将来还可能带 WiFi 口令)。
+#
+# 用法:
+#   sed -e 's/@@ROLE@@/car/'  \
+#       -e 's/@@ADDR@@/192.168.1.10/' \
+#       -e 's/@@UUID@@/'"$(uuidgen)"'/' \
+#       air-ground-lan.nmconnection.template > air-ground-lan.nmconnection
+#   sudo install -m 0600 -o root -g root \
+#       air-ground-lan.nmconnection /etc/NetworkManager/system-connections/
+#   sudo nmcli connection reload && sudo nmcli connection up air-ground-lan
+#
+#   ⚠ 权限必须是 0600 且属主 root, 否则 NetworkManager 会**拒绝加载**该文件
+#     且只在 journal 里留一行, 现象是"配置文件明明在那儿却不生效"。
+#
+# 地址分配的理由见 ADR-0006。
+# =============================================================================
+
+[connection]
+id=air-ground-lan
+uuid=@@UUID@@
+type=ethernet
+interface-name=eth0
+autoconnect=true
+# 比默认 WiFi 连接优先: 有线在时走有线, 拔了自动回落到 WiFi
+autoconnect-priority=100
+
+[ethernet]
+
+[ipv4]
+method=manual
+# @@ROLE@@ = car(192.168.1.10) | drone(192.168.1.20)
+address1=@@ADDR@@/24,192.168.1.1
+dns=192.168.1.1;223.5.5.5;
+# 静态地址不需要等 DHCP, 缩短开机到网络就绪的时间
+may-fail=false
+
+[ipv6]
+method=disabled
+# 关掉 IPv6 不是洁癖: ROS 1 只走 IPv4, 但节点注册时若拿到 IPv6 地址,
+# 会向 Master 注册一个别人连不上的 URI, 症状是节点可见但话题收不到数据。
+
+[proxy]

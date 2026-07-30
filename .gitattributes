@@ -43,7 +43,26 @@ Makefile        text working-tree-encoding=UTF-8
 *.json          text working-tree-encoding=UTF-8
 *.toml          text working-tree-encoding=UTF-8
 *.ini           text working-tree-encoding=UTF-8
-*.conf          text working-tree-encoding=UTF-8
+
+# ── 部署配置 (task-12) ──
+#
+# 以下文件由 Linux 上的解析器逐行读取，**CRLF 会直接导致解析失败**，
+# 不是"看起来有点乱"而是服务起不来：
+#   · systemd  把 "Type=simple" 里的  当成值的一部分 → 单元加载失败
+#   · sshd     配置行尾带  → 参数非法, sshd 拒绝启动 → 远程锁死在门外
+#   · udev     规则行尾带  → 规则静默不匹配, 设备符号链接不出现
+#   · Docker   RUN 行尾带  → 容器内 shell 报 command not found
+# 因此这几类一律强制 eol=lf。这条规则必须先于它保护的文件进入仓库
+# (2026-07-25 的编码事故教训, 见 Research_Diary)。
+*.conf          text working-tree-encoding=UTF-8 eol=lf
+*.service       text working-tree-encoding=UTF-8 eol=lf
+*.timer         text working-tree-encoding=UTF-8 eol=lf
+*.rules         text working-tree-encoding=UTF-8 eol=lf
+*.nmconnection  text working-tree-encoding=UTF-8 eol=lf
+*.template      text working-tree-encoding=UTF-8 eol=lf
+Dockerfile      text working-tree-encoding=UTF-8 eol=lf
+Dockerfile.*    text working-tree-encoding=UTF-8 eol=lf
+.dockerignore   text working-tree-encoding=UTF-8 eol=lf
 
 # ── 二进制文件（不做编码转换）──
 *.png           binary

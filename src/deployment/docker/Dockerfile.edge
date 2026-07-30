@@ -1,0 +1,98 @@
+# =============================================================================
+# Dockerfile.edge — 空地联合边缘节点镜像 (drone / car 共用)
+#
+# 构建 (必须在**仓库根目录**执行, 因为要 COPY ./src):
+#   docker build -f src/deployment/docker/Dockerfile.edge -t air-ground-edge:v1 .
+#
+# 运行: 见同目录 docker-compose.edge.yml + 角色 override
+#
+# -----------------------------------------------------------------------------
+# 与 task-12 §12.2 原文的三处差异, 都是"照抄会构建失败"的问题:
+#
+#   1. base image 用 ros-base 而不是 ros-core。
+#      ros-core 镜像里**没有初始化过 rosdep** (rosdep init 在 ros-base 层才做),
+#      原文的 `rosdep install` 会报 "ERROR: your rosdep installation has not been
+#      initialized yet"。
+#   2. 显式安装 python3-catkin-tools。
+#      `catkin build` 来自 catkin_tools, 不在任何 ros:* 基础镜像里,
+#      原文直接调用会 command not found。
+#   3. 构建上下文是仓库根目录, 不是 src/deployment/。
+#      原文写 `docker build -f docker/Dockerfile.edge .`, 但 `.` 下没有 ./src。
+# =============================================================================
+
+FROM ros:noetic-ros-base-focal
+
+LABEL maintainer="vista777-nk"
+LABEL description="Air-Ground Joint EQA Edge Node (Drone or Car)"
+LABEL org.opencontainers.image.source="https://github.com/vista777-nk/research_compitition"
+
+# 构建期不要交互式 tzdata 提问
+ARG DEBIAN_FRONTEND=noninteractive
+
+# 版本溯源: CI 注入真实 commit, 本地构建退化为 local。
+# 与固件的 FW_COMMIT_HASH 同一套思路 —— 拿到一个 artifact 要能问出它是哪来的。
+ARG BUILD_COMMIT=local
+ARG BUILD_TIME=unknown
+ENV AIR_GROUND_BUILD_COMMIT=${BUILD_COMMIT} \
+    AIR_GROUND_BUILD_TIME=${BUILD_TIME}
+
+# --- 系统依赖 ---
+# catkin_tools 在 Focal 上还需要 python3-osrf-pycommon, 否则 import 失败。
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3-pip \
+        python3-yaml \
+        python3-numpy \
+        python3-catkin-tools \
+        python3-osrf-pycommon \
+        ros-noetic-mavros \
+        ros-noetic-mavros-extras \
+        ros-noetic-mavros-msgs \
+        ros-noetic-ros-control \
+        ros-noetic-ros-controllers \
+        ros-noetic-robot-localization \
+        ros-noetic-tf2-ros \
+        ros-noetic-tf2-geometry-msgs \
+        ros-noetic-cv-bridge \
+        usbutils \
+        i2c-tools \
+        iproute2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- Python 依赖 ---
+# 版本与仓库根的 requirements.txt 对齐, 避免"仿真跑的库和实机跑的库不是一个版本"。
+RUN pip3 install --no-cache-dir \
+        "pymavlink>=2.4.39" \
+        "pyserial>=3.5"
+
+# --- 非 root 用户 ---
+# 说明: 容器内的 dialout/i2c 组 GID 未必与树莓派宿主机一致。
+# 真正生效的是宿主机 GID, 因此 compose 里用 group_add 注入 (见 docker-compose.edge.yml)。
+# 这里加入组只是让镜像单独跑起来时不至于完全没有串口权限。
+RUN useradd --create-home --shell /bin/bash --uid 1000 airground \
+    && usermod -aG dialout,plugdev,video airground
+
+# --- 工作空间 ---
+WORKDIR /home/airground/catkin_ws
+COPY --chown=airground:airground ./src ./src
+
+# --- 编译 ---
+# rosdep update 用 airground 用户跑: root 下跑会在 /root 留缓存, 运行时用户读不到。
+RUN rosdep update --rosdistro noetic 2>/dev/null || true \
+    && /bin/bash -c "source /opt/ros/noetic/setup.bash \
+        && apt-get update \
+        && rosdep install --from-paths src --ignore-src -y --rosdistro noetic \
+        && catkin build --summarize --no-status" \
+    && rm -rf /var/lib/apt/lists/* \
+    && chown -R airground:airground /home/airground
+
+# --- 入口点 ---
+COPY --chown=root:root ./src/deployment/docker/entrypoint.sh /entrypoint.sh
+RUN chmod 0755 /entrypoint.sh
+
+# 让 `docker inspect` 能直接看出这个镜像给谁用的
+ENV AIR_GROUND_ROLE=car \
+    AIR_GROUND_CHASSIS=diff \
+    EDGE_MODE=real
+
+USER airground
+ENTRYPOINT ["/entrypoint.sh"]

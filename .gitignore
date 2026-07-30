@@ -113,6 +113,12 @@ $RECYCLE.BIN/
 # === Environment & Secrets ===
 .env
 .env.*
+# 例外: 带注释的样例必须入库 —— install.sh 拿它生成各机的 .env,
+# README §4.5 也引用它。规则本身是对的 (真实 .env 含各机地址与将来的口令),
+# 但"按文件名"的忽略规则每次新增子项目都要复查一遍例外 ——
+# 与 2026-07-28 固件 Makefile 被裸 `Makefile` 规则吞掉是同一类问题。
+!.env.example
+!**/.env.example
 *.secret
 config/secrets.yaml
 config/local.yaml
@@ -130,3 +136,19 @@ temp/
 *.rar
 *.7z
 !models/**/*.zip
+
+# ── 部署密钥与本地覆盖 (task-12) ──
+# 私钥绝不入库。generate-ssh-keys.sh 只在本地 ~/.ssh 下生成，
+# 但有人可能手滑把密钥拷进部署目录, 这里做第二道拦截。
+*.pem
+*_rsa
+*_ed25519
+id_*
+!id_*.pub.example
+src/deployment/**/*.key
+src/deployment/**/authorized_keys
+# 各机实际的网络配置由模板生成, 含 WiFi 口令, 不入库
+src/deployment/network/*.nmconnection
+!src/deployment/network/*.nmconnection.template
+# 离线镜像包 (*.tar.gz 上面的 Archives 段已覆盖)
+src/deployment/**/*.tar

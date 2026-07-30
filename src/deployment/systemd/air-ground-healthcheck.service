@@ -1,0 +1,49 @@
+# =============================================================================
+# air-ground-healthcheck.service — 周期健康检查 (由 .timer 触发)
+#
+# 职责边界 (重要, 否则容易和 docker/systemd 的重启机制重复造轮子):
+#   · 容器**进程**活着没有 → docker + systemd Restart=always 已经管了
+#   · 本单元管的是**语义级**健康: ROS Master 可达吗? 关键 Topic 还在发吗?
+#     这两件事挂掉时进程往往还活得好好的, 重启策略看不见。
+#
+# 检查失败不自动重启边缘节点 —— 网络抖一下就把正在跑的实验掐掉, 代价更大。
+# 只告警, 由人或 Phase 2 的降级逻辑决定怎么处置。
+# =============================================================================
+
+[Unit]
+Description=Air-Ground Edge Node Health Check
+Documentation=file:///opt/air-ground/README.md
+# PartOf 让边缘节点停掉时健康检查也一起停, 不再刷"Master 不可达"的噪声。
+# 两个角色只会有一个真的在跑 (它们互为 Conflicts), 都列上即可。
+After=air-ground-car-edge.service air-ground-drone-edge.service
+
+[Service]
+Type=oneshot
+User=airground
+Group=airground
+WorkingDirectory=/opt/air-ground
+EnvironmentFile=/opt/air-ground/.env
+
+# 退出码语义 (见 healthcheck/check_nodes.py):
+#   0 = 健康  1 = Master 不可达  2 = Master 在但关键 Topic 缺失
+# SuccessExitStatus 只列 0: 非 0 会在 journal 里留下 failed 记录, 便于事后统计。
+ExecStart=/opt/air-ground/healthcheck/check_nodes.py
+
+# 无论上面成功与否都跑告警脚本, 由它按退出码决定亮灯还是静默。
+# `-` 前缀: 告警本身失败不该把这次检查记成失败。
+ExecStopPost=-/opt/air-ground/healthcheck/alert.sh
+
+TimeoutStartSec=30
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=yes
+ReadWritePaths=/var/log/air-ground
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=air-ground-health
+
+[Install]
+WantedBy=multi-user.target

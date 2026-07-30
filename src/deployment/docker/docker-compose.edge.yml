@@ -1,0 +1,80 @@
+# =============================================================================
+# docker-compose.edge.yml — Edge 节点公共基础 (车机 / 无人机共用)
+#
+# 单独用这个文件跑不起来: 角色特定的设备与环境变量在 override 文件里。
+#   车机  : docker compose -f docker-compose.edge.yml -f docker-compose.car.yml   up
+#   无人机: docker compose -f docker-compose.edge.yml -f docker-compose.drone.yml up
+#
+# -----------------------------------------------------------------------------
+# 与 task-12 §12.2 原文的两处关键差异
+# -----------------------------------------------------------------------------
+# 1. **删掉了 `privileged: true`。**
+#    原文同时写了 `privileged: true` 和 `devices:` —— 这两者是矛盾的:
+#    privileged 已经把宿主机所有设备节点和全部 capability 给了容器,
+#    下面那份 devices 白名单一行都不起作用, 只是看起来像做了权限控制。
+#    要么承认自己在用 privileged, 要么真的逐个挂设备。这里选后者
+#    (混元3 评审建议 1)。代价见 ADR-0005 §决策-3。
+#
+# 2. **`restart: "no"` —— 生命周期交给 systemd 独占。**
+#    原文 compose 写 `restart: unless-stopped`, systemd 又写 `Restart=always`,
+#    两个重启控制器叠在一起: 容器崩了 docker 就地重启, systemd 却看不到,
+#    于是 `systemctl status` 显示一切正常、`RestartCount` 永远是 0,
+#    而实际上节点已经在后台反复重启。排查这种问题非常费时。
+#    见 ADR-0005 §决策-4。
+# =============================================================================
+
+services:
+  edge-node:
+    image: ${AIR_GROUND_IMAGE:-air-ground-edge:v1}
+    container_name: air_ground_edge
+
+    # 生命周期由 systemd 拥有, 见文件头说明
+    restart: "no"
+
+    # ROS 1 的 XMLRPC/TCPROS 用动态端口 + 节点间直连, 必须共享宿主机网络栈
+    network_mode: "host"
+
+    # roslaunch 收到 SIGINT 才会走"通知各节点 shutdown → 等待 → 收尸"的正常流程;
+    # 默认的 SIGTERM 会让它直接死掉, 电机可能保持在最后一次下发的占空比上。
+    # 下位机侧有 500ms 指令看门狗兜底 (见固件 CMD_TIMEOUT_MS), 但不该依赖兜底。
+    stop_signal: SIGINT
+    stop_grace_period: 30s
+
+    # PID 1 收尸。roslaunch 会 fork 一堆节点进程, 没有 init 的话僵尸进程会堆积。
+    init: true
+
+    environment:
+      AIR_GROUND_ROLE: ${ROLE:-car}
+      AIR_GROUND_CHASSIS: ${CHASSIS:-diff}
+      EDGE_MODE: ${EDGE_MODE:-real}
+      ROS_MASTER_URI: ${ROS_MASTER_URI:-http://192.168.1.100:11311}
+      # 多网卡 (以太网 + WiFi + 4G) 下必须显式指定本机对外地址,
+      # 否则节点会用一个别人连不上的地址注册到 Master。见 entrypoint.sh。
+      ROS_IP: ${ROS_IP:?ROS_IP 必须显式设置 —— 见 .env.example}
+
+    # 宿主机 GID 注入。容器镜像里 dialout/i2c 的 GID 是构建时 Debian 分配的,
+    # 与树莓派 OS 上的实际 GID 不一定相同; 不匹配时容器内用户打不开串口,
+    # 症状是 "Permission denied: /dev/mcu" 而 ls -l 看着权限没问题。
+    # 实际 GID 用 `getent group dialout i2c` 查, 写进 .env。
+    group_add:
+      - ${HOST_GID_DIALOUT:-20}
+      - ${HOST_GID_I2C:-993}
+
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/log/air-ground:/home/airground/.ros/log
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+    # 公共设备: 3DR SiK 数传 (车机=ground 端, 无人机=air 端, 两边都有)
+    #
+    # ⚠ devices 里列出的设备**不存在时容器直接启动失败**。
+    #   这对数传和下位机是想要的行为 (没有它们边缘节点本来也没意义, 失败要响);
+    #   对可插拔的可选传感器不是, 因此 RPLIDAR 之类放在
+    #   docker-compose.car-sensors.yml 里, 接上了才叠加。
+    devices:
+      - /dev/telem:/dev/telem

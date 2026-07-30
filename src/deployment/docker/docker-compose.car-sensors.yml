@@ -1,0 +1,20 @@
+# =============================================================================
+# docker-compose.car-sensors.yml — 车机可插拔传感器 (可选叠加)
+#
+# 用法 (确认传感器已接好时才加这一层):
+#   docker compose -f docker-compose.edge.yml \
+#                  -f docker-compose.car.yml \
+#                  -f docker-compose.car-sensors.yml up
+#
+# 为什么单独一层: compose 的 devices: 里列的设备不存在时容器**直接启动失败**。
+# 把 USB 传感器混进必需项, 结果就是"雷达没插上导致整台车的边缘节点起不来" ——
+# 而底盘控制、数传、遥测本来都还能正常工作。故障范围不该被配置放大。
+# =============================================================================
+
+services:
+  edge-node:
+    devices:
+      # RPLIDAR A1 (USB 转串口)
+      - /dev/rplidar:/dev/rplidar
+      # OpenMV 云台相机 (USB 转串口)
+      - /dev/openmv:/dev/openmv

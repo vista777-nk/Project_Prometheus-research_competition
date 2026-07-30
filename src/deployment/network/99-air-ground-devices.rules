@@ -1,0 +1,87 @@
+# =============================================================================
+# 99-air-ground-devices.rules — 把会漂移的设备名钉成稳定符号链接
+#
+# 安装:
+#   sudo install -m 0644 99-air-ground-devices.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+# 验证:
+#   ls -l /dev/ | grep -E 'pixhawk|mcu|telem|rplidar|openmv'
+#
+# -----------------------------------------------------------------------------
+# 为什么必须做这件事
+# -----------------------------------------------------------------------------
+# ttyACM* / ttyUSB* 的编号按**枚举顺序**分配, 不是固定的。无人机 Pi 上同时接了
+# 飞控和一个 USB 转串口调试器时, 谁先枚举谁拿 ttyACM0 —— 换个插拔顺序、
+# 或者某次上电时序不同, MAVROS 就会去连一个不是飞控的东西。
+# 这类故障的表现是"昨天还好好的今天连不上", 极难定位。
+#
+# -----------------------------------------------------------------------------
+# TAG+="systemd" 与 SYSTEMD_ALIAS 的作用 (这一条容易漏)
+# -----------------------------------------------------------------------------
+# 只写 SYMLINK+="pixhawk" 的话, /dev/pixhawk 会出现, 但 **systemd 里并不存在
+# dev-pixhawk.device 这个单元** —— systemd 的设备单元名是从设备节点真实路径
+# 推导的 (/dev/ttyACM0 → dev-ttyACM0.device)。因此
+#   Wants=dev-pixhawk.device
+# 会永远等不到。
+#
+# 要让符号链接也成为一个可被依赖的单元名, 需要两件事:
+#   1. TAG+="systemd"                    —— 让该设备对 systemd 可见
+#   2. ENV{SYSTEMD_ALIAS}="/dev/pixhawk" —— 为它注册一个别名单元
+# 见 systemd.device(5)。task-12 §12.5 的原始规则只有 SYMLINK, 配上
+# §12.3 的设备依赖是跑不通的。
+#
+# -----------------------------------------------------------------------------
+# ⚠ VID/PID 需上机核对
+# -----------------------------------------------------------------------------
+# 下面的 idVendor/idProduct 是常见型号的公开值, 但同型号不同批次、
+# 不同固件版本可能不同。上板前用这条命令查实际值:
+#   udevadm info -a -n /dev/ttyACM0 | grep -m2 -E 'idVendor|idProduct'
+# 对不上就改这里 —— 不要去改上层的设备路径。
+# =============================================================================
+
+# --- Pixhawk 6C 飞控 (3DR/ArduPilot VID 0x26AC, PX4 VID 0x1209) --------------
+SUBSYSTEM=="tty", ATTRS{idVendor}=="26ac", SYMLINK+="pixhawk", \
+    TAG+="systemd", ENV{SYSTEMD_ALIAS}="/dev/pixhawk", MODE="0660", GROUP="dialout"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="5741", SYMLINK+="pixhawk", \
+    TAG+="systemd", ENV{SYSTEMD_ALIAS}="/dev/pixhawk", MODE="0660", GROUP="dialout"
+
+# --- 3DR SiK 数传 (SiLabs CP2102: 10c4:ea60) ---------------------------------
+# 注意 CP2102 是通用芯片, RPLIDAR 也常用它。因此这里必须再用序列号区分,
+# 否则两个设备会抢同一个符号链接。序列号用下面这条查:
+#   udevadm info -a -n /dev/ttyUSB0 | grep -m1 '{serial}'
+# 查到后把 ATTRS{serial} 的值替换掉。留空的话本条规则不会匹配任何设备 ——
+# 这是刻意的: 宁可符号链接不出现 (wait-for-device.sh 会报出来),
+# 也不要两个设备随机抢一个名字。
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", \
+    ATTRS{serial}=="REPLACE_WITH_TELEM_SERIAL", SYMLINK+="telem", \
+    TAG+="systemd", ENV{SYSTEMD_ALIAS}="/dev/telem", MODE="0660", GROUP="dialout"
+
+# --- RPLIDAR A1 (同为 CP2102, 靠序列号区分) ----------------------------------
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", \
+    ATTRS{serial}=="REPLACE_WITH_RPLIDAR_SERIAL", SYMLINK+="rplidar", \
+    MODE="0660", GROUP="dialout"
+
+# --- OpenMV 云台相机 (OpenMV VID 0x1209 / PID 0xABD1) ------------------------
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="abd1", \
+    SYMLINK+="openmv", MODE="0660", GROUP="dialout"
+
+# --- 车机下位机 (STM32F407 / MSPM0G3507) -------------------------------------
+#
+# 两种接法, 按实际情况留一条:
+#
+# (a) 走树莓派硬件串口 (GPIO 14/15 → /dev/ttyAMA1)。这是 PLATFORM.md 的设计,
+#     设备名固定不漂移, 严格来说不需要 udev 规则; 建符号链接只是为了让
+#     compose 和 ROS 参数在两种接法之间不用改。
+KERNEL=="ttyAMA1", SYMLINK+="mcu", MODE="0660", GROUP="dialout"
+#
+# (b) 台架调试时常用 USB 转串口 (CH340: 1a86:7523)。取消下面的注释即可。
+#     同时接了多个 CH340 时同样需要补 ATTRS{serial}。
+# SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", \
+#     SYMLINK+="mcu", MODE="0660", GROUP="dialout"
+
+# --- RealSense D435i ---------------------------------------------------------
+# librealsense 需要通过 libusb 直接访问设备 (读 IMU、查固件、硬件复位),
+# 只给 /dev/video* 是不够的 —— 症状是彩色图正常但深度图和 IMU 出不来。
+# 这里放开 USB 设备节点权限, 容器侧再 bind mount /dev/bus/usb
+# (见 docker-compose.drone.yml 里的说明)。
+SUBSYSTEM=="usb", ATTRS{idVendor}=="8086", MODE="0666", GROUP="plugdev"

@@ -417,6 +417,79 @@
     5.下一步：task-12（树莓派部署）/ task-13（CI 流水线扩展）无阻塞。
 
 
+###### 2026/7/30（Phase 1 · task-12）
+    1.发现：a) 任务文档里同时写了 `privileged: true` 和一份 devices 白名单。
+             这两者是矛盾的 —— privileged 已经把宿主机所有设备和全部 capability
+             给了容器，那份白名单一行都不起作用。它不是"多余的保险"，
+             而是**看起来像做了权限控制**。这类"形似而实无"的配置比没有配置更危险。
+          b) 同一类问题还有两处：`setup-3dr-radio.sh` 只建了个连接就打印
+             "3DR Radio configured."、一个参数都没设；`check-d435i-usb.sh` 扫描
+             系统里有没有任何 5000M 端口，而树莓派5 本身就有 USB3 口 ——
+             那个检查**恒为真**，相机插在 USB2 上照样报通过。
+             共同点：都会让人以为这一步已经做完了。
+          c) systemd 单元里那串 ProtectSystem/NoNewPrivileges/PrivateTmp
+             **保护不到边缘节点**。该单元唯一的工作是调用 docker CLI，
+             真正的负载跑在 dockerd 创建的容器里，不在这个单元的 cgroup 和
+             namespace 内。它们能约束的只是那个几十毫秒的 CLI 包装进程。
+             保留是聊胜于无，但不能让它造成"已经上了沙箱"的错觉。
+          d) 文档 §12.3 的 `Requires=dev-ttyACM0.device` 与 §12.5 的
+             `SYMLINK+="pixhawk"` 单独看都对，**合起来跑不通**：
+             只写 SYMLINK 的话 systemd 里并不存在 dev-pixhawk.device 这个单元
+             （设备单元名从设备节点真实路径推导），依赖会永远等不到。
+             要让符号链接可被依赖需要 TAG+="systemd" 与 SYSTEMD_ALIAS 两件事。
+          e) `ChallengeResponseAuthentication` 在 OpenSSH 9.x 已移除，
+             而树莓派 OS Bookworm 带的是 9.2 —— 照抄会让 sshd 起不来，
+             把自己锁在门外，而这台 Pi 可能已经装在无人机上了。
+
+    2.完成：【Phase 1 第三个任务 · 树莓派部署】
+          1) `src/deployment/` 八个子目录 33 个文件：Docker 层（一个镜像两个角色）、
+             systemd 自启与健康检查、udev 设备固定、chrony 主从、SSH 加固、
+             日志轮转与 journald 持久化。
+          2) `validate.sh` —— **本地与 CI 跑同一份**的静态校验入口，7 类检查。
+             查不了的项明确报 SKIP 并说明原因，不静默略过。
+          3) `healthcheck/agcheck.py` 把健康判定做成纯函数，31 个 Host 单元测试，
+             不需要 ROS、不需要网络、不需要树莓派就能跑。
+             这是把固件那条"逻辑与 I/O 分离"的经验搬到了部署层。
+          4) `validate_consistency.py` —— 跨文件一致性：compose 结构、
+             以及 agcheck 的必需话题与 ROS 侧 edge yaml 的话题名是否对齐。
+          5) ADR-0005（容器化部署，5 条决策 + 3 个否决方案）
+             与 ADR-0006（静态 IP 与时钟主从，4 条决策 + 3 个否决方案）。
+          6) CI 增至 5 个 job：新增 validate-deployment 与 build-edge-image（ARM64 + qemu）。
+          7) 与任务文档共 **14 处偏差，全部是"照抄会失败"的问题**，逐条给了理由。
+
+          【先落地 .gitattributes】
+          8) systemd / sshd / udev / Dockerfile 都是逐行解析的，CRLF 会让它们
+             在 Linux 上直接失效。这与 7/25 的编码事故是同一类问题，
+             日记里那条教训是"`.gitattributes` 必须作为第一批提交"。
+             因此本任务先写属性规则、再写被它保护的文件。
+
+    3.失败：a) **校验脚本自己的负向测试抓出了一个假绿灯。**
+             写完 validate.sh 后故意塞进去三样东西看它会不会红：
+             一个语法错误的脚本、一个 CRLF 的 unit、一份假私钥。
+             前后两项正常红了，**中间那项没有**。
+             原因是 Git for Windows 附带的 MSYS grep 在读入时会静默剥掉 CR，
+             `grep $''` 在 Windows 上永远匹配不到；而 Linux CI 上 grep 行为正常。
+             结果就是本地永远绿、真出问题时本地反而发现不了 ——
+             属于最坏的一类假绿灯。改用"剥掉 CR 前后字节数是否变化"后三项全红。
+             教训：**一个从来没红过的检查，和没有这个检查是等价的**，
+             而它还会让人以为已经查过了。校验脚本必须自己先过负向测试。
+          b) 本机是 Windows，没有 Docker 也没有 systemd，因此
+             `docker build` 与 `systemd-analyze verify` 都没在本地跑过，
+             由 CI 首次验证。ARM64 构建更是只能在 CI 上做（需 buildx + qemu）。
+             与 task-10/11 的交叉编译是同一类限制。
+
+    4.小结：这一轮反复遇到的是同一个模式 —— **"看起来做了但其实没做"的配置**。
+          privileged 配 devices 白名单、只打印不设置的电台脚本、恒为真的 USB3 检查、
+          保护不到目标的 systemd 加固，四处形态不同但性质一样。
+          它们比"缺了这一步"更危险：缺了会被发现，形似而实无不会。
+          而最讽刺的是我自己也写出了第五个 —— 那个永远不会红的 CRLF 检查。
+          所以这一轮真正的收获不是那 33 个文件，是那次负向测试。
+
+    5.下一步：task-13（CI 流水线扩展）现在有三类 job 模板可参照（固件 / 部署静态校验 /
+          跨架构镜像构建）。task-14 需要交付 car_edge_real.launch，
+          在此之前 entrypoint 会自动降级到仿真同款并打印说明。
+
+
 ---
 
 ## 历史名称脚注
