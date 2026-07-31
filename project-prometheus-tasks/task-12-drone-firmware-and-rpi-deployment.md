@@ -770,8 +770,10 @@ if __name__ == "__main__":
   也不要两个设备随机抢同一个名字。
 - **`setup-3dr-radio.py` 未在真实电台上验证。** AT 命令集依据 SiK 公开文档，
   默认只读模式。
-- **`car_edge_real.launch` 尚不存在**（task-14 交付）；`EDGE_MODE=real`
-  时 entrypoint 会检测到并降级，同时打印说明。
+- **`car_edge_real.launch` 的 real 后端尚未实现。** 该文件后被 task-14 交付（默认
+  `backend:=mock` 发假数据）。因文件已存在，`entrypoint.sh` 的"文件不存在才降级"
+  前提不再成立——`EDGE_MODE=real` 时会加载它跑 mock 后端、**不触发降级、健康检查显示绿**。
+  该降级语义已过时，待重新设计（详见 `src/deployment/README.md` §5.4"现状"）。
 - **网络降级（WiFi→4G）与本地缓存模式未实现**，Phase 2 规划（评审建议 4）。
 
 ### 对下游任务的影响

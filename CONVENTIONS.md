@@ -103,7 +103,6 @@ research_compitition/                   # 仓库根目录 (Git root)
 ├── .gitignore                          # Git 忽略规则
 │
 ├── Research_Diary.md                   # 科研日记 (持续更新)
-├── Memo_on_Division_of_Labor_Suggestions.md  # 备忘录类文档
 │
 ├── project-prometheus-tasks/           # 📁 核心项目文档
 │   ├── 00-OVERVIEW.md                  #   总索引
@@ -111,7 +110,7 @@ research_compitition/                   # 仓库根目录 (Git root)
 │   ├── PLATFORM.md                     #   平台架构
 │   ├── ICD.md                          #   接口控制文档
 │   ├── ROADMAP.md                      #   研究路线
-│   └── task-01~09-*.md                 #   实施任务
+│   └── task-01~15-*.md                 #   实施任务
 │
 ├── docs/                               # 📁 长期文档
 │   ├── decisions/                      #   ADR (架构决策记录)
@@ -172,7 +171,7 @@ research_compitition/                   # 仓库根目录 (Git root)
 | YAML 配置 | `snake_case.yaml` | `sensor_config.yaml`, `robot_params.yaml` |
 | Shell 脚本 | `snake_case.sh` | `setup_all.sh`, `test_bridge.sh` |
 | URDF/Xacro | `snake_case.urdf.xacro` | `diff_chassis.urdf.xacro` |
-| ADR 文档 | `ADR-NNNN-kebab-case.md` | `ADR-0001-adopt-conventional-commits.md` |
+| ADR 文档 | `ADR-NNNN.md` | `ADR-0001.md`, `ADR-0012.md` |
 
 ### 3.2 ROS 命名
 

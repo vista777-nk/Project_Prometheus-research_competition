@@ -111,7 +111,8 @@ STM32F407 / MSPM0G3507 (Layer 1)           Pixhawk 6C (Layer 1)
 │   ├── launch/
 │   │   ├── car_diff.launch
 │   │   ├── car_mecanum.launch
-│   │   └── car_edge.launch
+│   │   ├── car_edge.launch
+│   │   └── car_edge_real.launch  # 实机模式（task-14，默认 mock 后端）
 │   ├── config/
 │   │   ├── car_sensors.yaml
 │   │   ├── chassis_params.yaml
@@ -298,7 +299,7 @@ ssh car-pi    "chronyc tracking | grep 'System time'"
 | AD-09 | 底盘检测逻辑依赖 `rostopic list` 探测 (P2-06) | ℹ️ | 仿真可用；实机改用硬件引脚（MSPM0 GPIO）检测 |
 | AD-10 | PX4 v1.14 无 `iris_depth_camera` 专用 airframe | ℹ️ 设计约束 | 使用官方 Iris airframe，并以完整路径覆盖深度相机 SDF |
 | AD-11 | GPS HOME 默认值固定在仿真配置中 (P3-06) | ℹ️ | 已从源码移至 YAML；实机部署时通过 ROS 参数覆盖 |
-| AD-12 | 缺少 CI/CD、性能监控、代码风格强制 | ℹ️ | 项目稳定后引入 |
+| AD-12 | 缺少 CI/CD、性能监控、代码风格强制 | ✅ 部分 | task-13 已建 CI（7 job，含全仓 lint 门禁）；性能监控仍待引入 |
 
 ---
 

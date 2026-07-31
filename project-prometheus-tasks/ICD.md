@@ -300,13 +300,19 @@ air_ground_interfaces/
 │   ├── SemanticLandmark.msg     # 语义地标
 │   ├── Mission.msg              # 任务指令
 │   ├── MissionStatus.msg        # 任务状态
-│   └── Capability.msg           # 能力声明
+│   ├── Capability.msg           # 能力声明
+│   ├── SensorFusion.msg         # [过渡别名] Observation 的前身，仍被引用
+│   ├── ChassisState.msg         # [过渡别名] RobotState 的前身，仍被引用
+│   └── ServerCommand.msg        # [过渡别名] Mission 的前身，仍被引用
 ├── srv/
 │   ├── SwapChassis.srv          # 底盘切换
 │   └── QueryWorldState.srv      # 世界状态查询
 └── action/
     └── Navigate.action          # 导航 Action (长耗时任务)
 ```
+
+> 当前共 **10 个 msg**：7 个 ICD 新接口 + 3 个过渡别名（见 §八迁移策略）。
+> 3 个别名仍在 `CMakeLists.txt` 注册并被 `edge_server_bridge.py` 等引用，**尚未删除**。
 
 ---
 
@@ -335,6 +341,10 @@ air_ground_interfaces/
 | `Capability` | 无（新增） | task-07 `drone_preprocessor.py` / `car_preprocessor.py` 启动时各发一条 |
 
 > **迁移策略**：先新增 `Observation` 等消息定义，保留原 `SensorFusion`/`ServerCommand` 作为别名过渡一个版本，task-09 E2E 测试通过后再删除旧消息。这样不会阻塞当前 9 个 task 的执行。
+>
+> **现状（2026-08-01）**：task-09 E2E 已通过，但 3 个旧消息**仍未删除**——它们仍注册在
+> `CMakeLists.txt` 并被 `edge_server_bridge.py` 等运行时代码引用。删除前需先把这些
+> 引用迁移到新接口，否则会破坏通信桥。这是一个待办项，不是已完成项。
 
 ---
 

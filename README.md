@@ -6,7 +6,7 @@
 
 [![Phase](https://img.shields.io/badge/phase1-firmware__deployment-blue)](./project-prometheus-tasks/ROADMAP.md)
 [![Phase0](https://img.shields.io/badge/phase0_tasks-9/9-brightgreen)](./project-prometheus-tasks/00-OVERVIEW.md)
-[![Phase1](https://img.shields.io/badge/phase1_tasks-4/6-yellow)](./project-prometheus-tasks/00-OVERVIEW.md)
+[![Phase1](https://img.shields.io/badge/phase1_tasks-6/6-brightgreen)](./project-prometheus-tasks/00-OVERVIEW.md)
 [![Tests](https://img.shields.io/badge/tests-56/56-brightgreen)](./project-prometheus-tasks/task-09-validation.md)
 [![ROS](https://img.shields.io/badge/ROS-Noetic-brightgreen)](https://wiki.ros.org/noetic)
 [![PX4](https://img.shields.io/badge/PX4-v1.14-blueviolet)](https://px4.io/)
@@ -36,7 +36,7 @@
 | Phase 4: 毕设 | 🔴 2027~2028 | World Model · 3DGS · Dreamer |
 
 > **Phase 1 策略**：先固件，后上机；先接口，后算法；先可复现，后联调。80% 代码工作不需要硬件，CI + Docker 替代本地环境。
-> 详见 [Phase 1 Pre-Departure Brief](./docs/experiments/phase1-pre-departure-brief.md)。
+> 详见 [Phase 1 Pre-Departure Brief](./obsolete-documentation/phase1-pre-departure-brief.md)（已归档）。
 
 📋 详见 [00-OVERVIEW.md](./project-prometheus-tasks/00-OVERVIEW.md) 和 [ROADMAP.md](./project-prometheus-tasks/ROADMAP.md)
 
@@ -46,7 +46,7 @@
 
 | 你想…… | 去看 |
 |---------|------|
-| **接手这个项目 / 明天上实机** | **[docs/AI_HANDOFF.md](./docs/AI_HANDOFF.md)** — 现状、已验证与未验证清单、上机顺序 |
+| **接手这个项目 / 明天上实机** | **[docs/experiments/AI_HANDOFF.md](./docs/experiments/AI_HANDOFF.md)** — 现状、已验证与未验证清单、上机顺序 |
 | 理解这个项目的"为什么" | [RESEARCH_PHILOSOPHY.md](./project-prometheus-tasks/RESEARCH_PHILOSOPHY.md) |
 | 理解系统架构 | [PLATFORM.md](./project-prometheus-tasks/PLATFORM.md) |
 | 查看模块间接口 | [ICD.md](./project-prometheus-tasks/ICD.md) |
@@ -122,7 +122,6 @@ research_compitition/
 ├── SECURITY.md                         ← 安全策略
 ├── .gitignore / .gitattributes
 ├── Research_Diary.md                   ← 科研日记
-├── Memo_on_Division_of_Labor_Suggestions.md  ← AI 分工备忘录
 ├── docs/
 │   └── decisions/                      ← ADR (架构决策记录)
 ├── project-prometheus-tasks/           ← 核心项目文档
