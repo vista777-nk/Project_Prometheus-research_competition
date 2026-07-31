@@ -96,12 +96,36 @@ src/deployment/
 │   ├── check_nodes.py                systemd timer 入口
 │   ├── check_topics.py               人用的排查工具
 │   ├── alert.sh                      journald / LED / 蜂鸣器
-│   └── test_healthcheck.py           31 个 Host 用例
+│   └── test_healthcheck.py           45 个 Host 用例
+│
+├── mavlink/                          MAVLink 2 签名（task-14）
+│   ├── generate-mavlink-key.sh       默认写 ~/.config，拒绝往工作区写
+│   ├── px4-signing.params            签名段刻意留空，见 ADR-0010
+│   └── test-mavlink-signing.py       5 条黑盒断言
+│
+├── calibration/                      标定工具链（task-15，见其 README）
+│   ├── record-calib-bag.sh           采集；开录前先查话题在不在线
+│   ├── calibrate-camera.py           内参 → ROS camera_info 格式 YAML
+│   ├── calibrate-imu.py              Allan 方差 → 噪声密度 / 零偏
+│   ├── calibrate-cam-imu-extrinsic.py  Phase 1 只有接口与采集检查
+│   ├── convert-bag-to-kalibr.py      本项目 YAML ↔ Kalibr；bag 抽帧
+│   ├── validate-calibration.py     ★ 合理性检查，只依赖 PyYAML
+│   ├── generate-calib-report.py      YAML → Markdown 报告
+│   ├── calibration_db/               标定归档（只增不改，见其 README）
+│   └── test/                         合成真值样本 + 16 条流水线用例
+│
+├── test/                             集成验证（task-15 Part B）
+│   ├── test-serial-loopback.sh       入口，转发给 .py
+│   ├── test-serial-loopback.py     ★ 帧协议第三份实现 + 13 条自测
+│   └── test-observation-pipeline.py  真预处理器 + 真 World Model，10 条
 │
 └── logging/
     ├── ros-logrotate.conf
     └── setup-journald.sh
 ```
+
+> `scripts/smoke-test-phase1.sh`（仓库根，不在本目录）是 Phase 1 的总入口，
+> 它把上面这些的自测串起来跑一遍并检查 CI 归属。`make smoke-phase1`。
 
 ---
 
@@ -393,7 +417,9 @@ bash src/deployment/validate.sh
 |--------|:---:|:---:|
 | shell 语法 `bash -n` | ✓ | ✓ |
 | Python 语法 + 45 个单元测试 | ✓ | ✓ |
-| compose 结构 + 话题名一致性 | ✓ | ✓ |
+| 串口协议自测 13 条（黄金帧 / CRC / 拆帧） | ✓ | ✓ |
+| 标定流水线 16 条（合成真值） | 需 numpy+OpenCV | ✓ |
+| compose 结构 + 话题名一致性（含标定采集话题） | ✓ | ✓ |
 | 行尾必须是 LF | ✓ | ✓ |
 | 私钥 / 明文口令扫描 | ✓ | ✓ |
 | systemd `[Unit]`/`[Service]` 段归属自查 | ✓ | ✓ |

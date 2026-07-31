@@ -30,7 +30,7 @@
 | 阶段 | 状态 | 内容 |
 |------|:---:|------|
 | **Phase 0: 仿真框架** | ✅ 完成 (9/9) | 无人机 SITL · 差速底盘 · 麦轮底盘 · 传感器 · 通信桥 · 边缘服务器 · 集成总装 · 验证 |
-| **Phase 1: 固件+部署先行** | 🟡 进行中 (5/6) | STM32 麦轮固件 ✅ · MSPM0 差速固件 ✅ · 树莓派部署 (无人机+车机) ✅ · CI 流水线 ✅ · 传感器驱动骨架 + MAVLink 签名 ✅ · 标定脚本 |
+| **Phase 1: 固件+部署先行** | ✅ 完成 (6/6) | STM32 麦轮固件 ✅ · MSPM0 差速固件 ✅ · 树莓派部署 (无人机+车机) ✅ · CI 流水线 ✅ · 传感器驱动骨架 + MAVLink 签名 ✅ · 标定工具链 + 集成验证 ✅ |
 | Phase 2: EQA 论文 | 🔴 2026.09~12 | VLM + SLAM + 空地联合探索 |
 | Phase 3: 竞赛季 | 🔴 2027.01~08 | 全国电赛 + CRAIC2027 |
 | Phase 4: 毕设 | 🔴 2027~2028 | World Model · 3DGS · Dreamer |
@@ -147,7 +147,8 @@ research_compitition/
 │       ├── network/                    ← 网络 + 3DR 数传
 │       ├── ssh/                        ← SSH 加固
 │       ├── mavlink/                    ← MAVLink 签名
-│       ├── calibration/                ← 标定脚本
+│       ├── calibration/                ← 标定工具链 + 归档规范
+│       ├── test/                       ← 集成验证 (串口回路 / 数据流)
 │       └── healthcheck/                ← 健康检查
 └── obsolete-documentation/ ← 历史文档归档
 ```
@@ -198,7 +199,16 @@ cd src/firmware/mspm0_diff && make
 
 # 9. 构建树莓派 Docker 镜像
 cd src/deployment && docker build -f docker/Dockerfile.edge -t air-ground-edge:v1 .
+
+# 10. Phase 1 冒烟 —— 交付物存在性 + 语法 + 自测 + CI 归属 (任意 OS, 不需要 ROS)
+make smoke-phase1
+
+# 11. 部署与标定配置静态校验 (与 CI 跑同一份脚本)
+make validate-deployment
 ```
+
+> 第 10、11 步在没有 numpy / OpenCV / pymavlink 的机器上会把相应检查报成
+> **SKIP 而不是通过** —— 完整校验以 CI 为准。
 
 ---
 
@@ -208,4 +218,4 @@ cd src/deployment && docker build -f docker/Dockerfile.edge -t air-ground-edge:v
 
 ---
 
-*维护者: @vista777-nk · Phase 0 仿真完成 ✅ · Phase 1 固件+部署进行中 🔴*
+*维护者: @vista777-nk · Phase 0 仿真完成 ✅ · Phase 1 固件+部署完成 ✅（待实机联调）*

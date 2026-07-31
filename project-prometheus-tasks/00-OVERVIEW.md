@@ -42,8 +42,8 @@
 | [task-11](./task-11-mspm0-diff-firmware.md) | MSPM0G3507 差速固件（编码器 + PID + 电赛合规） | 🥇 固件先行 | 5h | ✅ |
 | [task-12](./task-12-drone-firmware-and-rpi-deployment.md) | 树莓派部署方案（Docker + systemd + 网络 + SSH） | 🥈 部署先行 | 4h | ✅ |
 | [task-13](./task-13-ci-pipeline.md) | CI 交叉编译流水线（ARM + MSPM0 + Docker + Lint） | 🥉 验证先行 | 3h | ✅ |
-| [task-14](./task-14-sensor-drivers-mavlink.md) | 实机传感器驱动骨架 + MAVLink 2 签名 | 🥉 验证先行 | 4h | 🔴 |
-| [task-15](./task-15-calibration-validation.md) | IMU/相机标定脚本 + Phase 1 集成验证 | 🥉 验证先行 | 3h | 🔴 |
+| [task-14](./task-14-sensor-drivers-mavlink.md) | 实机传感器驱动骨架 + MAVLink 2 签名 | 🥉 验证先行 | 4h | ✅ |
+| [task-15](./task-15-calibration-validation.md) | IMU/相机标定脚本 + Phase 1 集成验证 | 🥉 验证先行 | 3h | ✅ |
 
 ### 依赖拓扑 (Phase 0)
 
@@ -105,6 +105,26 @@ task-14 (传感器 + MAVLink) ── (独立) ── task-15
 > cppcheck 一次都没跑过，故只告警且 job 名带 `ADVISORY`。
 > 同时清掉两处「永远不会失败的检查」——`validate-deployment` 里 `|| true` 到底的
 > shellcheck 步骤，以及 README 顶部硬编码的假 CI badge。
+>
+> **2026-07-31 补充（task-15，Phase 1 收官）**：标定工具链 + 集成验证就位，
+> `scripts/smoke-test-phase1.sh` 60 项本地全绿。**Phase 1 六个任务全部完成**
+> （task-14 的状态本来就该是 ✅，这次一并改正）。
+>
+> 本任务再次印证了 task-13 记下的那条：**任务文档会过期**。task-15 原文里
+> 采集脚本的五个话题名在仓库里一个都不存在，冒烟测试查的两处路径/job 名
+> 也都对不上，`cv2.FileStorage` 写的 YAML 根本喂不进 ROS。七处偏差逐条记在
+> [task-15 §与原方案的偏差](./task-15-calibration-validation.md)，
+> 决策记录 [ADR-0011](../docs/decisions/ADR-0011.md)。
+>
+> 新增一条评审红线（ADR-0011 §方案 G）：**替身可以替环境（ROS、硬件、时钟），
+> 不能替被测对象**。原文的 `MockObservation` 测的是它自己那二十行模拟件，
+> 现在改成用 task-14 的 ROS 替身跑真的 `car_preprocessor` 和真的 `WorldModelStore`。
+> 换过来的当天就抓到一个替身缺陷（`rospy.Duration` 不收位置参数）。
+>
+> ⚠ 仍未核实、**上机第一件事**要做的四条，见
+> [标定 README §5](../src/deployment/calibration/README.md)：
+> PX4/MAVROS 的签名参数名（承 ADR-0010）、`camera_info_manager` 是否接受
+> 额外键、以及 `/car/openmv/image_raw` 到底有没有发布者。
 
 ## 🚀 快速开始
 

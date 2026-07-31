@@ -38,25 +38,90 @@ class _Message:
         return f"{type(self).__name__}({fields})"
 
 
-class Time(_Message):
-    """rospy.Time 替身。"""
+class _TimeBase(_Message):
+    """Time / Duration 的公共部分。
 
-    __slots__ = ("secs", "nsecs")
-    _defaults = {"secs": 0, "nsecs": 0}
+    真 rospy 的 `Time(secs, nsecs)` 与 `Duration(secs, nsecs)` 都接受
+    **位置参数**, 而且 secs 可以是浮点 (`rospy.Duration(1.0 / 10.0)` 是
+    最常见的写法, car_preprocessor.py 就是这么写的)。`_Message` 只收关键字,
+    所以这里必须自己实现构造 —— 这个差异是 task-15 让真节点跑在替身上时
+    才暴露出来的, 在那之前没有任何测试构造过 Duration。
+    """
 
-    @staticmethod
-    def now() -> "Time":
-        return Time(secs=0, nsecs=0)
+    __slots__ = ()
+
+    def __init__(self, secs=0, nsecs=0, **kwargs) -> None:
+        secs = kwargs.pop("secs", secs)
+        nsecs = kwargs.pop("nsecs", nsecs)
+        if kwargs:
+            raise TypeError(f"未知字段: {sorted(kwargs)}")
+        # 真 rospy 会把浮点秒规整成整数 secs + nsecs
+        whole = int(secs)
+        nsecs = int(nsecs) + int(round((float(secs) - whole) * 1e9))
+        whole += nsecs // 1_000_000_000
+        nsecs %= 1_000_000_000
+        self.secs = whole
+        self.nsecs = nsecs
 
     def to_sec(self) -> float:
         return self.secs + self.nsecs * 1e-9
 
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self.secs}, {self.nsecs})"
 
-class Duration(_Message):
+
+class Time(_TimeBase):
+    """rospy.Time 替身。
+
+    比较与相减是真 rospy.Time 的核心用法 (world_model.py 靠它判新鲜度),
+    替身不实现的话, `stamp > last_update` 会走 object 的默认比较并当场
+    TypeError —— 好在这一种是响的。真正危险的是只实现 `__gt__` 不实现
+    `__eq__`: 那样 `a >= b` 会时对时错。所以这里一次给全。
+    """
+
+    __slots__ = ("secs", "nsecs")
+
+    @staticmethod
+    def now() -> "Time":
+        return Time(0, 0)
+
+    @staticmethod
+    def from_sec(seconds: float) -> "Time":
+        return Time(seconds)
+
+    def __eq__(self, other) -> bool:
+        return isinstance(other, _TimeBase) and self.to_sec() == other.to_sec()
+
+    def __lt__(self, other) -> bool:
+        return self.to_sec() < other.to_sec()
+
+    def __le__(self, other) -> bool:
+        return self.to_sec() <= other.to_sec()
+
+    def __gt__(self, other) -> bool:
+        return self.to_sec() > other.to_sec()
+
+    def __ge__(self, other) -> bool:
+        return self.to_sec() >= other.to_sec()
+
+    def __hash__(self) -> int:
+        return hash(self.to_sec())
+
+    def __sub__(self, other) -> "Duration":
+        return Duration(self.to_sec() - other.to_sec())
+
+    def __add__(self, other) -> "Time":
+        return Time(self.to_sec() + other.to_sec())
+
+
+class Duration(_TimeBase):
     """rospy.Duration 替身。"""
 
     __slots__ = ("secs", "nsecs")
-    _defaults = {"secs": 0, "nsecs": 0}
+
+    @staticmethod
+    def from_sec(seconds: float) -> "Duration":
+        return Duration(seconds)
 
 
 class Header(_Message):
@@ -115,6 +180,248 @@ class String(_Message):
     _defaults = {"data": ""}
 
 
+# --- 以下几个类是 task-15 为「传感器→Observation 数据流验证」加的 --------
+#
+# 目的是让**真的** car_preprocessor.py 在没有 ROS 的机器上跑起来，
+# 而不是另写一份"模拟预处理器核心逻辑"的函数来测。后者测的是那份模拟件：
+# 预处理器里的新鲜度窗口、LiDAR 降采样、-1.0 无效标记、modalities 的
+# 生成规则一旦改了，模拟件照样全绿。
+#
+# 字段表同样逐条抄自真实 .msg，由 test_ros_stub_fidelity.py 在 ROS 容器里比对。
+
+
+class Image(_Message):
+    """sensor_msgs/Image。"""
+
+    __slots__ = ("header", "height", "width", "encoding", "is_bigendian", "step", "data")
+    _defaults = {"header": Header, "height": 0, "width": 0, "encoding": "",
+                 "is_bigendian": 0, "step": 0, "data": b""}
+
+
+class CompressedImage(_Message):
+    """sensor_msgs/CompressedImage。"""
+
+    __slots__ = ("header", "format", "data")
+    _defaults = {"header": Header, "format": "", "data": b""}
+
+
+class Point(_Message):
+    """geometry_msgs/Point。"""
+
+    __slots__ = ("x", "y", "z")
+
+
+class Pose(_Message):
+    """geometry_msgs/Pose。"""
+
+    __slots__ = ("position", "orientation")
+    _defaults = {"position": Point, "orientation": Quaternion}
+
+
+class Twist(_Message):
+    """geometry_msgs/Twist。"""
+
+    __slots__ = ("linear", "angular")
+    _defaults = {"linear": Vector3, "angular": Vector3}
+
+
+class PoseWithCovariance(_Message):
+    """geometry_msgs/PoseWithCovariance。"""
+
+    __slots__ = ("pose", "covariance")
+    _defaults = {"pose": Pose, "covariance": lambda: [0.0] * 36}
+
+
+class TwistWithCovariance(_Message):
+    """geometry_msgs/TwistWithCovariance。"""
+
+    __slots__ = ("twist", "covariance")
+    _defaults = {"twist": Twist, "covariance": lambda: [0.0] * 36}
+
+
+class Odometry(_Message):
+    """nav_msgs/Odometry。"""
+
+    __slots__ = ("header", "child_frame_id", "pose", "twist")
+    _defaults = {"header": Header, "child_frame_id": "",
+                 "pose": PoseWithCovariance, "twist": TwistWithCovariance}
+
+
+class Observation(_Message):
+    """air_ground_interfaces/Observation (ICD §2.1)。"""
+
+    __slots__ = (
+        "header", "robot_id", "modalities", "rgb", "depth",
+        "lidar_ranges", "lidar_angle_min", "lidar_angle_increment",
+        "ultrasonic_ranges", "angular_velocity", "linear_acceleration",
+    )
+    _defaults = {
+        "header": Header, "robot_id": "", "modalities": list,
+        "rgb": CompressedImage, "depth": Image,
+        "lidar_ranges": list, "ultrasonic_ranges": list,
+        "angular_velocity": Vector3, "linear_acceleration": Vector3,
+    }
+
+
+class RobotState(_Message):
+    """air_ground_interfaces/RobotState (ICD §2.2)。"""
+
+    __slots__ = ("header", "robot_id", "pose", "velocity", "mode",
+                 "chassis_type", "battery_voltage", "is_armed", "is_connected")
+    _defaults = {"header": Header, "robot_id": "", "pose": Pose, "velocity": Twist,
+                 "mode": "", "chassis_type": "", "battery_voltage": 0.0,
+                 "is_armed": False, "is_connected": False}
+
+
+class Capability(_Message):
+    """air_ground_interfaces/Capability (ICD §3.3)。"""
+
+    __slots__ = ("header", "robot_id", "locomotion_type", "max_speed",
+                 "max_endurance", "sensor_modalities", "sensor_range",
+                 "compute_tier", "max_payload_kg", "has_gripper")
+    _defaults = {"header": Header, "robot_id": "", "locomotion_type": "",
+                 "max_speed": 0.0, "max_endurance": 0.0,
+                 "sensor_modalities": list, "sensor_range": 0.0,
+                 "compute_tier": "", "max_payload_kg": 0.0, "has_gripper": False}
+
+
+class SemanticLandmark(_Message):
+    """air_ground_interfaces/SemanticLandmark (ICD §2.4)。"""
+
+    __slots__ = ("landmark_id", "semantic_label", "pose", "confidence", "last_observed")
+    _defaults = {"landmark_id": "", "semantic_label": "", "pose": Pose,
+                 "confidence": 0.0, "last_observed": Time}
+
+
+class MapMetaData(_Message):
+    """nav_msgs/MapMetaData。"""
+
+    __slots__ = ("map_load_time", "resolution", "width", "height", "origin")
+    _defaults = {"map_load_time": Time, "resolution": 0.0,
+                 "width": 0, "height": 0, "origin": Pose}
+
+
+class OccupancyGrid(_Message):
+    """nav_msgs/OccupancyGrid。"""
+
+    __slots__ = ("header", "info", "data")
+    _defaults = {"header": Header, "info": MapMetaData, "data": list}
+
+
+class WorldState(_Message):
+    """air_ground_interfaces/WorldState (ICD §2.3)。"""
+
+    __slots__ = ("header", "agents", "map_2d", "dynamic_obstacles", "landmarks",
+                 "last_update_perception", "last_update_planning")
+    _defaults = {"header": Header, "agents": list, "map_2d": OccupancyGrid,
+                 "dynamic_obstacles": list, "landmarks": list,
+                 "last_update_perception": Time, "last_update_planning": Time}
+
+
+class QueryWorldStateResponse(_Message):
+    """air_ground_interfaces/QueryWorldStateResponse。"""
+
+    __slots__ = ("result", "found")
+    _defaults = {"result": WorldState, "found": False}
+
+
+class QueryWorldState:
+    """服务类型占位。world_model.py 在模块层 import 它, 但 Store 用不到。"""
+
+    _response_class = QueryWorldStateResponse
+
+
+class CvBridgeError(Exception):
+    """cv_bridge.CvBridgeError 替身。"""
+
+
+class CvBridge:
+    """cv_bridge.CvBridge 替身 —— 只实现 car_preprocessor 用到的那一个方法。
+
+    刻意只支持 bgr8: 预处理器只用这一种编码。多支持一种就多一份没被
+    任何测试覆盖的转换代码，而它错了的时候颜色通道会悄悄反过来。
+    """
+
+    def imgmsg_to_cv2(self, message, desired_encoding: str = "passthrough"):
+        """把 Image 替身转成 numpy 数组。
+
+        Raises:
+            CvBridgeError: 编码不是 bgr8，或 data 长度与 height×step 不符。
+        """
+        import numpy
+
+        if desired_encoding not in ("bgr8", "passthrough"):
+            raise CvBridgeError(f"替身只支持 bgr8，收到 {desired_encoding}")
+        if message.encoding != "bgr8":
+            raise CvBridgeError(f"替身只支持 bgr8 图像，收到 {message.encoding!r}")
+        expected = message.height * message.step
+        if len(message.data) != expected:
+            raise CvBridgeError(
+                f"data 长度 {len(message.data)} 与 height×step={expected} 不符"
+            )
+        array = numpy.frombuffer(bytes(message.data), dtype=numpy.uint8)
+        return array.reshape(message.height, message.width, 3)
+
+
+class FakeSubscriber:
+    """rospy.Subscriber 替身。记录话题名与回调，供测试直接投喂消息。"""
+
+    def __init__(self, name: str, data_class, callback=None,
+                 queue_size: int = 0, **_kwargs) -> None:
+        self.name = name
+        self.data_class = data_class
+        self.callback = callback
+        self.queue_size = queue_size
+
+    def feed(self, message) -> None:
+        """把一条消息喂给回调，顺带检查类型 —— 类型不符在真 ROS 上是订不上的。"""
+        if not isinstance(message, self.data_class):
+            raise TypeError(
+                f"subscriber {self.name} declared {self.data_class.__name__} "
+                f"but got {type(message).__name__}"
+            )
+        if self.callback is not None:
+            self.callback(message)
+
+    def unregister(self) -> None:
+        """真 Subscriber 有这个方法，节点关闭时会调。"""
+        self.callback = None
+
+
+class TimerEvent:
+    """rospy.timer.TimerEvent 替身。"""
+
+    def __init__(self) -> None:
+        self.last_expected = None
+        self.last_real = None
+        self.current_expected = None
+        self.current_real = None
+        self.last_duration = 0.0
+
+
+class FakeTimer:
+    """rospy.Timer 替身 —— 不起线程，测试自己决定什么时候触发。
+
+    真 Timer 会起后台线程按周期调回调。测试里那样做会让断言依赖时序，
+    是不稳定测试的经典来源；这里改成手动 `fire()`。
+    """
+
+    def __init__(self, period, callback, oneshot: bool = False, **_kwargs) -> None:
+        self.period = period
+        self.callback = callback
+        self.oneshot = oneshot
+        self.fires = 0
+
+    def fire(self) -> None:
+        """手动触发一次回调。"""
+        self.fires += 1
+        self.callback(TimerEvent())
+
+    def shutdown(self) -> None:
+        """真 Timer 有这个方法。"""
+        self.callback = None
+
+
 class FakePublisher:
     """记录所有发布内容的 rospy.Publisher 替身。"""
 
@@ -152,10 +459,17 @@ class _RospyStub(types.ModuleType):
         self.params: Dict[str, Any] = {}
         self.logs: List[str] = []
         self.Publisher = FakePublisher
+        self.Subscriber = FakeSubscriber
+        self.Timer = FakeTimer
         self.Rate = FakeRate
         self.Time = Time
         self.Duration = Duration
         self._shutdown = True
+        # rospy.timer.TimerEvent —— car_preprocessor 的类型注解会取到它
+        timer_module = types.ModuleType("rospy.timer")
+        timer_module.TimerEvent = TimerEvent
+        timer_module.Timer = FakeTimer
+        self.timer = timer_module
 
     # --- 参数 ---
     def get_param(self, name, *default):
@@ -216,11 +530,14 @@ def install() -> "_RospyStub":
 
     rospy_stub = _RospyStub()
     sys.modules["rospy"] = rospy_stub
+    sys.modules["rospy.timer"] = rospy_stub.timer
 
     sensor_msgs = types.ModuleType("sensor_msgs")
     sensor_msgs_msg = types.ModuleType("sensor_msgs.msg")
     sensor_msgs_msg.LaserScan = LaserScan
     sensor_msgs_msg.Imu = Imu
+    sensor_msgs_msg.Image = Image
+    sensor_msgs_msg.CompressedImage = CompressedImage
     sensor_msgs.msg = sensor_msgs_msg
     sys.modules["sensor_msgs"] = sensor_msgs
     sys.modules["sensor_msgs.msg"] = sensor_msgs_msg
@@ -237,8 +554,43 @@ def install() -> "_RospyStub":
     geometry_msgs_msg = types.ModuleType("geometry_msgs.msg")
     geometry_msgs_msg.Vector3 = Vector3
     geometry_msgs_msg.Quaternion = Quaternion
+    geometry_msgs_msg.Point = Point
+    geometry_msgs_msg.Pose = Pose
+    geometry_msgs_msg.Twist = Twist
+    geometry_msgs_msg.PoseWithCovariance = PoseWithCovariance
+    geometry_msgs_msg.TwistWithCovariance = TwistWithCovariance
     geometry_msgs.msg = geometry_msgs_msg
     sys.modules["geometry_msgs"] = geometry_msgs
     sys.modules["geometry_msgs.msg"] = geometry_msgs_msg
+
+    nav_msgs = types.ModuleType("nav_msgs")
+    nav_msgs_msg = types.ModuleType("nav_msgs.msg")
+    nav_msgs_msg.Odometry = Odometry
+    nav_msgs_msg.OccupancyGrid = OccupancyGrid
+    nav_msgs_msg.MapMetaData = MapMetaData
+    nav_msgs.msg = nav_msgs_msg
+    sys.modules["nav_msgs"] = nav_msgs
+    sys.modules["nav_msgs.msg"] = nav_msgs_msg
+
+    interfaces = types.ModuleType("air_ground_interfaces")
+    interfaces_msg = types.ModuleType("air_ground_interfaces.msg")
+    interfaces_msg.Observation = Observation
+    interfaces_msg.RobotState = RobotState
+    interfaces_msg.Capability = Capability
+    interfaces_msg.WorldState = WorldState
+    interfaces_msg.SemanticLandmark = SemanticLandmark
+    interfaces_srv = types.ModuleType("air_ground_interfaces.srv")
+    interfaces_srv.QueryWorldState = QueryWorldState
+    interfaces_srv.QueryWorldStateResponse = QueryWorldStateResponse
+    interfaces.msg = interfaces_msg
+    interfaces.srv = interfaces_srv
+    sys.modules["air_ground_interfaces"] = interfaces
+    sys.modules["air_ground_interfaces.msg"] = interfaces_msg
+    sys.modules["air_ground_interfaces.srv"] = interfaces_srv
+
+    cv_bridge = types.ModuleType("cv_bridge")
+    cv_bridge.CvBridge = CvBridge
+    cv_bridge.CvBridgeError = CvBridgeError
+    sys.modules["cv_bridge"] = cv_bridge
 
     return rospy_stub
