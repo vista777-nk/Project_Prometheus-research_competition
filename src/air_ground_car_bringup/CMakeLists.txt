@@ -67,6 +67,13 @@ catkin_install_python(
     scripts/chassis_swapper.py
     scripts/gimbal_controller.py
     scripts/mecanum_controller.py
+    scripts/hardware_interface.py
+    scripts/mock_hardware.py
+    scripts/sensor_config.py
+    scripts/rplidar_driver.py
+    scripts/icm42688_driver.py
+    scripts/hcsr04_driver.py
+    scripts/openmv_bridge.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
@@ -92,4 +99,9 @@ if(CATKIN_ENABLE_TESTING)
   catkin_add_nosetests(test/test_car_preprocessor.py)
   catkin_add_nosetests(test/test_gimbal_controller.py)
   catkin_add_nosetests(test/test_mecanum_controller.py)
+  # test/host/ 下的传感器驱动测试**刻意不在这里注册**:
+  # 它们跑在纯 Python 环境 (CI 的 lint-scripts job), 不需要 ROS 也不需要
+  # roscore。同一个检查只实现一处 (ADR-0008 §决策-3)。
+  # 这里只注册一条 ROS 侧独有的检查: 那套测试用的 ROS 替身是否忠实。
+  catkin_add_nosetests(test/test_ros_stub_fidelity.py)
 endif()
