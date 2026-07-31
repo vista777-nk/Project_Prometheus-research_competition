@@ -1,0 +1,94 @@
+# =============================================================================
+# air-ground-car-edge.service — 车机边缘节点开机自启
+#
+# 安装: sudo install -m 0644 air-ground-car-edge.service /etc/systemd/system/
+#       sudo systemctl daemon-reload && sudo systemctl enable --now air-ground-car-edge
+#
+# -----------------------------------------------------------------------------
+# 与 task-12 §12.3 原文的三处差异
+# -----------------------------------------------------------------------------
+# 1. **删掉了 ExecStartPre 的 `docker compose pull`。**
+#    Phase 1 的镜像分发方式是离线刷入 (docker save/load 走 U 盘, 见评审建议 3),
+#    根本没有 registry。开机时 pull 必然失败, 而 ExecStartPre 失败会让整个
+#    单元启动失败 —— 结果是"车放在实验室能起、拉到没网的场地就起不来"。
+#    改为检查本地镜像是否存在, 缺了就报一句能照着做的话。
+#
+# 2. **`ProtectSystem=` 从 strict 降为 full, 并说明它保护的到底是什么。**
+#    原文把一串 systemd 加固指令写在这里, 读起来像是给边缘节点上了沙箱。
+#    实际上不是: 本单元唯一的工作是调用 docker CLI, 真正的负载跑在 dockerd
+#    创建的容器里, **不在本单元的 cgroup 和 namespace 内**。
+#    这些指令能保护的只是这个几十毫秒的 CLI 包装进程。
+#    真正的隔离边界在容器侧 (非 root 用户 / 设备白名单 / 无 privileged),
+#    见 docker-compose.edge.yml 与 ADR-0005 §决策-3。
+#    保留 full 而非 strict, 是因为 strict 会把 /run 也置为只读,
+#    docker CLI 与 /run/docker.sock 的交互在部分 docker 版本上会失败。
+#
+# 3. **Restart 由 systemd 独占。** compose 侧 `restart: "no"`, 理由见 compose 文件头。
+# =============================================================================
+
+[Unit]
+Description=Air-Ground Car Edge Node (ROS Noetic, containerized)
+Documentation=https://github.com/vista777-nk/research_compitition
+Documentation=file:///opt/air-ground/README.md
+After=network-online.target docker.service chrony.service
+Wants=network-online.target chrony.service
+Requires=docker.service
+
+# 同一台 Pi 上两个角色互斥 —— 防止误 enable 了两个 unit 抢同一份 .env
+Conflicts=air-ground-drone-edge.service
+
+# 重启风暴限流。**必须放在 [Unit] 段** —— systemd v230 起
+# StartLimitIntervalSec= / StartLimitBurst= 从 [Service] 移到了 [Unit]。
+# 旧名 StartLimitInterval= 保留了 [Service] 兼容别名, 新名没有。
+# 写错段的表现是 systemd 打一句 "Unknown key name ... ignoring" 然后**静默忽略**:
+# 单元照常工作, 但限流根本没生效 —— 配置错了就是无休止的 10 秒重启循环。
+# (这一条是 CI 的 systemd-analyze verify 抓出来的, 本机 Windows 跳过了该检查。)
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=airground
+Group=airground
+WorkingDirectory=/opt/air-ground
+
+EnvironmentFile=/opt/air-ground/.env
+Environment="COMPOSE_PROJECT_NAME=air-ground"
+
+# 启动前自检: 镜像在不在。缺了直接说清楚怎么办, 而不是让 compose 抛一句
+# "manifest unknown" 然后进入 10 秒一次的重启循环。
+ExecStartPre=/opt/air-ground/scripts/require-image.sh
+
+ExecStart=/usr/bin/docker compose \
+    -f /opt/air-ground/docker/docker-compose.edge.yml \
+    -f /opt/air-ground/docker/docker-compose.car.yml \
+    up --abort-on-container-exit --no-build
+
+ExecStop=/usr/bin/docker compose \
+    -f /opt/air-ground/docker/docker-compose.edge.yml \
+    -f /opt/air-ground/docker/docker-compose.car.yml \
+    down --timeout 30
+
+Restart=always
+RestartSec=10
+TimeoutStartSec=120
+# 大于 compose 的 stop_grace_period(30s), 留出收尸时间
+TimeoutStopSec=60
+
+
+# --- 加固 (作用范围见文件头第 2 条) ---
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+ReadWritePaths=/opt/air-ground /var/log/air-ground
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=air-ground-car
+
+[Install]
+WantedBy=multi-user.target

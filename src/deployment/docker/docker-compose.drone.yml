@@ -1,0 +1,35 @@
+# =============================================================================
+# docker-compose.drone.yml — 无人机角色覆盖
+#
+# 用法:
+#   docker compose -f docker-compose.edge.yml -f docker-compose.drone.yml up
+# =============================================================================
+
+services:
+  edge-node:
+    environment:
+      AIR_GROUND_ROLE: drone
+
+    devices:
+      # Pixhawk 6C 飞控。用 udev 符号链接而不是 /dev/ttyACM0 —— 若 Pi 上还插了
+      # 别的 CDC-ACM 设备 (常见于同时接了 USB 转串口调试器), 枚举顺序会让
+      # 飞控跑到 ttyACM1 上去, 而 MAVROS 仍在死等 ttyACM0。
+      # 规则见 network/99-air-ground-devices.rules。
+      - /dev/pixhawk:/dev/pixhawk
+
+    volumes:
+      # RealSense D435i。
+      #
+      # ⚠ 只挂 /dev/video* 是不够的。librealsense 除了 UVC 视频节点, 还要通过
+      #   libusb 直接访问 USB 设备做 IMU 读取、固件查询和硬件复位, 走的是
+      #   /dev/bus/usb 下的节点。只给 video0/video2 的话现象是:
+      #   彩色图能出、深度图和 IMU 出不来, 且报 "failed to set power state"。
+      #
+      #   这里用 bind mount 整个 /dev/bus/usb 而不是 devices:, 因为 USB 设备
+      #   重新枚举后 major/minor 会变, devices: 挂进去的节点会失效 (要重启容器),
+      #   bind mount 则跟随宿主机。代价是容器能看到**所有** USB 设备,
+      #   比逐个 devices 宽松 —— 这是 RealSense 强加的取舍, 记录在 ADR-0005 §决策-3。
+      - /dev/bus/usb:/dev/bus/usb
+
+    # 深度相机点云在共享内存里传递, 默认 64MB 不够
+    shm_size: "512m"

@@ -60,11 +60,13 @@ jobs:
           apt-get install -y --no-install-recommends \
             ros-noetic-gazebo-ros-pkgs ros-noetic-gazebo-ros || true
 
+      # 直接用仓库根的 requirements.txt, 不再在这里重抄一遍版本号。
+      # 之前是手抄的, 结果上界 (numpy<2.0.0 / pymavlink<3.0.0) 全漏了 ——
+      # numpy 2 会直接搞坏 Noetic 的 cv_bridge。单一来源比对齐检查更省事。
       - name: Install Python dependencies
         run: |
           pip3 install --upgrade pip
-          pip3 install pymavlink>=2.4.39 numpy>=1.22.0 PyYAML>=6.0
-          pip3 install opencv-python-headless>=4.8.0 Pillow>=9.0.0
+          pip3 install -r requirements.txt
 
       - name: rosdep check
         run: |
@@ -162,7 +164,7 @@ jobs:
   # 详见 src/firmware/mspm0_diff/src/mspm0_conf.h 与 ADR-0004 §决策-4。
   #
   # 被空实现掉的只有十几个寄存器原语；运动学、协议、PID、测速窗口、环形缓冲
-  # 全部是真实代码，由本 job 的 49 个 Host 用例覆盖。
+  # 全部是真实代码，由本 job 的 70 个 Host 用例覆盖。
   # ---------------------------------------------------------------------------
   build-mspm0-firmware:
     name: Build MSPM0G3507 Differential Firmware (task-11)
@@ -212,3 +214,106 @@ jobs:
             src/firmware/mspm0_diff/build/*.map
           retention-days: 30
           if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Task-12: 树莓派部署配置
+  #
+  # 分成两个 job:
+  #   validate-deployment — 秒级静态校验, 与本地 `bash src/deployment/validate.sh`
+  #                         **跑的是同一份脚本**。两份必然漂移, 所以不写第二份。
+  #   build-edge-image    — ARM64 镜像构建, 分钟级, 只在部署/ROS 包变更时跑。
+  #
+  # 部署配置的失败方式是"到了现场才发现"。这两个 job 的目的是把能静态查出来的
+  # 全部前移到提交时。
+  # ---------------------------------------------------------------------------
+  validate-deployment:
+    name: Validate Deployment Config (task-12)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # systemd-analyze 来自 systemd 包, ubuntu-latest 自带;
+      # 显式装 pyyaml 让 compose 走完整解析而不是降级的结构检查。
+      - name: Install validators
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends systemd shellcheck
+          python3 -m pip install --quiet pyyaml
+
+      # 与本地同一个入口。本地会 SKIP 掉 systemd-analyze, 这里会真的跑。
+      - name: Static validation
+        run: bash src/deployment/validate.sh
+
+      # shellcheck 比 `bash -n` 严格得多 (未加引号的变量、无效的 test 用法等)。
+      # 设为非阻塞: 它的部分规则对部署脚本偏严, 现阶段先看报告不拦提交。
+      - name: shellcheck (advisory)
+        continue-on-error: true
+        run: |
+          shellcheck --severity=warning             src/deployment/*.sh             src/deployment/**/*.sh || true
+
+      # compose 的完整语义校验需要 docker CLI —— ubuntu-latest 自带。
+      # ROS_IP 是刻意设成"未提供即报错"的 (见 ADR-0006 §决策-3),
+      # 因此这里必须显式注入假值; 若不注入也能通过, 说明那条约束是假的。
+      - name: docker compose config
+        run: |
+          cd src/deployment/docker
+          export ROS_IP=192.168.1.10 ROLE=car CHASSIS=diff                  ROS_MASTER_URI=http://192.168.1.100:11311
+          echo "--- car ---"
+          docker compose -f docker-compose.edge.yml -f docker-compose.car.yml config >/dev/null
+          echo "--- car + sensors ---"
+          docker compose -f docker-compose.edge.yml -f docker-compose.car.yml                          -f docker-compose.car-sensors.yml config >/dev/null
+          echo "--- drone ---"
+          ROLE=drone ROS_IP=192.168.1.20             docker compose -f docker-compose.edge.yml -f docker-compose.drone.yml config >/dev/null
+          echo "全部 compose 组合解析通过"
+
+      # 反向验证: 不给 ROS_IP 时必须失败。
+      # 没有这一步的话, 上面那条约束哪天被人改成有默认值也不会有人发现。
+      - name: ROS_IP guard must actually fail without it
+        run: |
+          cd src/deployment/docker
+          export ROLE=car CHASSIS=diff ROS_MASTER_URI=http://192.168.1.100:11311
+          unset ROS_IP
+          if docker compose -f docker-compose.edge.yml -f docker-compose.car.yml config >/dev/null 2>&1; then
+            echo "::error::ROS_IP 未设置时 compose 竟然通过了 —— ADR-0006 §决策-3 的约束已失效"
+            exit 1
+          fi
+          echo "ROS_IP 缺失时正确地失败了"
+
+  build-edge-image:
+    name: Build Edge Image ARM64 (task-12)
+    runs-on: ubuntu-latest
+    # 静态校验没过就没必要花十几分钟构建镜像
+    needs: validate-deployment
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 树莓派是 ARM64, CI runner 是 x86 —— 需要 qemu 做用户态模拟
+      # (task-12 评审建议 5)。代价是构建比原生慢数倍。
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build edge image (linux/arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/deployment/docker/Dockerfile.edge
+          platforms: linux/arm64
+          push: false
+          # 不 load 到本地 daemon: 跨架构镜像 load 不进 x86 daemon,
+          # 而且这里只关心"能不能构建成功"。
+          outputs: type=cacheonly
+          build-args: |
+            BUILD_COMMIT=${{ github.sha }}
+            BUILD_TIME=${{ github.run_id }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+        timeout-minutes: 60

@@ -1,6 +1,17 @@
 # Task-12: 树莓派部署方案
 
-> **状态：🔴 待开始** | **优先级：🥉 高** | **预计耗时：4h**
+> **状态：✅ 已完成（2026-07-30）** | **优先级：🥉 高** | **实际耗时：约 4h**
+>
+> **产出**：`src/deployment/`（8 个子目录 37 个文件）·
+> [ADR-0005](../docs/decisions/ADR-0005.md)（容器化部署）·
+> [ADR-0006](../docs/decisions/ADR-0006.md)（静态 IP 与时钟主从）·
+> [ADR-0007](../docs/decisions/ADR-0007.md)（`network_mode: host` 的暴露面与重估触发条件）·
+> CI job `validate-deployment` + `build-edge-image`
+>
+> **验收结果**：静态校验 26 项通过（含 45 个 Host 单元测试）。
+> 与本文档共 **14 处偏差，全部是"照抄会失败"的问题**，逐条见
+> [`src/deployment/README.md` §6](../src/deployment/README.md#6-与任务文档task-12的偏差)
+> ——**动手前先看那张表**（本页"可执行步骤"开头也有摘要）。
 >
 > **适用环境**：任意 OS（纯文本/Dockerfile/systemd unit 文件，不需 Ubuntu 20.04）
 > **硬件依赖**：无（Docker build 可在 CI 中验证，systemd 可语法检查）
@@ -80,6 +91,26 @@
 ---
 
 ## 可执行步骤
+
+> ## ⚠ 下面的代码块**不要照抄**
+>
+> 本节写于实现之前。实现过程中发现其中 **14 处照抄会直接失败**——
+> 不是风格问题，是"构建报错""服务起不来""把自己锁在门外"这一类。
+> 权威实现是 `src/deployment/`，偏差逐条附理由列在
+> **[`src/deployment/README.md` §6](../src/deployment/README.md#6-与任务文档task-12的偏差)**。
+>
+> 最容易踩的四条（完整 14 条见上面链接）：
+>
+> | 本节原文 | 照抄的后果 | 正确做法 |
+> |---|---|---|
+> | `FROM ros:noetic-ros-core-focal` | `rosdep install` 直接报错——ros-core 里 rosdep 没初始化过 | 用 `ros-base` |
+> | `roslaunch ... chassis:=${CHASSIS}` | `RLException: unused args`，第一次启动就失败 | `default_chassis:=` |
+> | `ChallengeResponseAuthentication no` | OpenSSH 9.x 已移除该项，`sshd -t` 报错、sshd 起不来——**把自己锁在门外** | `KbdInteractiveAuthentication no` |
+> | `ExecStartPre=docker compose pull` | Phase 1 没有 registry，开机 pull 必然失败 → 整个单元起不来 | `require-image.sh` 查本地镜像 |
+>
+> 本节保留原文不改，是因为它记录的是**当初的设想**；
+> 改掉它就看不出实现过程中学到了什么了。
+
 
 ### 12.1 目录结构
 
@@ -621,12 +652,136 @@ if __name__ == "__main__":
 
 ## 验收标准
 
-- [ ] `docker build -f docker/Dockerfile.edge` 可在 CI 中成功构建
-- [ ] `systemd-analyze verify` 对所有 `.service` 文件无语法错误
-- [ ] `bash -n` 对所有 `.sh` 脚本无语法错误
-- [ ] `check_nodes.py` 可在任意有 Python 3 的机器上运行（检测 ROS Master 可连通性）
-- [ ] SSH 加固脚本不包含硬编码密码/密钥
-- [ ] `README.md` 包含完整的"从烧录系统到开机自启"部署步骤
+- [x] `docker build` 可在 CI 中成功构建（`build-edge-image` job，ARM64 + qemu）
+- [x] `systemd-analyze verify` 对所有 `.service`/`.timer` 无语法错误（CI 执行）
+- [x] `bash -n` 对所有 `.sh` 脚本无语法错误（本地 + CI，10 个脚本）
+- [x] `check_nodes.py` 可在任意有 Python 3 的机器上运行（纯标准库，无 rospy）
+- [x] SSH 加固脚本不包含硬编码密码/密钥（校验脚本含专门的泄漏扫描项）
+- [x] `README.md` 包含完整的"从烧录系统到开机自启"部署步骤（§4，9 个小节）
+
+### 超出验收标准的部分
+
+- `validate.sh` —— 本地与 CI **共用同一份**静态校验入口，7 类检查
+- `test_healthcheck.py` —— 31 个 Host 单元测试，覆盖健康判定的纯逻辑
+- `validate_consistency.py` —— 跨文件一致性（compose 结构 / 话题名与 ROS 配置对齐）
+- 校验脚本自身做过**负向测试**，详见实施记录
+
+---
+
+## 实施记录（2026-07-30）
+
+### 交付清单
+
+| 路径 | 内容 |
+|------|------|
+| `src/deployment/README.md` | 从烧录系统到开机自启的完整流程 + 排查手册 + 已知限制 |
+| `src/deployment/validate.sh` | **静态校验入口，本地与 CI 同一份** |
+| `src/deployment/validate_consistency.py` | compose 结构 + 话题名与 ROS 配置的一致性 |
+| `src/deployment/install.sh` | 装到树莓派上，幂等，不自动启用服务 |
+| `src/deployment/docker/` | Dockerfile ×2 + entrypoint + compose ×4 + .env.example |
+| `src/deployment/systemd/` | 车机/无人机/健康检查 unit + timer |
+| `src/deployment/scripts/` | `require-image.sh` · `wait-for-device.sh` |
+| `src/deployment/network/` | udev 规则 · 3DR AT 配置 · USB3 检查 · 静态 IP 模板 · 无人机接线文档 |
+| `src/deployment/chrony/` | 车机=NTP 服务器 / 无人机+服务器=客户端 |
+| `src/deployment/ssh/` | sshd 加固 · fail2ban · 密钥生成 |
+| `src/deployment/healthcheck/` | 纯判定逻辑 + 两个 CLI + 告警 + **31 个单元测试** |
+| `src/deployment/logging/` | logrotate + journald 持久化 |
+| `docs/decisions/ADR-0005.md` | 容器化部署（5 条决策 + 3 个否决方案） |
+| `docs/decisions/ADR-0006.md` | 静态 IP 与时钟主从（4 条决策 + 3 个否决方案） |
+| `.github/workflows/ci.yml` | 新增 `validate-deployment` + `build-edge-image` |
+| `.gitattributes` | 补 `*.service`/`*.rules`/`Dockerfile*` 等的 `eol=lf` |
+
+### 最要紧的一件事：`.gitattributes` 必须先落地
+
+`systemd` / `sshd` / `udev` / `Dockerfile` 都是**逐行解析**的，CRLF 会让它们
+在 Linux 上直接失效 —— 不是"看起来有点乱"，而是：
+
+* systemd 把 `Type=simple
+` 里的 `
+` 当成值的一部分 → 单元加载失败
+* sshd 配置行尾带 `
+` → 参数非法，sshd 拒绝启动 → **把自己锁在门外**
+* udev 规则静默不匹配 → 符号链接不出现，容器起不来且没有任何报错
+
+这正是 2026-07-25 编码事故的同一类问题，仓库日记里那条教训是
+"`.gitattributes` 必须作为第一批提交"。因此本任务**先写属性规则，再写被它保护的文件**。
+
+### 与本文档的 14 处偏差
+
+全部是"照抄会失败"的问题，不是风格分歧。完整表格见
+[`src/deployment/README.md` §6](../src/deployment/README.md)，这里只摘最关键的四条：
+
+| # | 文档原文 | 问题 |
+|:---:|---|---|
+| 4 | `privileged: true` **且** `devices:` 白名单 | 两者矛盾。privileged 已给了全部设备，白名单一行都不起作用，**只是看起来像做了权限控制** |
+| 6 | `ExecStartPre=docker compose pull` | Phase 1 离线分发没有 registry，开机 pull 必然失败 → `ExecStartPre` 失败 → 整个单元起不来。症状是"实验室能起、拉到场地就起不来" |
+| 7 | `roslaunch ... chassis:=${CHASSIS}` | `car_edge.launch` 声明的是 `default_chassis`。roslaunch 对未声明参数是**硬错误**，第一次启动就会失败 |
+| 9 | `ChallengeResponseAuthentication no` | 该选项在 OpenSSH 9.x 已**移除**，而 Bookworm 带的是 9.2。照抄会让 `sshd -t` 报错、sshd 起不来 —— 而这台 Pi 可能已经装在无人机上了 |
+
+另有两处是"文档给的东西其实没做事"：
+
+* §12.4 的 `setup-3dr-radio.sh` 只建了个 mavutil 连接就打印 "3DR Radio configured."，
+  **一个参数都没设**。改写为真实的 SiK AT 命令实现，且默认只读。
+* §12.5 的 `check-d435i-usb.sh` 扫描系统里有没有任何 5000M 端口 ——
+  树莓派5 本身就有 USB3 口，所以这个检查**恒为真**，相机插在 USB2 上也报通过。
+  改为定位相机自身所在的那个端口。
+
+### 一处 systemd 依赖的连锁问题
+
+§12.3 用 `Requires=dev-ttyACM0.device` 让无人机等飞控就绪，§12.5 又给了
+一条 `SYMLINK+="pixhawk"` 的 udev 规则。这两段单独看都没错，**合起来跑不通**：
+
+只写 `SYMLINK` 的话 `/dev/pixhawk` 会出现，但 systemd 里**并不存在
+`dev-pixhawk.device` 这个单元** —— 设备单元名是从设备节点真实路径推导的。
+要让符号链接也成为可依赖的单元名，需要 `TAG+="systemd"` 与
+`ENV{SYSTEMD_ALIAS}="/dev/pixhawk"` 两件事（systemd.device(5)）。
+
+同时把 `Requires=` 改成了 `Wants=` + 显式等待脚本，理由写在 unit 文件头：
+`Requires` 硬阻塞意味着"飞控没插 = 相机数传遥测全都不启动"，
+而这些在飞控没接时仍然有用。故障范围不该被启动依赖放大。
+
+### 校验脚本自己的负向测试暴露了一个假绿灯
+
+写完 `validate.sh` 之后做了负向测试 —— 故意塞进去一个语法错误的脚本、
+一个 CRLF 的 unit、一份假私钥，看它会不会红。
+
+前后两项正常红了，**中间那项没有**。
+
+原因：Git for Windows 附带的 MSYS `grep` 在读入时会静默剥掉 CR，
+于是 `grep $'
+'` 在 Windows 上永远匹配不到。而 Linux CI 上 grep 行为正常 ——
+结果就是本地永远绿、真出问题时本地反而发现不了，属于最坏的一类假绿灯。
+改用"剥掉 CR 前后字节数是否变化"判断后三项全部正确报红。
+
+**教训**：校验脚本必须自己先过一遍负向测试。一个从来没红过的检查，
+和没有这个检查是等价的 —— 而它还会让人以为已经查过了。
+
+### 已知限制
+
+- **整套配置尚未在真实树莓派上执行过。** Phase 1 无硬件，目标是
+  "静态可校验 + CI 可构建"。首次上机按 README §4 逐步走。
+- **`docker build` 与 `systemd-analyze verify` 未在本地执行**
+  （开发机是 Windows，无 Docker/systemd），由 CI 首次验证。
+  ARM64 构建更是只能在 CI 上做（需 buildx + qemu）。
+- **udev 规则里的 VID/PID 与序列号需上机核对。** 3DR 数传与 RPLIDAR
+  同为 CP2102（`10c4:ea60`），必须靠序列号区分；规则里留的是
+  `REPLACE_WITH_*_SERIAL` 占位符，不填则那两条规则不匹配任何设备 ——
+  这是刻意的：宁可符号链接不出现（`wait-for-device.sh` 会报出来），
+  也不要两个设备随机抢同一个名字。
+- **`setup-3dr-radio.py` 未在真实电台上验证。** AT 命令集依据 SiK 公开文档，
+  默认只读模式。
+- **`car_edge_real.launch` 尚不存在**（task-14 交付）；`EDGE_MODE=real`
+  时 entrypoint 会检测到并降级，同时打印说明。
+- **网络降级（WiFi→4G）与本地缓存模式未实现**，Phase 2 规划（评审建议 4）。
+
+### 对下游任务的影响
+
+| 任务 | 影响 |
+|------|------|
+| **task-13** | CI 已有两个部署相关 job 模板；`validate.sh` 的"本地/CI 同一份"模式可推广到其他静态检查 |
+| **task-14** | 需交付 `car_edge_real.launch`；MAVROS 的 `fcu_url` 用 `/dev/pixhawk`、`gcs_url` 指向车机 `192.168.1.10:14550` |
+| **task-15** | 集成验证直接跑 `healthcheck/check_nodes.py`（退出码即结论）+ `chronyc tracking` |
+| **换硬件平台** | 改 `Dockerfile.edge` 的 base image 与 compose 里的设备路径即可 |
 
 ---
 

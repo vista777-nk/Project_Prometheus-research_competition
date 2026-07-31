@@ -1,0 +1,28 @@
+# =============================================================================
+# Dockerfile.server — 实验室服务器镜像
+#
+# ⚠ **Phase 2 才实现, 当前是刻意的占位。**
+#
+# 不把它写成"看起来能用"的样子, 是因为服务器镜像的关键内容 (GPU 推理运行时、
+# CUDA 版本、模型权重分发方式) 在 Phase 2 的研究模块定型前无法确定,
+# 现在编一份出来只会让人以为可以直接 build。
+#
+# 与 task-11 里 MSPM0 移植层的处理是同一条原则:
+# 不确定的部分要标清楚边界, 而不是填满它 (见 ADR-0004 §决策-3)。
+#
+# Phase 2 落地时需要的最小内容:
+#   · base: nvidia/cuda:*-runtime-ubuntu20.04 + ROS Noetic
+#   · air_ground_lab_server 包 + World Model + EQA 推理节点
+#   · ROS Master (roscore) 由本镜像承担, 两台 Pi 向它注册
+#   · TCP :9090 边缘上行接收端口
+#
+# 现在需要跑服务器侧, 用仓库根的 `make launch-server-only` 在裸机上启动。
+# =============================================================================
+
+FROM ros:noetic-ros-base-focal
+
+LABEL description="Air-Ground Lab Server (PLACEHOLDER — not implemented, see Phase 2)"
+
+RUN echo 'Dockerfile.server 是 Phase 2 占位, 尚未实现。' >&2 \
+    && echo '当前请在裸机上用 make launch-server-only 启动服务器侧。' >&2 \
+    && exit 1

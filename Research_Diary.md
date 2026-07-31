@@ -417,6 +417,196 @@
     5.下一步：task-12（树莓派部署）/ task-13（CI 流水线扩展）无阻塞。
 
 
+###### 2026/7/30（Phase 1 · task-12）
+    1.发现：a) 任务文档里同时写了 `privileged: true` 和一份 devices 白名单。
+             这两者是矛盾的 —— privileged 已经把宿主机所有设备和全部 capability
+             给了容器，那份白名单一行都不起作用。它不是"多余的保险"，
+             而是**看起来像做了权限控制**。这类"形似而实无"的配置比没有配置更危险。
+          b) 同一类问题还有两处：`setup-3dr-radio.sh` 只建了个连接就打印
+             "3DR Radio configured."、一个参数都没设；`check-d435i-usb.sh` 扫描
+             系统里有没有任何 5000M 端口，而树莓派5 本身就有 USB3 口 ——
+             那个检查**恒为真**，相机插在 USB2 上照样报通过。
+             共同点：都会让人以为这一步已经做完了。
+          c) systemd 单元里那串 ProtectSystem/NoNewPrivileges/PrivateTmp
+             **保护不到边缘节点**。该单元唯一的工作是调用 docker CLI，
+             真正的负载跑在 dockerd 创建的容器里，不在这个单元的 cgroup 和
+             namespace 内。它们能约束的只是那个几十毫秒的 CLI 包装进程。
+             保留是聊胜于无，但不能让它造成"已经上了沙箱"的错觉。
+          d) 文档 §12.3 的 `Requires=dev-ttyACM0.device` 与 §12.5 的
+             `SYMLINK+="pixhawk"` 单独看都对，**合起来跑不通**：
+             只写 SYMLINK 的话 systemd 里并不存在 dev-pixhawk.device 这个单元
+             （设备单元名从设备节点真实路径推导），依赖会永远等不到。
+             要让符号链接可被依赖需要 TAG+="systemd" 与 SYSTEMD_ALIAS 两件事。
+          e) `ChallengeResponseAuthentication` 在 OpenSSH 9.x 已移除，
+             而树莓派 OS Bookworm 带的是 9.2 —— 照抄会让 sshd 起不来，
+             把自己锁在门外，而这台 Pi 可能已经装在无人机上了。
+
+    2.完成：【Phase 1 第三个任务 · 树莓派部署】
+          1) `src/deployment/` 八个子目录 33 个文件：Docker 层（一个镜像两个角色）、
+             systemd 自启与健康检查、udev 设备固定、chrony 主从、SSH 加固、
+             日志轮转与 journald 持久化。
+          2) `validate.sh` —— **本地与 CI 跑同一份**的静态校验入口，7 类检查。
+             查不了的项明确报 SKIP 并说明原因，不静默略过。
+          3) `healthcheck/agcheck.py` 把健康判定做成纯函数，31 个 Host 单元测试，
+             不需要 ROS、不需要网络、不需要树莓派就能跑。
+             这是把固件那条"逻辑与 I/O 分离"的经验搬到了部署层。
+          4) `validate_consistency.py` —— 跨文件一致性：compose 结构、
+             以及 agcheck 的必需话题与 ROS 侧 edge yaml 的话题名是否对齐。
+          5) ADR-0005（容器化部署，5 条决策 + 3 个否决方案）
+             与 ADR-0006（静态 IP 与时钟主从，4 条决策 + 3 个否决方案）。
+          6) CI 增至 5 个 job：新增 validate-deployment 与 build-edge-image（ARM64 + qemu）。
+          7) 与任务文档共 **14 处偏差，全部是"照抄会失败"的问题**，逐条给了理由。
+
+          【先落地 .gitattributes】
+          8) systemd / sshd / udev / Dockerfile 都是逐行解析的，CRLF 会让它们
+             在 Linux 上直接失效。这与 7/25 的编码事故是同一类问题，
+             日记里那条教训是"`.gitattributes` 必须作为第一批提交"。
+             因此本任务先写属性规则、再写被它保护的文件。
+
+    3.失败：a) **校验脚本自己的负向测试抓出了一个假绿灯。**
+             写完 validate.sh 后故意塞进去三样东西看它会不会红：
+             一个语法错误的脚本、一个 CRLF 的 unit、一份假私钥。
+             前后两项正常红了，**中间那项没有**。
+             原因是 Git for Windows 附带的 MSYS grep 在读入时会静默剥掉 CR，
+             `grep $'
+'` 在 Windows 上永远匹配不到；而 Linux CI 上 grep 行为正常。
+             结果就是本地永远绿、真出问题时本地反而发现不了 ——
+             属于最坏的一类假绿灯。改用"剥掉 CR 前后字节数是否变化"后三项全红。
+             教训：**一个从来没红过的检查，和没有这个检查是等价的**，
+             而它还会让人以为已经查过了。校验脚本必须自己先过负向测试。
+          b) 本机是 Windows，没有 Docker 也没有 systemd，因此
+             `docker build` 与 `systemd-analyze verify` 都没在本地跑过，
+             由 CI 首次验证。ARM64 构建更是只能在 CI 上做（需 buildx + qemu）。
+             与 task-10/11 的交叉编译是同一类限制。
+
+    4.小结：这一轮反复遇到的是同一个模式 —— **"看起来做了但其实没做"的配置**。
+          privileged 配 devices 白名单、只打印不设置的电台脚本、恒为真的 USB3 检查、
+          保护不到目标的 systemd 加固，四处形态不同但性质一样。
+          它们比"缺了这一步"更危险：缺了会被发现，形似而实无不会。
+          而最讽刺的是我自己也写出了第五个 —— 那个永远不会红的 CRLF 检查。
+          所以这一轮真正的收获不是那 33 个文件，是那次负向测试。
+
+    5.下一步：task-13（CI 流水线扩展）现在有三类 job 模板可参照（固件 / 部署静态校验 /
+          跨架构镜像构建）。task-14 需要交付 car_edge_real.launch，
+          在此之前 entrypoint 会自动降级到仿真同款并打印说明。
+
+
+###### 2026/7/31（Phase 1 · task-12 评审收口）
+
+    1.问题：a) **CI 抓出一个本机永远看不到的错误。** `StartLimitIntervalSec` /
+             `StartLimitBurst` 我写在了 `[Service]` 段。systemd 从 v230 起把这两个
+             键移到了 `[Unit]`，旧名 `StartLimitInterval` 留了 `[Service]` 兼容别名、
+             **新名没有**。systemd 的处理方式是打一句
+             "Unknown key name … ignoring" 然后静默忽略 ——
+             单元照常启动、`systemctl status` 一切正常，而限流从未生效。
+             真正的表现要到"配置写错 + 无休止 10 秒重启循环"时才暴露。
+          b) 顺着 CI 的输出还发现 validate.sh 自己有个归类 bug：
+             `systemd-analyze verify` 会**连带加载依赖单元**并把它们的错误一起打印。
+             healthcheck.service 有 `After=air-ground-*-edge.service`，
+             于是四个单元全红、行号指向别的文件，而真实错误只有两处。
+          c) 评审同时指出四点：host 网络的安全代价没有重估触发条件、
+             离线镜像更新还是手工流程、14 处偏差只躺在部署 README 里、
+             以及 `car_edge_real.launch` 的降级只有一条 echo，上位机看不见。
+          d) 自查还发现 `air-ground-healthcheck.service` 里有一句注释写着
+             "PartOf 让边缘节点停掉时健康检查也一起停" —— 而文件里**根本没有
+             PartOf**。一条描述不存在配置的注释，正是我在 4.小结 里批评过的
+             那类"看起来做了但其实没做"，只不过这次载体是注释。
+
+    2.完成：1) **段归属自查（不依赖 systemd）。** 用 awk 跟踪当前段名，
+             检查 `StartLimit*` 是否落在 `[Unit]`。这类"写错段被静默忽略"的错误
+             本机（Windows）根本查不到，把它固定成一条本机也能跑的检查，
+             并做了负向测试确认能真的变红。
+          2) `systemd-analyze verify` 改为一次性校验全部单元、不按单元归类。
+             中间试过按文件名过滤来归类，但那样"不带文件名的错误"会被静默丢掉 ——
+             又一个假绿灯。宁可一次报全，systemd 的报错本来就自带 路径:行号。
+          3) **降级状态贯通到容器外**（评审 4）。entrypoint 在 roslaunch **之前**
+             把结论写进 bind mount 的 `edge-state.env`，`agcheck.py` 读它并以
+             退出码 **4** 报出；`SuccessExitStatus=4` 让 systemd 不把预期降级
+             标成 failed，`alert.sh` 映射为 warning 而非 critical。
+             新增 14 个 Host 用例（31 → 45），其中四个专门钉优先级：
+             Master 掉线、话题缺失、未知角色都必须**盖过**降级。
+          4) `scripts/update-image.sh`（评审 2）：U 盘自动发现 → SHA-256 校验 →
+             **架构核对** → 空间预检 → 备份旧镜像 → load → 可回滚。
+             价值不在少敲几行，在把这四步变成必然执行。默认不重启。
+          5) ADR-0007（评审 1）：`network_mode: host` 的暴露面清单 +
+             三条 Phase 2 重估触发条件（接外网 / 迁 ROS 2 / 同机跑互不信任负载）。
+             ADR 不可变，故不改 ADR-0005 而另立一份。触发条件同时挂进
+             ROADMAP 的"待重估的技术决策"——不指望有人回来读 ADR。
+          6) task-12 的"可执行步骤"顶部加了"不要照抄"警告框（评审 3），
+             含最容易踩的四条摘要和偏差表链接。原文一字未改：
+             它记录的是当初的设想，改掉就看不出实现过程中学到了什么。
+          7) 降级契约的四端（entrypoint / agcheck / systemd / alert）
+             加进 validate.sh 交叉校验，与固件那边用黄金帧锁串口协议同一用意。
+             三条断开路径都做了负向测试。
+
+    3.失败：a) ADR-0005 §决策-3 把 host 模式的理由写成"ROS 1 的多播与动态端口"。
+             **ROS 1 不用多播** —— 它的发现是中心化的（节点向 Master 注册，
+             Master 告知对端地址后直连）；用多播发现的是 ROS 2 的 DDS。
+             真实理由是节点端口由内核随机分配、ROS 1 没有任何配置项能约束成范围，
+             因此 `bridge` 模式声明不出 `ports:`。结论没错，理由写错了。
+             ADR 不可变，原文保留，更正记在 ADR-0007 开头。
+             教训：**决策对不等于理由对**，而后来者复用的是理由。
+          b) 那条幽灵 PartOf 注释暴露了另一件事：`PartOf` 写在
+             `healthcheck.service` 上本来就没用 —— 它是 `Type=oneshot`，
+             停一个没在运行的 oneshot 是空操作。要抑制停机噪声，必须停掉
+             **周期触发它的 timer**。所以不是"补上漏写的一行"，
+             是那行本来就该在另一个文件里。改成 `.timer` 上的 `PartOf`，
+             并在 service 里写清为什么不在这儿。
+
+    4.验证：部署静态校验 25/25 通过（原 21），含 45 个 Host 用例（原 31）。
+          三条新检查（段归属 / 降级契约 / 状态文件名）逐条做过负向测试。
+          固件回归 STM32 63/63、MSPM0 70/70，合计 133 全绿 —— 本轮未动固件，
+          跑一遍是确认没有连带影响。
+
+    5.小结：7/30 那条小结说"这一轮真正的收获是那次负向测试"。这一轮把它推进了一格：
+          **负向测试要覆盖到本机跑不了的那部分**。CRLF 那次是本机能查却查错了，
+          这次的 `StartLimitIntervalSec` 是本机根本没有 systemd、连查都查不了 ——
+          于是错误一路走到 CI。补救不是"依赖 CI"，是**把 CI 才能发现的错误类型
+          反向翻译成一条本机能跑的检查**。段归属自查就是这么来的：
+          它查不了完整语法，但能查"这个键是不是又写错段了"，而那正是踩过的坑。
+
+    6.下一步：task-13（CI 流水线扩展）。本轮给它多留了一条经验 ——
+          CI 的价值不只在拦住错误，还在**告诉你本机缺哪类检查**。
+          task-14 交付 `car_edge_real.launch` 时，需要把降级判定从状态文件
+          迁到 ICD 的 `Capability` 消息，状态文件退化为启动自检记录。
+
+    7.补记（同日 · ARM64 镜像构建首次运行）：
+          build-edge-image 这个 job 之前一直没跑过 —— 它 needs: validate-deployment,
+          而后者一直红着。段归属修好之后它第一次真正执行, 然后挂在
+          `pip3 install pymavlink` 上。
+
+          诊断链条: Focal 的 python3-pip 是 **20.0.2**, 而 PEP 600 的
+          `manylinux_2_XX_<arch>` 轮子标签要 pip 20.3 才认识; PyPI 上 lxml 的
+          aarch64 轮子正是 `manylinux_2_28_aarch64`。老 pip 认不出就退回去编译
+          lxml 源码, 而镜像里没有 libxml2-dev 也没有编译器。lxml 又是 pymavlink
+          的**构建期**依赖 —— pymavlink 只发 sdist, setup.py 会在安装时现场生成
+          MAVLink dialect, 那一步要 lxml。
+
+          本机是 Windows 没有 Docker, 这条链验证不了。所以没有赌单一判断,
+          而是把三条可能的失败路径一起堵上: apt 预装 python3-lxml/python3-future
+          (预编译 arm64 deb, 不存在"编译失败"这条路)、pip 升到 <25
+          (pip 25.0 起不支持 Python 3.8)、版本约束补上 requirements.txt 的上界。
+          **这一点在部署 README §9 里明写了"该修复同样未在本地验证"** ——
+          未验证的修复不该看起来像已验证的。
+
+          顺带发现两件事:
+          a) Dockerfile 的注释写着"与 requirements.txt 对齐", 而上界 `<3.0.0`
+             从没同步过来。又一条"声称做了但没做"。已补交叉校验并做负向测试。
+          b) 更要紧的: drone_car_bridge.py 里 pymavlink 是 **try/except 可选导入**。
+             装不上不报错, 只会退回自己手写的 v1 解析器, 然后把 MAVLink **v2**
+             帧整个丢掉 (只留一条 logwarn_throttle) —— 而 Pixhawk 6C 默认说 v2。
+             也就是说这次 CI 是"幸运地"在构建期挂了; 要是 pip 装了个半成品,
+             这个故障会一路潜伏到实机上, 表现为"飞控接上了但收不到心跳"。
+             因此在 Dockerfile 里加了一条构建期 import 验证 ——
+             **可选依赖的安装失败必须在构建期变成硬错误**, 否则运行期没人看得见。
+             CI 的 ROS job 也改成直接 `pip install -r requirements.txt`,
+             把手抄版本号这个漂移源整个去掉 (原来漏了 numpy<2.0.0,
+             而 numpy 2 会直接搞坏 Noetic 的 cv_bridge)。
+
+          这一条和 5.小结 是同一个模式的两面: 那里说"把 CI 才能发现的错误反向
+          翻译成本机检查", 这里是"把运行期才会暴露的静默降级前移到构建期"。
+          共同点是**不要让失败发生在没人看的地方**。
+
 ---
 
 ## 历史名称脚注
