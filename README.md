@@ -6,11 +6,11 @@
 
 [![Phase](https://img.shields.io/badge/phase1-firmware__deployment-blue)](./project-prometheus-tasks/ROADMAP.md)
 [![Phase0](https://img.shields.io/badge/phase0_tasks-9/9-brightgreen)](./project-prometheus-tasks/00-OVERVIEW.md)
-[![Phase1](https://img.shields.io/badge/phase1_tasks-0/6-lightgrey)](./project-prometheus-tasks/00-OVERVIEW.md)
+[![Phase1](https://img.shields.io/badge/phase1_tasks-4/6-yellow)](./project-prometheus-tasks/00-OVERVIEW.md)
 [![Tests](https://img.shields.io/badge/tests-56/56-brightgreen)](./project-prometheus-tasks/task-09-validation.md)
 [![ROS](https://img.shields.io/badge/ROS-Noetic-brightgreen)](https://wiki.ros.org/noetic)
 [![PX4](https://img.shields.io/badge/PX4-v1.14-blueviolet)](https://px4.io/)
-[![CI](https://img.shields.io/badge/CI-passing-brightgreen)](./.github/workflows/ci.yml)
+[![CI](https://github.com/vista777-nk/research_compitition/actions/workflows/ci.yml/badge.svg)](https://github.com/vista777-nk/research_compitition/actions/workflows/ci.yml)
 
 ---
 
@@ -30,7 +30,7 @@
 | 阶段 | 状态 | 内容 |
 |------|:---:|------|
 | **Phase 0: 仿真框架** | ✅ 完成 (9/9) | 无人机 SITL · 差速底盘 · 麦轮底盘 · 传感器 · 通信桥 · 边缘服务器 · 集成总装 · 验证 |
-| **Phase 1: 固件+部署先行** | 🔴 进行中 (0/6) | STM32 麦轮固件 · MSPM0 差速固件 · 树莓派部署 (无人机+车机) · CI 流水线 · 传感器驱动 · 标定脚本 |
+| **Phase 1: 固件+部署先行** | 🟡 进行中 (4/6) | STM32 麦轮固件 ✅ · MSPM0 差速固件 ✅ · 树莓派部署 (无人机+车机) ✅ · CI 流水线 ✅ · 传感器驱动 · 标定脚本 |
 | Phase 2: EQA 论文 | 🔴 2026.09~12 | VLM + SLAM + 空地联合探索 |
 | Phase 3: 竞赛季 | 🔴 2027.01~08 | 全国电赛 + CRAIC2027 |
 | Phase 4: 毕设 | 🔴 2027~2028 | World Model · 3DGS · Dreamer |

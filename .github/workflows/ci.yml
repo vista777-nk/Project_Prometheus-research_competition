@@ -236,22 +236,20 @@ jobs:
 
       # systemd-analyze 来自 systemd 包, ubuntu-latest 自带;
       # 显式装 pyyaml 让 compose 走完整解析而不是降级的结构检查。
+      # (task-13) 不再装 shellcheck: 本 job 已不跑它, validate.sh 用的是 `bash -n`。
       - name: Install validators
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends systemd shellcheck
+          sudo apt-get install -y --no-install-recommends systemd
           python3 -m pip install --quiet pyyaml
 
       # 与本地同一个入口。本地会 SKIP 掉 systemd-analyze, 这里会真的跑。
       - name: Static validation
         run: bash src/deployment/validate.sh
 
-      # shellcheck 比 `bash -n` 严格得多 (未加引号的变量、无效的 test 用法等)。
-      # 设为非阻塞: 它的部分规则对部署脚本偏严, 现阶段先看报告不拦提交。
-      - name: shellcheck (advisory)
-        continue-on-error: true
-        run: |
-          shellcheck --severity=warning             src/deployment/*.sh             src/deployment/**/*.sh || true
+      # (task-13) 原先这里有一个非阻塞的 shellcheck 步骤, 已删除。
+      # 它只扫 src/deployment 且 `|| true` 到底 —— 永远不会失败的检查等于没有检查。
+      # 现由 lint-scripts job 全仓扫描并**阻塞**, 见该 job 的说明。
 
       # compose 的完整语义校验需要 docker CLI —— ubuntu-latest 自带。
       # ROS_IP 是刻意设成"未提供即报错"的 (见 ADR-0006 §决策-3),
@@ -317,3 +315,99 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
         timeout-minutes: 60
+
+  # ---------------------------------------------------------------------------
+  # Task-13: 全仓静态检查
+  #
+  # 这是 task-13 唯一新增的 job —— 另外四个维度 (ROS / STM32 / MSPM0 / Docker)
+  # 已由 task-10/11/12 在交付各自功能时建好。
+  #
+  # 门禁按"**是否在本地实测过**"分层, 而不是按工具的名气或严格程度 (ADR-0008):
+  #
+  #   工具         版本      范围              提交前实测结果    本 job 行为
+  #   ----------   -------   ---------------   ---------------   ----------
+  #   shellcheck   0.10.0    22 个 *.sh        warning 级 0 条   阻塞
+  #   yamllint     1.38.0    14 个 *.y[a]ml    0 条              阻塞
+  #   flake8       7.1.1     全部 *.py         0 条              阻塞
+  #   cppcheck     发行版版本 src/firmware      **未实测**        仅告警
+  #
+  # 三个阻塞工具全部**钉死版本号**。理由: 不钉版本的话, 上游加一条新规则就能
+  # 把绿灯变红, 而看红灯的人无法区分"代码退化了"和"工具升级了"。
+  # 钉版本的代价是要人工升级, 换来的是"红灯一定意味着代码有问题"。
+  #
+  # 不在这里做 systemd 单元校验: `systemd-analyze verify` 已由 validate.sh §6b
+  # 在 validate-deployment job 里真跑。同一个检查只实现一处。
+  # ---------------------------------------------------------------------------
+  lint-scripts:
+    name: Lint Scripts & Configs (task-13)
+    runs-on: ubuntu-latest
+
+    env:
+      SHELLCHECK_VERSION: v0.10.0
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 不用 apt 装 shellcheck: ubuntu-latest 的版本是 0.9.0, 与提交前实测用的
+      # 0.10.0 不是同一版。"用没实测过的版本做门禁"等于门禁没实测过。
+      - name: Install shellcheck (pinned)
+        run: |
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" \
+            | tar -xJf -
+          sudo install -m 0755 "shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+          rm -rf "shellcheck-${SHELLCHECK_VERSION}"
+          shellcheck --version
+
+      - name: Install Python linters (pinned)
+        run: pip3 install --quiet "yamllint==1.38.0" "flake8==7.1.1"
+
+      # --severity=warning: error 级当前 0 条, 只卡 error 等于不卡回归 ——
+      # 新脚本引入 SC2164 (cd 未判错) 这类问题时 CI 照样会绿。
+      # info/style 级 (37 条) 不纳入门禁: 多是风格偏好, 拿来拦提交性价比不高。
+      # -x 让它跟随 source 进去查。
+      - name: ShellCheck (blocking, severity>=warning)
+        run: |
+          mapfile -d '' -t scripts < <(git ls-files -z '*.sh')
+          echo "检查 ${#scripts[@]} 个 shell 脚本"
+          shellcheck -x --severity=warning -f gcc "${scripts[@]}"
+
+      # 用 git ls-files 而不是通配符展开: 通配符要么漏目录, 要么扫进
+      # 未入库的临时文件。门禁的范围必须和仓库内容一致。
+      #
+      # line-length 关掉 —— 仓库里的 compose/config 有对齐用的长行, 折行反而更难读。
+      # 其余 relaxed 规则保留, 包括 new-lines (行尾必须 LF): Linux 侧内容实测 0 条。
+      - name: yamllint (blocking)
+        run: |
+          mapfile -d '' -t yamls < <(git ls-files -z '*.yaml' '*.yml')
+          echo "检查 ${#yamls[@]} 个 YAML 文件"
+          yamllint -d "{extends: relaxed, rules: {line-length: disable}}" "${yamls[@]}"
+
+      - name: flake8 (blocking)
+        run: |
+          mapfile -d '' -t pys < <(git ls-files -z '*.py')
+          echo "检查 ${#pys[@]} 个 Python 文件"
+          flake8 --max-line-length=120 --count "${pys[@]}"
+
+      # ⚠ 非阻塞, 且这不是"先宽松以后再收紧"的托词 ——
+      # 提交这一步时本地既没有 cppcheck 也没有 make, **它对固件 C 代码的输出
+      # 一次都没跑过**。把没实测过的检查设成阻塞, 等于用别人的 CI 当试验场。
+      # 首轮 CI 输出出来后再决定: 若告警可控就升为阻塞并删掉这段注释;
+      # 若噪声大则调 --suppress 或撤掉。在那之前它只是一份报告。
+      # (task-13 评审建议 2 / ADR-0008 §决策-1)
+      - name: cppcheck (ADVISORY — 输出未经实测, 见 ADR-0008)
+        continue-on-error: true
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cppcheck
+          cppcheck --version
+          cppcheck --enable=warning,style,performance,portability \
+                   --std=c99 --error-exitcode=1 \
+                   --suppress=missingIncludeSystem \
+                   -I src/firmware/common \
+                   src/firmware/common src/firmware/stm32_mecanum/src \
+                   src/firmware/mspm0_diff/src

@@ -2,7 +2,7 @@
 
 > 本文档是项目入口。详细内容已拆分为四个专题文件。
 >
-> **当前进度**：Phase 0 仿真框架 9/9 ✅ · Phase 1 基础设施 3/6 🟡 · 56/56 ROS 单元测试通过 · E2E 33/33 通过 · 固件 Host 测试 133/133 通过（麦轮 63 + 差速 70）· 部署静态校验 26/26 通过（含 45 个 Host 用例）· 6 个 ROS package 全部可编译
+> **当前进度**：Phase 0 仿真框架 9/9 ✅ · Phase 1 基础设施 4/6 🟡 · 56/56 ROS 单元测试通过 · E2E 33/33 通过 · 固件 Host 测试 133/133 通过（麦轮 63 + 差速 70）· 部署静态校验 26/26 通过（含 45 个 Host 用例）· 6 个 ROS package 全部可编译 · CI 六个 job（含全仓 lint 门禁）
 
 ## 📖 必读文件
 
@@ -41,7 +41,7 @@
 | [task-10](./task-10-stm32-mecanum-firmware.md) | STM32F407 麦轮固件（逆运动学 + PID + 串口协议） | 🥇 固件先行 | 6h | ✅ |
 | [task-11](./task-11-mspm0-diff-firmware.md) | MSPM0G3507 差速固件（编码器 + PID + 电赛合规） | 🥇 固件先行 | 5h | ✅ |
 | [task-12](./task-12-drone-firmware-and-rpi-deployment.md) | 树莓派部署方案（Docker + systemd + 网络 + SSH） | 🥈 部署先行 | 4h | ✅ |
-| [task-13](./task-13-ci-pipeline.md) | CI 交叉编译流水线（ARM + MSPM0 + Docker + Lint） | 🥉 验证先行 | 3h | 🔴 |
+| [task-13](./task-13-ci-pipeline.md) | CI 交叉编译流水线（ARM + MSPM0 + Docker + Lint） | 🥉 验证先行 | 3h | ✅ |
 | [task-14](./task-14-sensor-drivers-mavlink.md) | 实机传感器驱动骨架 + MAVLink 2 签名 | 🥉 验证先行 | 4h | 🔴 |
 | [task-15](./task-15-calibration-validation.md) | IMU/相机标定脚本 + Phase 1 集成验证 | 🥉 验证先行 | 3h | 🔴 |
 
@@ -93,6 +93,18 @@ task-14 (传感器 + MAVLink) ── (独立) ── task-15
 > ⚠ task-11 的默认构建产出**不是可烧录固件**（MSPM0 移植层默认空实现，
 > 原因见 ADR-0004 §决策-3）。算法层完整且有 70 个 Host 用例覆盖；
 > 上板需按其 README §7 接入 TI SDK 与 SysConfig。
+>
+> **2026-07-31 补充（task-13）**：CI 增至 6 个 job。但本任务真正新增的只有
+> `lint-scripts` 一个 —— 文档要求的另外四个维度，**task-10/11/12 在交付各自
+> 功能时已经顺带建好了**。这说明任务文档会过期，执行前必须核对现状而不是照抄
+> 「可执行步骤」，偏差已逐条记入 [task-13 §与原方案的偏差](./task-13-ci-pipeline.md)。
+>
+> 门禁强度按「**是否在本地实测过**」分层，由
+> [ADR-0008](../docs/decisions/ADR-0008.md) 固化：shellcheck / yamllint / flake8
+> 三项提交前跑过全仓（分别 0/0/0 条）故设为阻塞并钉死版本号；
+> cppcheck 一次都没跑过，故只告警且 job 名带 `ADVISORY`。
+> 同时清掉两处「永远不会失败的检查」——`validate-deployment` 里 `|| true` 到底的
+> shellcheck 步骤，以及 README 顶部硬编码的假 CI badge。
 
 ## 🚀 快速开始
 

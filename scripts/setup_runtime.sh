@@ -49,7 +49,12 @@ if [[ "$runtime_mode" == "px4" ]]; then
     return 1 2>/dev/null || exit 1
   fi
 
+  # Both paths derive from PX4_AUTOPILOT_DIR, so they cannot be resolved
+  # statically. Readability is already checked above, which is the part that
+  # actually matters; ShellCheck only needs to be told to stop following.
+  # shellcheck source=/dev/null
   source "$runtime_gazebo_setup"
+  # shellcheck source=/dev/null
   source "$runtime_px4_setup" "$runtime_px4_root" "$runtime_px4_build"
   export ROS_PACKAGE_PATH="${ROS_PACKAGE_PATH}:${runtime_px4_root}:${runtime_sitl_gazebo}"
 fi
