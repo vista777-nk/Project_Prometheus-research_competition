@@ -1,10 +1,14 @@
 # Task-15: IMU/相机标定脚本 + Phase 1 集成验证
 
-> **状态：🔴 待开始** | **优先级：🥉 中** | **预计耗时：3h**
+> **状态：✅ 已完成 (2026-07-31)** | **优先级：🥉 中** | **预计耗时：3h**
 >
 > **适用环境**：任意 OS（标定脚本为 Python，离线数据驱动）
 > **硬件依赖**：无（标定脚本操作 ROS bag 文件，不依赖实时传感器）
 > **ROS 依赖**：Python 3 + 标定工具链（Kalibr 等可在 Docker/CI 中验证安装）
+>
+> **落地与本文的偏差见文末 [§与原方案的偏差](#与原方案的偏差)** —— 有七处，
+> 其中三处是本文与仓库现状直接冲突（话题名、输出格式、冒烟测试路径与 job 名）。
+> 决策记录见 [ADR-0011](../docs/decisions/ADR-0011.md)。
 
 ---
 
@@ -680,3 +684,152 @@ echo "========================================="
 ---
 
 *版本: v1.0 · 日期: 2026-07-28 · Phase 1 · 标定 + 验证*
+
+---
+
+## 与原方案的偏差
+
+> 本文是任务书，落地时按仓库现状调整了七处。ADR 见
+> [ADR-0011](../docs/decisions/ADR-0011.md)。约定同 task-13 / task-14：
+> **本文不改正文，偏差写在这里**——正文是当初的想法，这一节是实际发生的事。
+
+### 1. 采集脚本的五个话题名，仓库里一个都不存在（§15A.2）
+
+| 本文 | 仓库实际 | 出处 |
+|------|---------|------|
+| `/drone/rgb/image_raw` | `/drone/camera/rgb/image_raw` | `drone_edge.yaml` |
+| `/drone/depth/image_raw` | `/drone/camera/depth/image_raw` | `drone_edge.yaml` |
+| `/drone/imu/data_raw` | `/mavros/imu/data` | `drone_edge.yaml` |
+| `/car/imu/data_raw` | `/car/imu/data` | `car_edge.yaml` / `real_sensors.yaml` |
+| `/drone/rgb/camera_info` | **不存在**（本任务的产出才会造出它） | —— |
+
+`rosbag record` 订阅一个没有发布者的话题**不报错**，录出 0 条消息的 bag。
+相机标定要人举着标定板站两分钟，IMU 标定要静置两小时——代价不是"重跑脚本"。
+
+现在：话题名写在脚本顶部的 `*_TOPIC` 变量里，由
+`validate_consistency.py::check_calibration_topics()` 断言它们真的出现在三份
+配置里（负向测试跑过：改回 `/car/imu/data_raw` 立刻红）；脚本另在开录前跑
+`rostopic list` 逐个确认在线，不在线拒绝开录。
+
+### 2. `cv2.FileStorage` 写的 YAML，ROS 读不了（§15A.3 / §15A.4）
+
+本文的「Modified Interface」写的是 `camera_intrinsics.yaml → ROS camera_info`，
+但给的实现用 `cv2.FileStorage`。实测（OpenCV 5.0.0）：首行是 `%YAML 1.2` 指令、
+矩阵带 `!!opencv-matrix` 标签，`yaml.safe_load()` 抛 `ConstructorError`。
+而 `camera_info_manager` 走的正是普通 YAML 解析。
+
+现在：用 PyYAML 直接写 `camera_info` 的键布局（含
+`rectification_matrix` / `projection_matrix`），本项目的溯源信息放在
+`air_ground_calibration:` 额外段。副作用是 `validate-calibration.py` 不再需要
+OpenCV——它必须能在没装 OpenCV 的树莓派上跑。
+
+⚠ `camera_info_manager` 是否忽略那个额外段，本机（无 ROS）核实不了，
+已列入 [标定 README §5 上机核实清单](../src/deployment/calibration/README.md)。
+
+### 3. §15A.3 的重投影误差计算：一处重复、一处崩溃
+
+- **重复**：手算的 RMS 与 `cv2.calibrateCamera` 的返回值 `ret` **是同一个数**
+  （实测比值 0.999997）。本文把它们当成"重投影误差"和"RMS"两个指标分别打印。
+  现在只报一个 `rms_reprojection_error`，另外报**逐张** RMS——那才是
+  整体 RMS 给不出的信息（能区分"整体偏差大"和"某两张拖后腿"）。
+- **崩溃**：`cv2.norm(img_points[i], projected, cv2.NORM_L2)` 在 OpenCV 5.0 上
+  抛 `Input type mismatch`——4.x 的 `findChessboardCorners` 返回 `(N,1,2)`，
+  5.0 返回 `(N,2)`，而 `projectPoints` 一直是 `(N,1,2)`。现在统一
+  `reshape(-1, 2)` 再用 numpy 算，两个版本都对。
+
+另：§15A.3 的 `calibrate()` 要求 ≥10 张，而验收标准写"≥5 张"。
+现在默认 10 张（低于 10 张时畸变系数与主点强相关），并给 `--min-images` 开关。
+
+### 4. §15A.4 的焦距区间装不下本项目的相机
+
+`0.5w < fx < 2.0w` 换算过来是 HFOV ∈ (28.1°, 90.0°)。RealSense D435i 的
+**深度**流标称 87°±3° HFOV → `fx ≈ 0.527w`，上沿正好压在 `fx = 0.5w` 的边界上：
+一次完全正常的标定有可能被判成"焦距不合理"。
+
+现在：区间按视场角定义为 HFOV ∈ [20°, 120°]（即 `fx ∈ [0.2887w, 2.836w]`），
+并在输出里直接打印反推的 HFOV。同时把 `fy` 的判据从"对比图像**高度**"改成
+`fy/fx ≈ 1`——`fy` 与图像高度之间本来就没有关系。
+
+### 5. §15B.2 的 `MockObservation` 测的是它自己
+
+本文写了一个二十行的 `preprocess_to_observation()`，注释是"模拟
+`car_preprocessor.py` 的核心逻辑"。那三个用例一定会通过，因为它们测的是
+那二十行模拟件。真的 `build_messages()` 里有五件它没有的事：新鲜度窗口、
+LiDAR 降采样与 `angle_increment` 同步放大、无效距离写 −1.0、
+超声波限幅与缺失填 `max_range`、`modalities` 由新鲜度生成——全是实机上
+真正会出问题的地方。
+
+现在：用 task-14 已有的 ROS 替身跑**真的** `CarPreprocessor` 和**真的**
+`WorldModelStore`，10 条用例。为此给替身补了 15 个消息类与
+`Subscriber`/`Timer`/`CvBridge`；`cv2` 用真的，所以 JPEG 压缩那一段是真跑的。
+
+补替身时当场抓到一个替身缺陷：`rospy.Duration(1.0 / publish_rate)`——
+`car_preprocessor.py` 的原话——在替身上 `TypeError`（替身只收关键字参数，
+真 `rospy.Duration` 收位置参数）。在那之前没有任何测试构造过 `Duration`。
+
+### 6. §15B.1 的 Python 塞在 shell heredoc 里
+
+`bash -n` 只检查 shell 语法，`py_compile` 看不见 heredoc 里的内容，
+于是那段代码不被任何门禁覆盖——而它是 ADR-0003 帧协议的**第三份独立实现**。
+
+现在：拆成 `test-serial-loopback.py`（逻辑 + `--self-test`）与
+`test-serial-loopback.sh`（转发入口，保留本文的用法）。13 条协议自测在没有
+硬件的机器上跑，黄金帧与固件的 `test_protocol.c::test_pong_golden_frame` 同源。
+
+自测第 10 条记录了一个**本来就存在**的行为：线路上一个杂散 `0xA5` 会让
+拆帧状态机空等 165 字节，期间到达的帧全部被吞掉（`protocol_frame.h` 的
+`@warning` 早已写明）。解药是空闲重同步，`run_loopback()` 每次 `read()`
+读空时调 `parser.reset()`——对应固件 `uart.c` 的 IDLE 中断。
+
+另：本文的解析逻辑是"找第一个 `0xA5` 然后按偏移读"。载荷里允许出现
+`0xA5`/`0x5A`（协议不做字节填充），而且固件在 PONG 之外还周期上报 TELEMETRY，
+所以那样会随机对错。现在用与固件同构的 LEN + CRC + EOF 状态机。
+
+### 7. §15B.3 冒烟测试的两处路径/名字对不上
+
+- `test/mock_hardware.py` → 实际在 `scripts/mock_hardware.py`。
+  mock 后端是**运行时**要加载的（`backend: mock`），不是测试专用件。
+- CI job `build-docker-edge` → 仓库里叫 `build-edge-image`。
+
+两处都会产生**永远红的检查**，而看久了就没人看了。现在按实际路径/名字查，
+并把 `validate-deployment` / `lint-scripts` / `smoke-test-phase1` 三个 job
+一并纳入检查。
+
+冒烟脚本放在仓库根的 `scripts/`（本文的 `WS="$(dirname $0)/.."` 隐含了这个位置），
+`make smoke-phase1` 可跑。按 §优化建议 3 升级成三层：交付物存在性 →
+语法/YAML 解析/自测真跑 → CI 归属。CI 里另有一步**反向验证**：删掉一个交付物
+之后冒烟测试必须失败——否则"毕业证书"是假的。
+
+---
+
+### 采纳的优化建议
+
+四条评审建议全部落地：
+
+1. **IMU 标定输出规范**：六个字段照收，另加 `derived_for_driver` 段——
+   `real_sensors.yaml` 收的是**离散标准差**，Allan 解出的是**连续噪声密度**，
+   差一个 `√采样率`（100 Hz 下协方差差 100 倍）。这层换算本文没提。
+2. **相机-IMU 外参的 Phase 1 边界**：照办。另加了 bag 合规性检查与
+   "占位模板必须判失败"——单位阵是合法 SE(3)，只有 `status` 能区分
+   "还没标定"和"外参恰好为零"。
+3. **升级冒烟测试维度**：照办，见上面第 7 条。YAML 用 PyYAML 真 `load` 一遍
+   而不是 `yamllint`——后者查风格，查不出"这份 YAML 根本 load 不出来"。
+4. **标定报告模板**：照办，含 ASCII 重投影误差分布图与 log-log Allan 曲线。
+   报告的判定阈值用 `importlib` 从 `validate-calibration.py` 加载，不抄第二份。
+
+### 未做的事
+
+- **`sample_calib_data/` 不是 5 张真实照片，是合成真值**（ADR-0011 §决策-4）。
+  真实照片的真值未知，只能断言 RMS 小——而 RMS 小是几乎所有错误标定都满足的。
+  合成数据能断言"解出来的 fx 与设进去的 fx 差 0.18%"。代价写在
+  `make_sample_calib_data.py` 的 docstring 里：它证明不了 `plumb_bob` 拟合得了
+  真实镜头，也没有运动模糊/卷帘快门。
+- **本机装不上 CI 钉的 OpenCV/numpy 版本**（Windows + Python 3.14，
+  `numpy<2.0.0` 没有 cp314 轮子）。所有标定数值是在 OpenCV 5.0.0 / numpy 2.5.1
+  上实测的。代码只用两版都稳定的 API，但"CI 上的数与本地一致"这件事，
+  第一次 CI 运行之前没有被验证过。
+- **三问检查**：Platform 更稳（协议/话题/标定格式三处契约现在都有会报警的检查）；
+  Research 更自由（`validate-calibration.py` 零重依赖，换标定算法不动校验和输出格式）；
+  换硬件更简单（换相机重采一次数据，脚本不变；换 IMU 只改 `--sensor` 和采样率）。
+
+*落地日期: 2026-07-31 · 执行: subagent · 决策记录: ADR-0011*

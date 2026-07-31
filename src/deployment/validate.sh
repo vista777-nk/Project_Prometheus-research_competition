@@ -14,6 +14,8 @@
 #   ------------------------   ----------------   --------
 #   shell 语法 (bash -n)              ✓              ✓
 #   Python 语法 + 单元测试            ✓              ✓
+#   串口协议自测 (task-15)            ✓              ✓
+#   标定流水线 (task-15)          需 numpy/cv2       ✓
 #   compose 结构 + 话题一致性         ✓              ✓
 #   行尾必须是 LF                     ✓              ✓
 #   密钥泄漏扫描                      ✓              ✓
@@ -96,6 +98,32 @@ else
         *)
             fail "MAVLink 2 签名自测"
             tail -25 /tmp/agmavlink.log | sed 's/^/      /'
+            ;;
+    esac
+
+    # 串口协议自测 (task-15)。**没有降级路径** —— 它只用标准库,
+    # 任何能跑 python3 的机器上都必须过。黄金帧与固件的
+    # test_protocol.c::test_pong_golden_frame 同源: 协议有三份独立实现
+    # (STM32 / MSPM0 / 本文件), 任何一端改了字节序或 CRC 参数, 两边总有一处红。
+    if "${PYTHON}" src/deployment/test/test-serial-loopback.py --self-test \
+            >/tmp/agserial.log 2>&1; then
+        pass "串口协议自测 (黄金帧/CRC/拆帧/重同步 13 条)"
+    else
+        fail "串口协议自测"
+        tail -25 /tmp/agserial.log | sed 's/^/      /'
+    fi
+
+    # 标定流水线 (task-15)。退出码 2 = 没有 numpy/OpenCV, 报 SKIP。
+    # CI 的 validate-deployment job 装了这两个 (版本约束 -c requirements.txt),
+    # 所以那边一定真跑。
+    "${PYTHON}" src/deployment/calibration/test/test_calib_pipeline.py \
+        >/tmp/agcalib.log 2>&1
+    case $? in
+        0) pass "标定流水线 (合成真值 → 内参/IMU/转换/报告 16 条)" ;;
+        2) skip "标定流水线 (未安装 numpy 或 OpenCV)" ;;
+        *)
+            fail "标定流水线"
+            tail -25 /tmp/agcalib.log | sed 's/^/      /'
             ;;
     esac
 fi

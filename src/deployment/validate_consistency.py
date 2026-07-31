@@ -132,12 +132,59 @@ def check_required_topics() -> int:
     return failed
 
 
+def check_calibration_topics() -> int:
+    """record-calib-bag.sh 里写死的话题名必须在仓库的配置里真实存在。
+
+    这条检查针对的是标定采集特有的失败方式：`rosbag record` 订阅一个
+    没有发布者的话题**不报错**，它就那么等着，录出一个 0 条消息的 bag。
+    人已经举着标定板站了两分钟、或者 IMU 已经静置了两小时，回到桌前才发现。
+
+    task-15 原文的采集脚本里五个话题名全是仓库里不存在的
+    （/drone/rgb/image_raw、/drone/imu/data_raw、/car/imu/data_raw …），
+    所以这条不是假想的风险。同 validate.sh §7「交叉引用」的用意。
+    """
+    script = REPO_ROOT / "src/deployment/calibration/record-calib-bag.sh"
+    if not script.exists():
+        print(f"{BAD} 找不到 {script}")
+        return 1
+
+    declared = set(
+        re.findall(r'^[A-Z_]+_TOPIC="(/[^"]+)"', script.read_text(encoding="utf-8"), re.M)
+    )
+    if not declared:
+        print(f"{BAD} {script.name} 里没解析出任何 *_TOPIC 赋值 —— 变量命名被改过？")
+        return 1
+
+    sources = [
+        REPO_ROOT / "src/air_ground_car_bringup/config/car_edge.yaml",
+        REPO_ROOT / "src/air_ground_drone_bringup/config/drone_edge.yaml",
+        REPO_ROOT / "src/air_ground_car_bringup/config/real_sensors.yaml",
+    ]
+    known: set[str] = set()
+    for path in sources:
+        if not path.exists():
+            print(f"{BAD} 找不到 {path}")
+            return 1
+        known |= set(re.findall(r"(/[A-Za-z0-9_/]+)", path.read_text(encoding="utf-8")))
+
+    unknown = sorted(declared - known)
+    if unknown:
+        print(f"{BAD} {script.name} 录的话题在任何配置里都找不到: {unknown}")
+        print("      rosbag record 不会为此报错, 只会录出空 bag。")
+        print(f"      配置来源: {', '.join(p.name for p in sources)}")
+        return 1
+
+    print(f"{OK} 标定采集话题均在配置中存在 ({len(declared)} 个)")
+    return 0
+
+
 def main() -> int:
     print("  --- compose 结构 ---")
     compose_failed, degraded = check_compose_files()
 
     print("  --- 话题名一致性 ---")
     topics_failed = check_required_topics()
+    topics_failed += check_calibration_topics()
 
     total = compose_failed + topics_failed
     if total:

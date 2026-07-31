@@ -164,3 +164,14 @@ src/deployment/**/*.tar
 # 这里只拦真正的密钥命名, 兜底交给上面那条 src/deployment/**/*.key。
 mavlink_secret.key
 *_secret.key
+
+# ── 标定原始数据 (task-15) ──
+# 标定结果 (*.yaml / REPORT.md) **要入库** —— 它们是文本、体积小、
+# 是实验记录的一部分, 见 src/deployment/calibration/calibration_db/README.md。
+# 不入库的只有原始采集: 一次相机标定的 bag 是几百 MB, 抽出来的帧同量级。
+# 与上面密钥段同样的取舍: 不写裸的 `*.bag` / `*.png`, 只按目录拦 ——
+# 宽泛的按扩展名规则迟早会静默吞掉一个该入库的文件。
+src/deployment/calibration/**/*.bag
+src/deployment/calibration/calibration_db/**/images/
+src/deployment/calibration/calibration_db/**/*.csv
+calib_data/

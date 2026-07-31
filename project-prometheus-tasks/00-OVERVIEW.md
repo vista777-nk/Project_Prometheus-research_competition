@@ -42,8 +42,8 @@
 | [task-11](./task-11-mspm0-diff-firmware.md) | MSPM0G3507 差速固件（编码器 + PID + 电赛合规） | 🥇 固件先行 | 5h | ✅ |
 | [task-12](./task-12-drone-firmware-and-rpi-deployment.md) | 树莓派部署方案（Docker + systemd + 网络 + SSH） | 🥈 部署先行 | 4h | ✅ |
 | [task-13](./task-13-ci-pipeline.md) | CI 交叉编译流水线（ARM + MSPM0 + Docker + Lint） | 🥉 验证先行 | 3h | ✅ |
-| [task-14](./task-14-sensor-drivers-mavlink.md) | 实机传感器驱动骨架 + MAVLink 2 签名 | 🥉 验证先行 | 4h | 🔴 |
-| [task-15](./task-15-calibration-validation.md) | IMU/相机标定脚本 + Phase 1 集成验证 | 🥉 验证先行 | 3h | 🔴 |
+| [task-14](./task-14-sensor-drivers-mavlink.md) | 实机传感器驱动骨架 + MAVLink 2 签名 | 🥉 验证先行 | 4h | ✅ |
+| [task-15](./task-15-calibration-validation.md) | IMU/相机标定脚本 + Phase 1 集成验证 | 🥉 验证先行 | 3h | ✅ |
 
 ### 依赖拓扑 (Phase 0)
 
@@ -105,6 +105,45 @@ task-14 (传感器 + MAVLink) ── (独立) ── task-15
 > cppcheck 一次都没跑过，故只告警且 job 名带 `ADVISORY`。
 > 同时清掉两处「永远不会失败的检查」——`validate-deployment` 里 `|| true` 到底的
 > shellcheck 步骤，以及 README 顶部硬编码的假 CI badge。
+>
+> **2026-07-31 补充（task-15，Phase 1 收官）**：标定工具链 + 集成验证就位，
+> `scripts/smoke-test-phase1.sh` 60 项本地全绿。**Phase 1 六个任务全部完成**
+> （task-14 的状态本来就该是 ✅，这次一并改正）。
+>
+> 本任务再次印证了 task-13 记下的那条：**任务文档会过期**。task-15 原文里
+> 采集脚本的五个话题名在仓库里一个都不存在，冒烟测试查的两处路径/job 名
+> 也都对不上，`cv2.FileStorage` 写的 YAML 根本喂不进 ROS。七处偏差逐条记在
+> [task-15 §与原方案的偏差](./task-15-calibration-validation.md)，
+> 决策记录 [ADR-0011](../docs/decisions/ADR-0011.md)。
+>
+> 新增一条评审红线（ADR-0011 §方案 G）：**替身可以替环境（ROS、硬件、时钟），
+> 不能替被测对象**。原文的 `MockObservation` 测的是它自己那二十行模拟件，
+> 现在改成用 task-14 的 ROS 替身跑真的 `car_preprocessor` 和真的 `WorldModelStore`。
+> 换过来的当天就抓到一个替身缺陷（`rospy.Duration` 不收位置参数）。
+>
+> ⚠ 仍未核实、**上机第一件事**要做的四条，见
+> [标定 README §5](../src/deployment/calibration/README.md)：
+> PX4/MAVROS 的签名参数名（承 ADR-0010）、`camera_info_manager` 是否接受
+> 额外键、以及 `/car/openmv/image_raw` 到底有没有发布者。
+>
+> **2026-08-01 补充（task-15 收尾）**：首轮 CI（run #25 / `fe0cf66`）除
+> ARM64 镜像外全部通过，其中 `validate-deployment` 装了 CI 钉的
+> numpy<2 + OpenCV 4.x 并真跑了标定流水线 —— numpy 版本差异那笔账结清。
+> 为了让"通过"之外还能看到**逐项数值差**（容差留了 3~10 倍余量，
+> 系统性偏移可以躲在里面），流水线测试现在会打印实测值与本地基准的对比表。
+>
+> cppcheck 从 ADVISORY **升为阻塞**（[ADR-0012](../docs/decisions/ADR-0012.md)）。
+> 依据不是读日志（job log 要 admin 权限），而是 Actions 的 jobs API 会单独记录
+> 每一步的结论：该步骤带 `--error-exitcode=1`，run #24 与 #25 两次退出码都是 0，
+> 即**两次零发现**。ADR-0008 当初留的条件是"等它的输出被观测到"，现在兑现了。
+>
+> 升级时的取舍值得记：cppcheck 是四个阻塞工具里唯一**不钉版本**的
+> （没有官方预编译 Linux 二进制，钉版本要源码构建，每次 CI 加 3~6 分钟）。
+> ADR-0008 要求钉版本的**目的**是让人能区分"代码退化了"和"工具升级了"——
+> 这里改用报错文案达成同一目的，代价（判断从自动降级成人读一行）写在 ADR 里。
+>
+> 剩余欠账：超声波时序方案（编号定为 ADR-0013）、PX4/MAVROS 签名参数名、
+> `/car/openmv/image_raw` 的发布者 —— 后两笔只能等实机。
 
 ## 🚀 快速开始
 

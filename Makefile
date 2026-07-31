@@ -9,7 +9,7 @@ export PX4_AUTOPILOT_DIR := $(PX4_ROOT)
 
 .PHONY: build clean rebuild test-unit test-drone test-car test-diff \
 	test-mecanum test-sensors test-bridge test-server test-all \
-	test-e2e quick-smoke test-smoke \
+	test-e2e quick-smoke test-smoke smoke-phase1 validate-deployment \
 	launch-drone launch-car launch-car-mecanum launch-server launch-full \
 	launch-full-mecanum kill status help
 
@@ -54,6 +54,17 @@ quick-smoke: build
 	@bash "$(WS)/src/quick_smoke.sh"
 
 test-smoke: quick-smoke
+
+# Phase 1 冒烟 (task-15)。刻意**不**依赖 build: 它检查的是"交付物在不在、
+# 语法对不对、自测跑不跑得起来", 这些不需要 catkin 工作空间, 也不需要 ROS。
+# 在任何装了 python3 的机器上都该能跑 —— 缺 numpy/OpenCV/pymavlink 时
+# 相应的项报 SKIP 而不是失败。
+smoke-phase1:
+	@bash "$(WS)/scripts/smoke-test-phase1.sh"
+
+# 部署配置静态校验 (task-12~15)。与 CI 的 validate-deployment job 同一份脚本。
+validate-deployment:
+	@bash "$(WS)/src/deployment/validate.sh"
 
 launch-drone: build
 	@xvfb-run -a -s '-screen 0 1280x1024x24 -nolisten tcp' bash -c 'export LIBGL_ALWAYS_SOFTWARE=1; source "$(WS)/scripts/setup_runtime.sh" px4 && roslaunch air_ground_bringup drone_only.launch gui:=false headless:=true'
@@ -100,6 +111,8 @@ help:
 	@echo "  make test-all              Run Task 02-07 unit and runtime tests"
 	@echo "  make test-e2e              Run the full Task-09 E2E validation"
 	@echo "  make quick-smoke           Run the short Task-09 smoke test"
+	@echo "  make smoke-phase1          Run the Phase 1 smoke test (no ROS needed)"
+	@echo "  make validate-deployment   Static-validate deployment + calibration configs"
 	@echo "  make launch-drone          Launch PX4 drone simulation"
 	@echo "  make launch-car            Launch the differential-drive car"
 	@echo "  make launch-car-mecanum    Launch the mecanum car"
