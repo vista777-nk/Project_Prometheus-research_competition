@@ -26,7 +26,10 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-cd "${REPO_ROOT}"
+# cd 失败必须立刻退出: 后面全部的 find / git / 相对路径都建立在"当前目录是仓库根"
+# 这个前提上。cd 没成功而继续跑, 会在错误的目录里查出一份"全过"的报告 ——
+# 又是一个假绿灯, 而且比不查更有欺骗性。
+cd "${REPO_ROOT}" || { echo "无法进入仓库根 ${REPO_ROOT}" >&2; exit 1; }
 
 # 内嵌/外部 Python 都会打印带符号的中文。Windows 控制台默认 GBK,
 # 直接写会抛 UnicodeEncodeError 把检查整个打断 —— 校验脚本自己不能有这种脆弱点。
@@ -298,6 +301,10 @@ fi
 # ros-noetic-cv-bridge 与 python3-numpy, 在 arm64 上 pip 编译 opencv 代价太大)。
 # CI 的 ROS job 已改为直接 pip install -r requirements.txt, 不在这条检查范围内。
 pin_bad=0
+# 目前只有 pymavlink 一个包在两侧都有 pip 显式约束, 所以这是个单元素循环。
+# 保留循环形态而不是展开成直写: numpy/opencv 现在走 apt, 哪天改成 pip 装就要
+# 加进这个列表, 到时候只改一行。
+# shellcheck disable=SC2043
 for pkg in pymavlink; do
     req_pin=$(grep -oE "^${pkg}[><=,.0-9]+" requirements.txt | head -1)
     img_pin=$(grep -oE "${pkg}[><=,.0-9]+" src/deployment/docker/Dockerfile.edge | head -1)

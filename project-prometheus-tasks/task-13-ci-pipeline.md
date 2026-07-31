@@ -1,10 +1,15 @@
 # Task-13: CI 交叉编译流水线
 
-> **状态：🔴 待开始** | **优先级：🥈 高** | **预计耗时：3h**
+> **状态：✅ 已完成（2026-07-31）** | **优先级：🥈 高** | **实际耗时：~1h**
 >
 > **适用环境**：任意 OS（纯 YAML + Shell 脚本）
 > **硬件依赖**：无
 > **依赖**：task-10, task-11 的固件目录结构就位（可先搭建 CI 骨架，固件就位后自动激活）
+>
+> ⚠ **执行前必读**：本文档写于 2026-07-28。到实际执行时，文档里要求新建的 5 个 job
+> **已有 4 个被 task-10/11/12 顺带建好**，真正缺的只有 `lint-scripts`。
+> 请先读文末的[「与原方案的偏差」](#与原方案的偏差2026-07-31-实际执行)再动手，
+> 不要照抄「可执行步骤」——照抄会重复建 job 并覆盖掉更强的已有实现。
 
 ---
 
@@ -325,13 +330,98 @@ clean:
 
 ## 验收标准
 
-- [ ] `build-stm32-firmware` job 成功编译并产出 `.bin` artifact
-- [ ] `build-mspm0-firmware` job 成功编译并产出 `.bin` artifact
-- [ ] `build-docker-edge` job 成功构建 Docker 镜像（无需 push）
-- [ ] `lint-scripts` job 对已有脚本无 critical 错误
-- [ ] 所有固件单元测试 job 在 CI 中通过（绿灯）
-- [ ] 原有 ROS `build-and-test` job 不受影响（重命名可，删除不可）
-- [ ] CI badge 在 README 中可见
+- [x] `build-stm32-firmware` job 成功编译并产出 `.bin` artifact —— **task-10 已交付**
+- [x] `build-mspm0-firmware` job 成功编译并产出 `.bin` artifact —— **task-11 已交付**（`ci-link` 剖面，产物不可烧录，见 ADR-0004）
+- [x] `build-docker-edge` job 成功构建 Docker 镜像（无需 push）—— **task-12 已交付**，拆为 `validate-deployment` + `build-edge-image`（ARM64/QEMU）
+- [x] `lint-scripts` job 对已有脚本无 error 级告警 —— **实测 error 0 条**，门禁实际定在更严的 warning 级（0 条）
+- [x] 所有固件单元测试 job 在 CI 中通过（绿灯）—— 麦轮 63 + 差速 70
+- [x] 原有 ROS `build-and-test` job 不受影响 —— 一行未改
+- [x] CI badge 在 README 中可见 —— 换成真 badge（原先是硬编码的假 badge）
+
+---
+
+## 与原方案的偏差（2026-07-31 实际执行）
+
+本文档写于 2026-07-28，执行时已过期。逐条记录偏差与理由 —— 决策依据见
+[ADR-0008](../docs/decisions/ADR-0008.md)。
+
+### 偏差 1：5 个 job 里有 4 个已经存在，本任务只新增 1 个
+
+| 文档要求的 job | 实际 |
+|---|---|
+| `build-and-test-ros` | 已有，且已含 `catkin build` + `catkin test`（覆盖评审建议 5） |
+| `build-stm32-firmware` | task-10 已建，已含 `FW_COMMIT`/`FW_TIME` 版本注入（覆盖评审建议 1） |
+| `build-mspm0-firmware` | task-11 已建 |
+| `build-docker-edge` | task-12 已建，且更强：ARM64 + QEMU、`ROS_IP` 缺失反向验证 |
+| `lint-scripts` | ❌ **本任务唯一新增** |
+
+§13.1（`common/` 目录）、§13.2 的三个固件/Docker job、§13.4（Makefile 模板）
+**全部无需重做**，`common/` 已有 8 个模块且 task-11 一行未改地复用过。
+
+### 偏差 2：§13.2 的 `lint-scripts` 写法有三处不能照抄
+
+原文的三个步骤都存在"永远不会失败"的问题：
+
+| 原文 | 问题 | 实际实现 |
+|---|---|---|
+| `xargs -0 shellcheck -x -f tty` | 无 `--severity`，默认连 style 级都算失败（实测 38 条），会直接红 | `--severity=warning`，门禁定在实测 0 条的层级 |
+| `yamllint ... \|\| echo "(review warnings)"` | `\|\| echo` 吞掉退出码，**永远不会失败** | 去掉 `\|\| echo`，改为真阻塞 |
+| `shopt -s globstar` + 通配符列举路径 | 漏掉未列举的目录 | `git ls-files -z '*.yaml' '*.yml'`，范围与仓库内容一致 |
+
+另外文件范围也用 `git ls-files` 取代 `find`，避免扫进未入库的临时文件。
+
+### 偏差 3：不实现 §13.2 的 systemd 校验步骤
+
+`systemd-analyze verify` 已由 `src/deployment/validate.sh` §6b 在
+`validate-deployment` job 里真实执行（本地 SKIP，Linux CI 真跑）。
+再抄一份就是两处要同步维护的等价逻辑。同时删掉了 `validate-deployment` 里
+那个非阻塞的 shellcheck 步骤 —— 范围被全仓扫描完全覆盖。
+
+### 偏差 4：ADR 写一份而不是两份，编号是 0008
+
+- ADR-0007 号已被 task-12 的 `network_mode: host` 占用，**编号不可复用**；
+- `common/` 的设计已由 ADR-0004 与 `src/firmware/README.md` 记录，再开一份是重复记账；
+- "GitHub Actions vs Jenkins" 对本项目没有真实取舍代价，单独成篇是凑数。
+
+改为写一份有真实取舍的 **[ADR-0008：CI 门禁分层](../docs/decisions/ADR-0008.md)**，
+GitHub Actions 选型放进它的「被否决的方案」一节。
+
+### 偏差 5：评审建议的取舍
+
+| 建议 | 处置 |
+|---|---|
+| 1. 版本注入 | ✅ task-10/11 已实现（`FW_COMMIT`/`FW_TIME`） |
+| 2. cppcheck + flake8 | flake8 ✅ 阻塞（实测 0 条）；**cppcheck ⚠ 仅告警** —— 见下方已知限制 |
+| 3. CI 缓存优化（apt cache / ccache） | ❌ 不做。当前 CI 时长无压力，属性能优化；且会在「钉版本」之外再引入一层不确定性 |
+| 4. TI 官方工具链校验 | ❌ 超出 CI 范围，记入 task-11 已知限制 |
+| 5. ROS 包验证 | ✅ 已有 job 本来就跑全工作区 `catkin build` + `catkin test` |
+
+### 已知限制（需首轮 CI 确认）
+
+1. **cppcheck 的输出一次都没跑过** —— 提交时本机既无 cppcheck 也无 make。
+   因此它被设成 `continue-on-error`，job 名里带 `ADVISORY`。
+   首轮 CI 输出出来后再决定升为阻塞还是撤掉。
+   **这是刻意的非阻塞，不是「以后再收紧」的托词**（ADR-0008 §决策-1）。
+2. **shellcheck 的 `-x`（跟随 source）在 Linux 上的行为未实测** ——
+   本地跑的是 Windows 版 0.10.0。CI 用同版本二进制以尽量对齐。
+3. **badge URL 需仓库有一次 workflow 运行记录才会正常渲染**。
+
+### 提交前的本地实测基线
+
+```
+shellcheck 0.10.0  22 个 *.sh       error 0 / warning 0（修掉 4 条后）/ info 37
+yamllint   1.38.0  14 个 *.y[a]ml   0 条（含 ci.yml 自身）
+flake8     7.1.1   31 个 *.py       0 条
+validate.sh                         通过 26 · 失败 0 · 跳过 1
+```
+
+> ⚠ **yamllint 在 Windows 上会假报 9 条 `wrong new line character`**：
+> `.gitattributes` 给 `*.yaml` 只声明了 `text` 没声明 `eol=lf`，工作区是 CRLF
+> 而 git blob 是 LF。要按 Linux 侧内容核对，不能直接扫工作区。
+>
+> 核对 blob 时**不要用 `grep $'\r'`** —— MSYS 的 grep 会静默剥掉 CR，
+> 得出「全仓都是 CRLF」的相反结论。用 `validate.sh` §4 写明的「剥 CR 前后字节数差」法。
+> 这条坑 task-12 踩过一次并写进了注释，task-13 又原样踩了一次。
 
 ---
 
