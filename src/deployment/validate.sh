@@ -85,6 +85,19 @@ else
         fail "healthcheck 单元测试"
         tail -25 /tmp/agtest.log | sed 's/^/      /'
     fi
+
+    # MAVLink 2 签名自测 (task-14)。退出码 2 = 没装 pymavlink, 报 SKIP 不算失败 ——
+    # 与上面 validate_consistency.py 的降级约定一致。CI 上会真跑
+    # (validate-deployment job 装了 pymavlink), 所以这里的 SKIP 不会掩盖问题。
+    "${PYTHON}" src/deployment/mavlink/test-mavlink-signing.py >/tmp/agmavlink.log 2>&1
+    case $? in
+        0) pass "MAVLink 2 签名自测 (签名开销/验签/错误密钥/重放/未签名)" ;;
+        2) skip "MAVLink 签名自测 (未安装 pymavlink)" ;;
+        *)
+            fail "MAVLink 2 签名自测"
+            tail -25 /tmp/agmavlink.log | sed 's/^/      /'
+            ;;
+    esac
 fi
 
 # =============================================================================
@@ -117,7 +130,7 @@ section "4. 行尾必须是 LF"
 mapfile -t CRLF_TARGETS < <(find src/deployment \
     \( -name '*.sh' -o -name '*.service' -o -name '*.timer' \
        -o -name '*.rules' -o -name '*.conf' -o -name 'Dockerfile*' \
-       -o -name '*.template' -o -name '.dockerignore' \) -type f | sort)
+       -o -name '*.template' -o -name '.dockerignore' -o -name '*.params' \) -type f | sort)
 
 # 判断方式说明 (这一条是写完之后做负向测试才发现的):
 # **不要**用 `grep $'\r'`。Git for Windows 附带的 MSYS grep 在读入时会静默

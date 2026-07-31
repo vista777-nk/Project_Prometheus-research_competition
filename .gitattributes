@@ -63,6 +63,9 @@ Makefile        text working-tree-encoding=UTF-8
 Dockerfile      text working-tree-encoding=UTF-8 eol=lf
 Dockerfile.*    text working-tree-encoding=UTF-8 eol=lf
 .dockerignore   text working-tree-encoding=UTF-8 eol=lf
+# PX4 参数模板 (task-14): 由飞控端的 param load / QGC 逐行解析,
+# 与上面几类同理, CRLF 会让行尾混进值里。
+*.params        text working-tree-encoding=UTF-8 eol=lf
 
 # ── 二进制文件（不做编码转换）──
 *.png           binary

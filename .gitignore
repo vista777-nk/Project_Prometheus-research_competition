@@ -152,3 +152,15 @@ src/deployment/network/*.nmconnection
 !src/deployment/network/*.nmconnection.template
 # 离线镜像包 (*.tar.gz 上面的 Archives 段已覆盖)
 src/deployment/**/*.tar
+
+# ── MAVLink 签名密钥 (task-14) ──
+# 这把钥匙一旦泄露, 数传链路的签名就完全失效 —— 攻击者可以伪造任意
+# MAVLink 消息, 包括解锁与航点。它比 SSH 私钥更值得多拦几道:
+#   第一道 generate-mavlink-key.sh 默认写到 ~/.config/air-ground/, 且拒绝往工作区写
+#   第二道 就是下面这几条
+#   第三道 validate.sh §5 扫 src/deployment/ 下的 *.key
+# 刻意**不**写裸的 `*.key`: 上面 Makefile 那条注释记着教训 ——
+# 按文件名的宽泛规则迟早会吞掉一个该入库的文件, 而且是静默吞掉。
+# 这里只拦真正的密钥命名, 兜底交给上面那条 src/deployment/**/*.key。
+mavlink_secret.key
+*_secret.key

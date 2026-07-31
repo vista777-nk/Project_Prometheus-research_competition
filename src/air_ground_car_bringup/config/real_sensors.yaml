@@ -1,0 +1,91 @@
+# Task-14 实机传感器参数 —— 四个驱动骨架共用一份, 每个节点只读自己那一段。
+#
+# 与仿真侧 config/car_sensors.yaml 的关系:
+#   car_sensors.yaml   描述 Gazebo 里那套虚拟传感器 (给 URDF 和标定用)
+#   real_sensors.yaml  描述实物传感器的接线与量程 (给驱动骨架用)
+# 两边的**话题名与消息类型必须一致**, 否则 car_preprocessor.py 在实机上
+# 订不到任何东西, 而且不会有任何报错。test/test_topic_contract.py 守这条。
+#
+# backend: mock — 假数据后端, 任意 OS 可跑, 只验证节点/参数/话题能起来
+#          real — 真实硬件后端, Phase 1 未实现, 启动时会立刻抛异常 (ADR-0009)
+backend: mock
+
+# --- 思岚 RPLIDAR A1 (UART 115200) ---
+rplidar:
+  port: /dev/ttyUSB0
+  baudrate: 115200
+  topic: /car/scan
+  # frame_id 与 urdf/car_sensors.urdf.xacro 里的 link 名一致
+  frame_id: lidar_link
+  samples: 360
+  scan_rate: 10.0
+  min_range: 0.15
+  max_range: 12.0
+  # 扫描张角。ROS 规定逆时针为正 (REP-103), 雷达自身是顺时针,
+  # 驱动里做了取负; 少这个负号地图会前后镜像。
+  angle_min: -3.14159265
+  angle_max: 3.14159265
+  # 一次 read() 取多少字节。512 ≈ 100 个采样点, 10Hz/360 点时约 1/4 圈。
+  read_chunk: 512
+  # 断线重连间隔 (s) 与"多久收不到字节算掉线"(s)
+  reconnect_interval: 2.0
+  data_timeout: 2.0
+
+# --- TDK ICM42688-P 6 轴 IMU (I2C 0x68) ---
+icm42688:
+  bus: 1
+  address: 0x68
+  # 与仿真侧 libgazebo_ros_imu_sensor.so 的 topicName 对齐 (imu/data)
+  topic: /car/imu/data
+  frame_id: imu_link
+  update_rate: 100.0
+  # 量程。驱动按这两个值写 ACCEL_CONFIG0 / GYRO_CONFIG0 并推导灵敏度,
+  # 不要在代码里改常量。可选值: g = 2/4/8/16, dps = 125/250/500/1000/2000
+  accel_range_g: 4
+  gyro_range_dps: 500
+  # 协方差用的噪声标准差。当前沿用 car_sensors.yaml 的仿真值,
+  # 实机静置标定后由 task-15 替换。
+  gyro_noise_stddev: 0.0005
+  accel_noise_stddev: 0.001
+  reconnect_interval: 2.0
+
+# --- HC-SR04 ×4 (GPIO, BCM 编号) ---
+hcsr04:
+  topic_prefix: /car/ultrasonic
+  frame_id_template: ultrasonic_{name}_link
+  directions: [front, rear, left, right]
+  pins:
+    front:
+      trig: 17
+      echo: 27
+    rear:
+      trig: 22
+      echo: 23
+    left:
+      trig: 5
+      echo: 6
+    right:
+      trig: 13
+      echo: 19
+  # 单路刷新率 (Hz)。四路轮流触发, 主循环频率是它的 4 倍。
+  update_rate: 20.0
+  min_range: 0.02
+  max_range: 4.0
+  # HC-SR04 要求触发脉冲 >=10us。这个 10us 由 GPIOInterface 的实现负责,
+  # Python 层做不到 (非实时内核 sleep 精度是毫秒级) —— 见 ADR-0009。
+  trigger_pulse_us: 10.0
+  # 超时窗。30ms 往返 ≈ 5.1m, 略大于 4m 量程。
+  echo_timeout_us: 30000.0
+  # 20 摄氏度空气中的声速 (m/s)。约 0.6 m/s/摄氏度, 实机标定见 task-15。
+  speed_of_sound: 343.0
+
+# --- OpenMV 云台相机 (UART) ---
+openmv:
+  port: /dev/ttyAMA2
+  baudrate: 115200
+  topic: /car/openmv/detections
+  read_chunk: 256
+  # 单行上限。超过还没等到 '\n' 就丢缓冲, 防止对端乱发时把内存吃光。
+  max_line_bytes: 4096
+  reconnect_interval: 2.0
+  data_timeout: 5.0

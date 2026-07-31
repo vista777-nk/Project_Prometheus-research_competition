@@ -1,10 +1,16 @@
 # Task-14: 实机传感器驱动骨架 + MAVLink 2 签名
 
-> **状态：🔴 待开始** | **优先级：🥉 中** | **预计耗时：4h**
+> **状态：✅ 已完成（2026-07-31）** | **优先级：🥉 中** | **实际耗时：~2.5h**
 >
 > **适用环境**：任意 OS（驱动骨架为纯 Python 代码，MAVLink 签名为 Python 脚本）
 > **硬件依赖**：无（骨架代码通过接口抽象 + Mock 测试验证）
 > **ROS 依赖**：Python 3 + rospy（CI 中导入检查，不运行完整 ROS）
+>
+> ⚠ **执行前必读**：本文档写于 2026-07-28。落地时发现文档给的**三处接口
+> 与仓库里已经跑起来的仿真契约对不上**（IMU 话题、超声波消息类型、雷达角度范围），
+> 且 §14B.5 的签名自测脚本断言恒为假。这几处照抄的话 CI 会全绿、实机会哑。
+> 请先读文末的[「与原方案的偏差」](#与原方案的偏差2026-07-31-实际执行)再动手。
+> 决策依据见 [ADR-0009](../docs/decisions/ADR-0009.md) 与 [ADR-0010](../docs/decisions/ADR-0010.md)。
 
 ---
 
@@ -732,23 +738,25 @@ mavlink_secret.key
 
 ## 验收标准
 
+> 勾选状态为 2026-07-31 实际执行结果。带 ⚠ 的条目做了偏差处理，见文末。
+
 ### Part A 传感器骨架
 
-- [ ] 4 个驱动骨架文件语法正确（`python3 -m py_compile` 通过）
-- [ ] `hardware_interface.py` 抽象基类定义完整（3 个 ABC）
-- [ ] `mock_hardware.py` 提供所有 3 个接口的 Mock 实现
-- [ ] RPLIDAR 骨架可发布结构正确的 `LaserScan`（字段非空，360 个 range）
-- [ ] ICM42688 骨架可发布结构正确的 `Imu`
-- [ ] HC-SR04 骨架可发布 4 路 `Range`
-- [ ] OpenMV 骨架可解析 JSON 并发布
-- [ ] 至少 1 个骨架有单元测试（推荐 RPLIDAR）
+- [x] 4 个驱动骨架文件语法正确（`python3 -m py_compile` 通过）
+- [x] `hardware_interface.py` 抽象基类定义完整（3 个 ABC）
+- [x] `mock_hardware.py` 提供所有 3 个接口的 Mock 实现（改放 `scripts/`，见偏差 5）
+- [x] RPLIDAR 骨架可发布结构正确的 `LaserScan`（360 个 range） ⚠ 角度范围 `-π..π` 而非 `0..2π`（偏差 1）
+- [x] ICM42688 骨架可发布结构正确的 `Imu` ⚠ 话题 `/car/imu/data`（偏差 1）
+- [x] HC-SR04 骨架可发布 4 路测距 ⚠ 消息类型为 `LaserScan` 而非 `Range`（偏差 1）
+- [x] OpenMV 骨架可解析 JSON 并发布
+- [x] 至少 1 个骨架有单元测试 — 实际 4 个驱动 + 1 份契约测试，**69 个用例**
 
 ### Part B MAVLink 签名
 
-- [ ] `generate-mavlink-key.sh` 可生成 32-byte 密钥，权限 600
-- [ ] `test-mavlink-signing.py` 往返测试通过（仅需 `pymavlink` pip 包）
-- [ ] 密钥文件已在 `.gitignore` 中排除
-- [ ] PX4 签名参数模板语法正确
+- [x] `generate-mavlink-key.sh` 可生成 32-byte 密钥，权限 600 ⚠ 默认路径移出仓库（偏差 8）
+- [x] `test-mavlink-signing.py` 往返测试通过 — **5/5**（原文脚本断言恒为假，见偏差 6）
+- [x] 密钥文件已在 `.gitignore` 中排除（三道防线，ADR-0010 §决策-4）
+- [x] PX4 签名参数模板语法正确 ⚠ **签名段刻意留空** —— 参数名未核实（偏差 7）
 
 ---
 
@@ -774,7 +782,160 @@ mavlink_secret.key
 
 ---
 
+## 与原方案的偏差（2026-07-31 实际执行）
+
+本文档写于 2026-07-28。逐条记录偏差与理由 —— 决策依据见
+[ADR-0009](../docs/decisions/ADR-0009.md)（Part A）与
+[ADR-0010](../docs/decisions/ADR-0010.md)（Part B）。
+
+### 偏差 1（Part A）：三处接口与仿真既有契约不一致，全部按仿真侧改
+
+这是本次最重要的一条。三处都**不会有任何报错**：
+
+| 项 | 本文档 | 仓库实际（仿真 + `car_preprocessor.py`） | 照文档做的后果 |
+|---|---|---|---|
+| IMU 话题 | `/car/imu` | `/car/imu/data`（`libgazebo_ros_imu_sensor.so` 的 topicName） | Observation 永远没有 imu 模态 |
+| 超声波类型 | `sensor_msgs/Range` | `sensor_msgs/LaserScan`（单束射线） | 订阅端类型不匹配 → **永不连接** |
+| 雷达角度 | `angle_min=0, angle_max=2π` | `-π .. π` | 整张地图沿前后轴镜像 |
+
+判据是"哪个有下游"：预处理器已经在跑，Gazebo 插件已经在发，Phase 0 端到端已经绿。
+驱动骨架是新来的一方，职责是接上现有的管子。
+
+并且这条契约不靠人记 —— `test/host/test_topic_contract.py` 交叉比对
+`real_sensors.yaml` × `car_edge.yaml` × `car_sensors.yaml` ×
+`car_preprocessor.py` 的 `DIRECTIONS` × URDF 的 link 名，任一处漂移当场红。
+
+> `Range` 语义上确实更贴切，改它要连 URDF 插件 + 预处理器 + Phase 0 回归一起改，
+> 是独立的一次重构。记为债务（ADR-0009 §影响）。
+
+### 偏差 2（Part A）：`pulse_in` + `rospy.sleep` 换成一个 `trigger_and_measure`
+
+§14A.5 的 `rospy.sleep(0.000010)` 在 Linux 非实时内核上实际精度是毫秒级，
+与要求的 10μs **差 100–1000 倍**。文档自己在 §14A.5 下方也标了这个问题（ADR-0013 待定）。
+
+处置不是"留着示意"，而是把整段 μs 时序压进 `GPIOInterface.trigger_and_measure()`
+一个方法里，Python 层拿不到 write/sleep/pulse_in 这套半成品原语 ——
+实现它的人必须真的解决时序（pigpio / MCU / UART 模块三选一，仍归 ADR-0013）。
+
+### 偏差 3（Part A）：`real` 后端**拒绝构造**，不提供空实现
+
+`create_uart('real')` 等直接 `raise NotImplementedError`。
+一个 `open()` 永远返回 True、`read()` 永远返回空的后端，会让实机上的驱动
+安静地发布全零数据 —— 就是 ADR-0008 反复记录的那类假绿灯的硬件版。
+
+### 偏差 4（Part A）：参数进 YAML，且**测试直接读那份 YAML**
+
+§14A.3~14A.6 的示例把量程、引脚、频率写成类常量。改为全部进
+`config/real_sensors.yaml`（CONVENTIONS §4.3），并且 `test/host/fixtures.py`
+直接加载仓库里那份 YAML，不在测试里另抄参数字典 ——
+抄一份的话，测试验的是抄件，实机加载的是 YAML，漂移时测试照样全绿。
+
+### 偏差 5（Part A）：目录与测试组织
+
+| 文档 | 实际 | 理由 |
+|---|---|---|
+| `test/mock_hardware.py` | `scripts/mock_hardware.py` | mock 是运行期后端（`backend:=mock` 无硬件冒烟），不只是测试设施 |
+| `test/test_*.py` 平铺 | `test/host/` 子目录 | 与需要真 ROS 的既有 3 份测试分开：运行环境不同，混放会两边都跑不起来 |
+| 只要求 1 份单测 | 5 份，69 个用例 | 协议解析/量纲换算/契约一致性都是纯逻辑，值得钉死 |
+| — | 新增 `test/test_ros_stub_fidelity.py` | ROS 替身自己也要被验证：替身抄错字段名的话，驱动跟着写错，两边一致、测试全绿、实机哑 |
+
+### 偏差 6（Part B）：§14B.5 的自测脚本断言恒为假
+
+原文两次 `pack()` 之间只设了 `signing.secret_key`，没设 `sign_outgoing`。
+实测（pymavlink 2.4.49）：
+
+```
+未签名 17 → 设 secret_key 后 17 → 原文断言 assert 17 == 17 + 13 → False
+```
+
+另外原文用的 `mavutil.mavlink` 是 MAVLink **1** 的 v10 方言，
+解签名帧会报 `invalid MAVLink message length. Got 22 expected 9`（指错方向的报错）。
+
+改正后并把断言从 1 条扩到 5 条 —— 只测"签名后长度 +13"证明不了签名有用，
+一个把 13 个零字节贴在帧尾的实现也能过。实测全部通过：
+
+| # | 断言 | 实测 |
+|---|---|---|
+| 1 | 签名开销恰好 13 字节 | 21 → 34 ✓ |
+| 2 | 同密钥可解出 HEARTBEAT | ✓ |
+| 3 | 错误密钥被拒 | `Invalid signature` ✓ |
+| 4 | 重放被拒 | `Invalid signature` ✓ |
+| 5 | 未签名帧被拒 | `Invalid signature` ✓ |
+
+### 偏差 7（Part B）：签名参数名核实不了 → 不写进生效配置
+
+§14B.3 的 `MAV_0_SIGNING=1` 与 §14B.4 的 `mavros/signing/*` **一个都没能核实**：
+原文引用的 PX4 v1.14 签名文档页打不开，检索到的官方页面只在 `main`
+（v1.18 时间线）路径下；本机无 ROS，`rosparam list` 跑不了。
+
+处置：`px4-signing.params` 只保留能确定的传输参数，签名段留空并写明原因；
+`mavros_signing.yaml` 整份标为"不被任何 launch 加载"的核实清单。
+
+理由是这两类文件的失败方式一样 —— `param load` 会跳过未知参数并继续，
+`rosparam` 会老实把没人读的键塞进参数服务器。两种情况下**配置文件的存在本身
+成了"功能已启用"的假证据**。核实步骤已写进两个文件顶部，task-15 上机时处理。
+
+### 偏差 8（Part B）：密钥默认路径移出仓库
+
+§14B.2 的 `KEYFILE="mavlink_secret.key"` 写在当前目录 ——
+在 `src/deployment/mavlink/` 里跑一次就往仓库里落一个密钥文件。
+改为默认 `~/.config/air-ground/`，并显式拒绝往 Git 工作区写，
+沿用 `generate-ssh-keys.sh` 的做法（第一道防线是脚本自己不往仓库写）。
+
+> **这个脚本的冒烟测试抓到了它自己的两个 bug**，两个都属于"守卫恒不生效"：
+>
+> 1. `openssl rand -hex 32` 在 Git-Bash 下输出带 CRLF，那个 `\r`
+>    会成为密钥内容的一部分 —— 开发机生成、Linux 上使用，两边密钥不一致，
+>    症状是"密钥明明一样却验签失败"。
+> 2. 第一版的仓库守卫拿 `git rev-parse --show-toplevel` 的输出与 `pwd`
+>    做前缀比较。Git for Windows 下这两者格式不同（`e:/Vista/...` vs
+>    `/e/Vista/...`），比较**恒不相等**，守卫恒不生效 —— 实测时它眼睁睁
+>    把密钥写进了仓库。改用 `git rev-parse --is-inside-work-tree`。
+>
+> 记在这里是因为第 2 条正是本仓库反复出现的那个模式的又一例：
+> 一段看起来在做检查、实际什么都拦不住的代码。它和 7/30 的
+> `grep $'\r'`（MSYS 静默剥 CR）是同一个成因 —— **Windows 与 Linux 的
+> 路径/行尾差异，会把守卫悄悄变成装饰**。写完守卫必须做一次负向测试。
+
+### 偏差 9（CI）：§CI 归属策略按原文执行，但 Part B 挂 `validate.sh`
+
+| 检查 | 归属 | 理由 |
+|---|---|---|
+| 驱动 `py_compile` + `pytest` | `lint-scripts` job（按原文） | 跑在 ROS 替身上，只要 python3 + pytest |
+| 替身忠实度 | ROS 容器 `catkin test` | 只有那里有真 `sensor_msgs` |
+| MAVLink 签名自测 | `validate.sh` §2 → `validate-deployment` job | 它验的是**部署配置**，而 `validate.sh` 已是部署配置的唯一入口 |
+
+原文的 `pytest test/ --mock-rospy` 没有实现：`--mock-rospy` 需要自定义 pytest 选项，
+而 `test/host/conftest.py` 在收集期装替身即可，不需要额外开关。
+
+---
+
+## 提交前本地实测
+
+按 ADR-0008 §决策-1 的要求，凡设成阻塞的检查都在本地跑过全仓：
+
+| 检查 | 工具与版本 | 范围 | 结果 |
+|---|---|---|---|
+| flake8 | 7.1.1（与 CI 同版） | 新增 17 个 `*.py`（连同同目录既有文件一并扫） | **0 条** |
+| shellcheck | 0.10.0（与 CI 同版） | 全仓 23 个 `*.sh` | **0 条**（severity≥warning） |
+| yamllint | 1.38.0（与 CI 同版） | 全仓 16 个 YAML | **0 条**（按 LF 规范化后的内容跑，见 Research_Diary 2026-07-31 §4） |
+| py_compile | Python 3.13 | 7 个驱动骨架模块 | 全过 |
+| pytest | 8.3.4 | `test/host/` | **69 passed** |
+| MAVLink 签名自测 | pymavlink 2.4.49 | 5 条断言 | **5/5** |
+| `validate.sh` | — | 全部 | 通过 29 · 失败 0 · 跳过 1（systemd-analyze，非 Linux） |
+| 密钥脚本负向测试 | — | 3 例 | 拒绝写仓库（已有目录/不存在的子目录）✓ · 拒绝覆盖已有密钥 ✓ · 仓库外正常生成 64 hex ✓ |
+
+**未在本地验证的**（诚实记录）：
+`catkin build` / `catkin test`（本机无 ROS Noetic），因此
+`test_ros_stub_fidelity.py` 与新增的 `catkin_install_python` 条目
+以 CI 首轮输出为准；`car_edge_real.launch` 未真跑过 roslaunch；
+密钥文件的 `0600` 权限在 Windows 上验不了（MSYS 不落实 chmod），
+Linux/树莓派侧以 `umask 077` + `chmod 600` 双保险。
+
+---
+
 ## 参考资料
+
 
 | 文件 | 内容 |
 |------|------|

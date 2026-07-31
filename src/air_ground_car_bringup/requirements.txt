@@ -11,3 +11,8 @@ PyYAML>=6.0,<7.0
 
 # ROS 桥接 (由系统 apt 提供，此处仅作记录)
 # cv-bridge (ros-noetic-cv-bridge)
+
+# 测试 (task-14 实机驱动骨架的宿主机测试, test/host/)
+# 只在开发机与 CI 的 lint-scripts job 里需要, 实机镜像不装。
+# 不钉版本: 它不是门禁工具, 断言写在测试文件里, 上游升级不会凭空多出失败。
+pytest

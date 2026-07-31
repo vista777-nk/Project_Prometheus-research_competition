@@ -237,11 +237,15 @@ jobs:
       # systemd-analyze 来自 systemd 包, ubuntu-latest 自带;
       # 显式装 pyyaml 让 compose 走完整解析而不是降级的结构检查。
       # (task-13) 不再装 shellcheck: 本 job 已不跑它, validate.sh 用的是 `bash -n`。
+      # (task-14) 装 pymavlink 让 validate.sh §2 的签名自测真跑而不是报 SKIP。
+      #           版本约束用 `-c requirements.txt` 引过来, 不在这里抄一份 ——
+      #           抄一份就多一个会漂移的地方 (validate.sh §7 正在查这类漂移)。
       - name: Install validators
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends systemd
           python3 -m pip install --quiet pyyaml
+          python3 -m pip install --quiet -c requirements.txt pymavlink
 
       # 与本地同一个入口。本地会 SKIP 掉 systemd-analyze, 这里会真的跑。
       - name: Static validation
@@ -337,6 +341,12 @@ jobs:
   #
   # 不在这里做 systemd 单元校验: `systemd-analyze verify` 已由 validate.sh §6b
   # 在 validate-deployment job 里真跑。同一个检查只实现一处。
+  #
+  # (task-14) 本 job 另外挂了两步**不属于 lint** 的检查: 传感器驱动骨架的
+  # py_compile 与单元测试。放这里的理由是运行环境 —— 那套测试跑在 ROS 替身上,
+  # 只需要 python3 + pytest, 与本 job 的环境完全一致; 拖进 ROS 容器要多装
+  # 一整套 desktop-full 才能跑同样的断言。job 名保持不变 (改名会打断
+  # 已有的 required check), 但这条注释必须写明它现在不止 lint。
   # ---------------------------------------------------------------------------
   lint-scripts:
     name: Lint Scripts & Configs (task-13)
@@ -366,6 +376,14 @@ jobs:
       - name: Install Python linters (pinned)
         run: pip3 install --quiet "yamllint==1.38.0" "flake8==7.1.1"
 
+      # (task-14) 传感器驱动骨架的宿主机测试也挂在本 job 上。
+      # 它们跑在 ROS 替身上 —— 不需要 ROS、不需要 roscore、不需要传感器,
+      # 因此没有理由拖进 ROS 容器里跑 (那个 job 要装完整 desktop-full)。
+      # pytest 版本不钉: 它不是门禁工具, 断言在测试文件里, 上游升级不会
+      # 凭空多出失败。pyyaml 是契约测试读 config/*.yaml 用的。
+      - name: Install host test deps
+        run: pip3 install --quiet pytest pyyaml
+
       # --severity=warning: error 级当前 0 条, 只卡 error 等于不卡回归 ——
       # 新脚本引入 SC2164 (cd 未判错) 这类问题时 CI 照样会绿。
       # info/style 级 (37 条) 不纳入门禁: 多是风格偏好, 拿来拦提交性价比不高。
@@ -392,6 +410,23 @@ jobs:
           mapfile -d '' -t pys < <(git ls-files -z '*.py')
           echo "检查 ${#pys[@]} 个 Python 文件"
           flake8 --max-line-length=120 --count "${pys[@]}"
+
+      # (task-14) 驱动骨架: 先语法, 再逻辑。
+      #
+      # py_compile 单独跑一遍而不是靠 pytest 兜底: 骨架里有几个模块
+      # (real 后端未实现的分支、__main__ 段) pytest 不会导入,
+      # 语法错误就会一路溜进实机。
+      - name: py_compile 传感器驱动骨架 (blocking)
+        run: |
+          python3 -m py_compile src/air_ground_car_bringup/scripts/*.py
+          echo "全部驱动骨架语法正确"
+
+      # 提交前本地实测: 69 passed。断言覆盖 RPLIDAR 协议解析、IMU 量纲换算、
+      # 超声波回波换算、OpenMV JSON 校验, 以及**驱动话题与 car_preprocessor
+      # 订阅的一致性** (test_topic_contract.py) —— 最后这条抓到过三处真实不一致,
+      # 见 ADR-0009 §背景。
+      - name: 传感器驱动骨架单元测试 (blocking)
+        run: python3 -m pytest src/air_ground_car_bringup/test/host -q
 
       # ⚠ 非阻塞, 且这不是"先宽松以后再收紧"的托词 ——
       # 提交这一步时本地既没有 cppcheck 也没有 make, **它对固件 C 代码的输出
