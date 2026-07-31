@@ -2,8 +2,8 @@
 
 > **Task-12** · Phase 1 基础设施 · 两台树莓派5（车机 + 无人机）共用一套配置
 >
-> 状态：配置完成并通过静态校验（31 个 Host 用例 + 7 类静态检查）·
-> **尚未在真实树莓派上执行过**，已知限制见 §9
+> 状态：配置完成并通过静态校验（45 个 Host 用例 + 43 项静态检查）·
+> **尚未在真实树莓派上执行过**，已知限制见 §9；⚠ `EDGE_MODE=real` 假绿灯风险见 §5.4「现状」
 
 ---
 
@@ -73,6 +73,7 @@ src/deployment/
 │
 ├── scripts/
 │   ├── require-image.sh              启动前确认镜像在本地
+│   ├── update-image.sh               离线镜像包更新（见 §4.3）
 │   └── wait-for-device.sh            等设备枚举，超时大声失败
 │
 ├── network/
@@ -347,6 +348,8 @@ compose 的 `devices:` 里列的设备**不存在时容器直接启动失败**�
 只打一条 echo 是不够的——它留在容器日志里，上位机看不见。所以 entrypoint
 在 roslaunch **之前**把结论写进 `/var/log/air-ground/edge-state.env`
 （bind mount，容器外可读），`check_nodes.py` 读它并以退出码 **4** 报出：
+
+旧行为示例（彼时 `car_edge_real.launch` 尚未交付，会触发降级；现行行为见上方「现状」段）：
 
 ```
 [2026-07-31T12:00:00] DEGRADED: 降级运行 (role=car, 话题齐全但能力集不完整)

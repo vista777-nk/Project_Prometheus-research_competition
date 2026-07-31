@@ -634,22 +634,24 @@ echo "========================================="
 
 ## 验收标准
 
+> 勾选状态为 2026-08-01 实际交付结果（格式同 task-14）。带 ⚠ 的条目见文末「与原方案的偏差」。
+
 ### Part A 标定
 
-- [ ] `calibrate-camera.py` 可处理 ≥5 张棋盘格图片，输出 `camera_intrinsics.yaml`
-- [ ] `validate-calibration.py` 对标定结果做合理性检查（5 项全部通过）
-- [ ] 标定脚本在 CI 中可用离线样本数据测试（不需要 ROS）
-- [ ] `record-calib-bag.sh` 有明确的操作指南（提示用户如何移动标定板）
-- [ ] **标定报告自动生成** (Phase 1 交付): `generate-calib-report.py` 将 YAML 转换为 Markdown 报告，包含 K Matrix / Distortion Coefficients / RMS Reprojection Error / Calibration Date
-- [ ] (Stretch) `calibration_db/` 目录结构占位 + README 说明归档规范 (完整历史数据库为 Phase 2 功能)
+- [x] `calibrate-camera.py` 可处理 ≥5 张棋盘格图片，输出 `camera_intrinsics.yaml` ⚠ 默认最少 10 张，`--min-images` 可调（偏差 3）
+- [x] `validate-calibration.py` 对标定结果做合理性检查（5 项全部通过） ⚠ 焦距判据按 HFOV 重定义（偏差 4）
+- [x] 标定脚本在 CI 中可用离线样本数据测试（不需要 ROS）—— 16 个流水线用例
+- [x] `record-calib-bag.sh` 有明确的操作指南（提示用户如何移动标定板） ⚠ 话题名按仓库现状更正，开录前检查在线（偏差 1）
+- [x] **标定报告自动生成** (Phase 1 交付): `generate-calib-report.py` 将 YAML 转换为 Markdown 报告，包含 K Matrix / Distortion Coefficients / RMS Reprojection Error / Calibration Date ⚠ 另含逐张 RMS（偏差 3）
+- [x] (Stretch) `calibration_db/` 目录结构占位 + README 说明归档规范 (完整历史数据库为 Phase 2 功能)
 
 ### Part B 集成验证
 
-- [ ] `test-serial-loopback.sh` 可发送 PING 并判断是否收到 PONG (含 board_type/chassis_type 校验)
-- [ ] `test-observation-pipeline.py` 3 个测试用例通过
-- [ ] `smoke-test-phase1.sh` 可检查所有 Phase 1 文件存在性 + CI job 存在性
-- [ ] Phase 1 冒烟测试在 GitHub Actions 中可运行
-- [ ] **三问检查** (每完成一个 Task)：Platform 是否更稳定？ / Research 是否更自由？ / 未来替换硬件是否更简单？
+- [x] `test-serial-loopback.sh` 可发送 PING 并判断是否收到 PONG (含 board_type/chassis_type 校验) —— 13 项自测全过
+- [x] `test-observation-pipeline.py` 3 个测试用例通过 ⚠ 实际 10 个用例，且测的是真 `CarPreprocessor` 而非模拟件（ADR-0011）
+- [x] `smoke-test-phase1.sh` 可检查所有 Phase 1 文件存在性 + CI job 存在性 —— 61 项全绿
+- [x] Phase 1 冒烟测试在 GitHub Actions 中可运行 —— 含删除交付物的负向测试
+- [x] **三问检查** (每完成一个 Task)：Platform 是否更稳定？ / Research 是否更自由？ / 未来替换硬件是否更简单？ —— 见文末「三问检查」记录
 
 ---
 

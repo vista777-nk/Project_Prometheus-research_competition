@@ -82,7 +82,7 @@
 │  Layer 1: Hardware (硬件/仿真层)    [✅ 已实现] │
 │  PX4 SITL · Gazebo · ros_control · Sensors   │
 │  drone_bringup · car_bringup                   │
-│  🆕 Phase 1: STM32/MSPM0 固件 (待合入)        │
+│  Phase 1: STM32/MSPM0 固件 ✅ (已交付)        │
 └──────────────────────────────────────────────┘
 ```
 
@@ -96,7 +96,7 @@
 | `air_ground_drone_bringup` | Layer 1 | PX4 SITL 无人机 + 深度相机/GPS/IMU | ✅ |
 | `air_ground_car_bringup` | Layer 1 | 差速/麦轮双底盘 + 车载传感器 + 云台 + 实机驱动骨架 | 16/16 + 69 |
 | `air_ground_com_bridge` | Layer 2 | MAVLink UDP 桥 + TCP JSON 桥 | 17/17 |
-| `air_ground_lab_server` | Layer 4 | TCP 接收 + World Model + 研究占位节点 | ✅ |
+| `air_ground_lab_server` | Layer 2~3 | TCP 接收 + World Model + 研究占位节点 | ✅ |
 | `air_ground_bringup` | Orchestration | 单 Gazebo 世界的顶层集成 Launch | ✅ |
 
 ---
@@ -120,17 +120,21 @@ research_compitition/
 ├── README.md                           ← 你在这里
 ├── CONVENTIONS.md                      ← 命名/编码/提交规范
 ├── SECURITY.md                         ← 安全策略
-├── .gitignore / .gitattributes
+├── LICENSE / Makefile / requirements.txt / setup_all.sh
+├── .gitignore / .gitattributes / .github/  ← CI 工作流在 .github/workflows/
 ├── Research_Diary.md                   ← 科研日记
+├── scripts/                            ← 运行环境 setup + Phase 1 冒烟脚本
 ├── docs/
-│   └── decisions/                      ← ADR (架构决策记录)
+│   ├── architecture/                   ← 能力矩阵 (capability_matrix.md)
+│   ├── decisions/                      ← ADR (架构决策记录, ADR-0001~0012)
+│   └── experiments/                    ← 实验记录 + AI_HANDOFF.md (交接必读)
 ├── project-prometheus-tasks/           ← 核心项目文档
 │   ├── 00-OVERVIEW.md                  ← 总索引 + 任务清单
 │   ├── RESEARCH_PHILOSOPHY.md          ← 设计哲学与宪法
 │   ├── PLATFORM.md                     ← 平台架构
 │   ├── ICD.md                          ← 接口控制文档
 │   ├── ROADMAP.md                      ← 研究路线
-│   └── task-01~09-*.md                 ← 实施任务
+│   └── task-01~15-*.md                 ← 实施任务
 ├── src/                                ← 源代码
 │   ├── air_ground_interfaces/          ← 自定义消息/服务
 │   ├── air_ground_drone_bringup/       ← 无人机仿真
@@ -138,19 +142,22 @@ research_compitition/
 │   ├── air_ground_com_bridge/          ← 通信桥
 │   ├── air_ground_lab_server/          ← 实验室服务器
 │   ├── air_ground_bringup/             ← 顶层集成启动
-│   ├── firmware/                       ← 🆕 下位机固件 (非 ROS)
+│   ├── firmware/                       ← 下位机固件 (非 ROS)
 │   │   ├── common/                     ← 共享模块 (PID/CRC/Unity)
 │   │   ├── stm32_mecanum/              ← STM32F407 麦轮固件
 │   │   └── mspm0_diff/                 ← MSPM0G3507 差速固件
-│   └── deployment/                     ← 🆕 部署配置 (非 ROS)
-│       ├── docker/                     ← Docker 镜像
-│       ├── systemd/                    ← 自启服务
-│       ├── network/                    ← 网络 + 3DR 数传
-│       ├── ssh/                        ← SSH 加固
-│       ├── mavlink/                    ← MAVLink 签名
-│       ├── calibration/                ← 标定工具链 + 归档规范
-│       ├── test/                       ← 集成验证 (串口回路 / 数据流)
-│       └── healthcheck/                ← 健康检查
+│   ├── deployment/                     ← 部署配置 (非 ROS)
+│   │   ├── docker/                     ← Docker 镜像
+│   │   ├── systemd/                    ← 自启服务
+│   │   ├── network/                    ← 网络 + 3DR 数传
+│   │   ├── ssh/                        ← SSH 加固
+│   │   ├── mavlink/                    ← MAVLink 签名
+│   │   ├── calibration/                ← 标定工具链 + 归档规范
+│   │   ├── test/                       ← 集成验证 (串口回路 / 数据流)
+│   │   └── healthcheck/                ← 健康检查
+│   ├── e2e_test.sh                     ← Task-09 E2E 验收
+│   ├── quick_smoke.sh                  ← Task-09 快速冒烟
+│   └── test_task01.sh                  ← Task-01 环境验收
 └── obsolete-documentation/ ← 历史文档归档
 ```
 

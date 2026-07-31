@@ -21,27 +21,29 @@
 
 ## 能力矩阵 v1.0
 
+> **Phase 列图例**：`✅` = 已交付并通过测试；`实机⏳` = 骨架/仿真已验证，实机联调待 Phase 2 Step 1（清单见 [AI_HANDOFF](../experiments/AI_HANDOFF.md) §6）；无标记 = 计划中。
+
 ### 运动控制 (Locomotion)
 
 | Capability | Provider | Interface | Consumer | Replaceability | Phase |
 |------------|----------|-----------|----------|:---:|:---:|
-| **麦轮逆运动学** | `stm32_mecanum` 固件 / `mecanum_controller.py` (仿真) | `vx,vy,ω → 四轮RPM` (内部) → `/car/cmd_vel` | `air_ground_car_bringup` | ★★★★☆ | Phase 1 |
-| **差速运动学** | `mspm0_diff` 固件 / `diff_drive_controller` (仿真) | `v,ω → 左右轮RPM` (内部) → `/car/cmd_vel` | `air_ground_car_bringup` | ★★★★☆ | Phase 1 |
-| **四轮速度PID** | `common/pid.c` (STM32+MSPM0 共享) | `target_rpm, actual_rpm → pwm_duty` | `stm32_mecanum`, `mspm0_diff` | ★★★★★ | Phase 1 |
-| **无人机飞控** | PX4 v1.14 (Pixhawk 6C) / PX4 SITL (仿真) | MAVLink / MAVROS → `/mavros/*` | `air_ground_com_bridge` | ★★★☆☆ | Phase 2 |
-| **底盘热切换** | `chassis_swapper.py` | `/car/switch_chassis` (SwapChassis.srv) | `air_ground_lab_server` → Coordinator | ★★★★☆ | Phase 0 ✅ |
+| **麦轮逆运动学** | `stm32_mecanum` 固件 / `mecanum_controller.py` (仿真) | `vx,vy,ω → 四轮RPM` (内部) → `/car/cmd_vel` | `air_ground_car_bringup` | ★★★★☆ | Phase 1 ✅ · 实机⏳ |
+| **差速运动学** | `mspm0_diff` 固件 / `diff_drive_controller` (仿真) | `v,ω → 左右轮RPM` (内部) → `/car/cmd_vel` | `air_ground_car_bringup` | ★★★★☆ | Phase 1 ✅ · 实机⏳ |
+| **四轮速度PID** | `common/pid.c` (STM32+MSPM0 共享) | `target_rpm, actual_rpm → pwm_duty` | `stm32_mecanum`, `mspm0_diff` | ★★★★★ | Phase 1 ✅ · 实机⏳ |
+| **无人机飞控** | PX4 v1.14 (Pixhawk 6C) / PX4 SITL (仿真) | MAVLink / MAVROS → `/mavros/*` | `air_ground_com_bridge` | ★★★☆☆ | Phase 0 ✅ (SITL) · 实机⏳ |
+| **底盘热切换** | `chassis_swapper.py` | `/car/swap_chassis` (SwapChassis.srv) | `air_ground_lab_server` → Coordinator | ★★★★☆ | Phase 0 ✅ |
 
 ### 感知 (Perception)
 
 | Capability | Provider | Interface | Consumer | Replaceability | Phase |
 |------------|----------|-----------|----------|:---:|:---:|
-| **2D LiDAR 扫描** | RPLIDAR A1 / Gazebo `libgazebo_ros_laser.so` | `/car/scan` (LaserScan) → `Observation.msg` | `car_preprocessor.py` → World Model | ★★★★★ | Phase 1 |
-| **RGB 图像** | D435i / OpenMV / Gazebo camera plugin | `sensor_msgs/Image` → `Observation.rgb` | `car_preprocessor.py` / `drone_preprocessor.py` → World Model | ★★★★★ | Phase 1 |
-| **深度图像** | D435i / Gazebo depth plugin | `sensor_msgs/Image` → `Observation.depth` | `drone_preprocessor.py` → World Model | ★★★★★ | Phase 1 |
-| **IMU** | ICM42688 / Pixhawk 6C 板载 / Gazebo IMU plugin | `sensor_msgs/Imu` → `Observation` (angular_velocity, linear_acceleration) | `car_preprocessor.py` / `drone_preprocessor.py` → World Model | ★★★★★ | Phase 1 |
-| **超声波测距** | 4×HC-SR04 / Gazebo ultrasonic plugin | `sensor_msgs/Range×4` → `Observation.ultrasonic_ranges` | `car_preprocessor.py` → World Model | ★★★★★ | Phase 1 |
-| **GPS 定位** | M8N GPS / Gazebo GPS plugin | `sensor_msgs/NavSatFix` → `RobotState.pose` | `gps_converter.py` → World Model | ★★★★☆ | Phase 1 |
-| **OpenMV 目标检测** | OpenMV 云台 / (仿真无对照) | `/car/openmv/detections` (JSON String) → `Observation` | `car_preprocessor.py` → World Model | ★★★☆☆ | Phase 1 |
+| **2D LiDAR 扫描** | RPLIDAR A1 / Gazebo `libgazebo_ros_laser.so` | `/car/scan` (LaserScan) → `Observation.msg` | `car_preprocessor.py` → World Model | ★★★★★ | Phase 1 ✅ · 实机⏳ |
+| **RGB 图像** | D435i / OpenMV / Gazebo camera plugin | `sensor_msgs/Image` → `Observation.rgb` | `car_preprocessor.py` / `drone_preprocessor.py` → World Model | ★★★★★ | Phase 1 ✅ · 实机⏳ |
+| **深度图像** | D435i / Gazebo depth plugin | `sensor_msgs/Image` → `Observation.depth` | `drone_preprocessor.py` → World Model | ★★★★★ | Phase 1 ✅ · 实机⏳ |
+| **IMU** | ICM42688 / Pixhawk 6C 板载 / Gazebo IMU plugin | `sensor_msgs/Imu` → `Observation` (angular_velocity, linear_acceleration) | `car_preprocessor.py` / `drone_preprocessor.py` → World Model | ★★★★★ | Phase 1 ✅ · 实机⏳ |
+| **超声波测距** | 4×HC-SR04 / Gazebo ultrasonic plugin | `sensor_msgs/Range×4` → `Observation.ultrasonic_ranges` | `car_preprocessor.py` → World Model | ★★★★★ | Phase 1 ✅ · 实机⏳（时序方案未定，ADR-0013 预留） |
+| **GPS 定位** | M8N GPS / Gazebo GPS plugin | `sensor_msgs/NavSatFix` → `RobotState.pose` | `gps_converter.py` → World Model | ★★★★☆ | Phase 1 ✅ · 实机⏳ |
+| **OpenMV 目标检测** | OpenMV 云台 / (仿真无对照) | `/car/openmv/detections` (JSON String) → `Observation` | `car_preprocessor.py` → World Model | ★★★☆☆ | Phase 1 ✅ · 实机⏳ |
 
 ### 通信 (Communication)
 
@@ -49,7 +51,7 @@
 |------------|----------|-----------|----------|:---:|:---:|
 | **空地 MAVLink 桥** | `drone_car_bridge.py` | MAVLink UDP ↔ ROS topics (`/drone/*`) | `air_ground_com_bridge` | ★★★★☆ | Phase 0 ✅ |
 | **车服 TCP 桥** | `edge_server_bridge.py` | ROS topics ↔ TCP JSON (`:9090`) | `tcp_receiver.py` (服务器) | ★★★☆☆ | Phase 0 ✅ |
-| **MAVLink 2 签名** | 密钥生成脚本 + PX4 参数 | 32-byte 共享密钥 → 消息签名验证 | Pixhawk 6C ↔ MAVROS ↔ 地面站 | ★★★★☆ | Phase 1 |
+| **MAVLink 2 签名** | 密钥生成脚本 + PX4 参数 | 32-byte 共享密钥 → 消息签名验证 | Pixhawk 6C ↔ MAVROS ↔ 地面站 | ★★★★☆ | Phase 1 ✅（工具链；参数名实机待核） |
 
 ### 认知 (Cognition)
 
@@ -64,11 +66,11 @@
 
 | Capability | Provider | Interface | Consumer | Replaceability | Phase |
 |------------|----------|-----------|----------|:---:|:---:|
-| **容器化部署** | `Dockerfile.edge` + `docker-compose.edge.yml` | 环境变量注入 (`AIR_GROUND_ROLE`, `CHASSIS`) | 树莓派5 ×2 | ★★★★★ | Phase 1 |
-| **开机自启** | `systemd` units | `systemctl enable` | 树莓派5 ×2 | ★★★★☆ | Phase 1 |
-| **CI 交叉编译** | GitHub Actions (arm-gcc) | `.bin` artifact | 固件烧录工具 | ★★★★★ | Phase 1 |
-| **标定工具链** | `calibrate-camera.py` + `validate-calibration.py` | YAML 输出 → ROS camera_info | 相机驱动 → Observation | ★★★★★ | Phase 1 |
-| **健康检查** | `check_nodes.py` + `healthcheck.timer` | ROS Master XML-RPC 探测 | systemd alert | ★★★★☆ | Phase 1 |
+| **容器化部署** | `Dockerfile.edge` + `docker-compose.edge.yml` | 环境变量注入 (`AIR_GROUND_ROLE`, `CHASSIS`) | 树莓派5 ×2 | ★★★★★ | Phase 1 ✅ · 实机⏳ |
+| **开机自启** | `systemd` units | `systemctl enable` | 树莓派5 ×2 | ★★★★☆ | Phase 1 ✅ · 实机⏳ |
+| **CI 交叉编译** | GitHub Actions (arm-gcc) | `.bin` artifact | 固件烧录工具 | ★★★★★ | Phase 1 ✅ |
+| **标定工具链** | `calibrate-camera.py` + `validate-calibration.py` | YAML 输出 → ROS camera_info | 相机驱动 → Observation | ★★★★★ | Phase 1 ✅ · 实机⏳ |
+| **健康检查** | `check_nodes.py` + `healthcheck.timer` | ROS Master XML-RPC 探测 | systemd alert | ★★★★☆ | Phase 1 ✅ · 实机⏳ |
 
 ### 传感器→Observation 数据流
 
@@ -112,7 +114,8 @@
 | 日期 | 审查者 | 变更 |
 |------|--------|------|
 | 2026-07-28 | ChatGPT (终审架构师) | 初始创建，覆盖 Phase 0 + Phase 1 全部能力 |
+| 2026-08-01 | 接手方 AI 助手 (文档对齐) | Phase 1 各行补交付状态标记与图例；底盘热切换服务名更正为 `/car/swap_chassis` |
 
 ---
 
-*版本: v1.0 · 日期: 2026-07-28 · 与 ICD.md 配套使用 · 每次架构变更后更新*
+*版本: v1.1 · 日期: 2026-08-01 · 与 ICD.md 配套使用 · 每次架构变更后更新*

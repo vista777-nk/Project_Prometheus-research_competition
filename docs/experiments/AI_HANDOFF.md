@@ -34,9 +34,9 @@ curl -sSL "https://api.github.com/repos/vista777-nk/research_compitition/actions
 | 项 | 值 |
 |---|---|
 | 分支 | `feat/task-XX`（**不是** main；main 落后很多，合并是人的决定） |
-| HEAD | `a419b98`（2026-08-01） |
+| HEAD | `dc2b38e`（2026-08-01；此后的提交均为纯文档，代码状态同 `a419b98`） |
 | Phase | Phase 0 仿真 ✅ 9/9 · **Phase 1 固件+部署 ✅ 6/6** · Phase 2 未开始 |
-| 最近 CI | run #25 (`fe0cf66`) 全绿；run #26 (`a419b98`) 是 cppcheck 转阻塞后的首跑 |
+| 最近 CI | run #25 (`fe0cf66`) 全绿；run #26 (`a419b98`) 是 cppcheck 转阻塞后的首跑；此后 4 个提交均为纯文档 |
 | ADR | 0001–0012 已用；**0013 已预留给「超声波时序方案 A/B/C」**，别占 |
 
 ⚠ **提交会自动推送**（VSCode 的 post-commit sync）。`git commit` 之后
@@ -241,7 +241,7 @@ CHASSIS=mecanum bash src/deployment/test/test-serial-loopback.sh /dev/ttyAMA0
 ```bash
 # B2 MSPM0G3507 差速 —— 预期有摩擦
 ```
-⚠ CI 产出的是 `ci-link` 剖面，**移植层为空实现，不可烧录**（ADR-0004 §决策-4）。
+⚠ CI 产出的是 `ci-link` 剖面，**移植层为空实现，不可烧录**（ADR-0004 §决策-3）。
 要接 TI MSPM0 SDK + SysConfig，见 `src/firmware/mspm0_diff/README.md` §7。解 U10。
 
 ### C. 车机树莓派
@@ -251,7 +251,9 @@ CHASSIS=mecanum bash src/deployment/test/test-serial-loopback.sh /dev/ttyAMA0
 "文件不存在才降级"的前提已失效。`.env` 里若设 `EDGE_MODE=real`，车机会加载它
 跑 **mock 假数据、不触发降级、健康检查显示绿**——正是本仓库最警惕的假绿灯。
 在重新设计 mock/real 降级语义（改 `entrypoint.sh` + 写 ADR，见 §8-D8）之前，
-**不要把 `EDGE_MODE` 设为 `real`**；保持默认值，让"没数据"保持显而易见，
+**`.env` 里必须显式设 `EDGE_MODE=sim`**——默认值恰恰就是 `real`
+（`.env.example`、`docker-compose.edge.yml`、`entrypoint.sh` 三处默认都是），
+"保持默认"会直接踩进 D8。设为 `sim` 让"没数据"保持显而易见，
 传感器话题按 C3 逐个核实。
 
 ```bash
@@ -410,4 +412,4 @@ Step 1 的验收在 ROADMAP §本阶段目标，其中一条要求
 
 ---
 
-*交接人：Claude Opus 5 · 2026-08-01 · HEAD `a419b98`*
+*交接人：Claude Opus 5 · 2026-08-01 · HEAD `dc2b38e`*

@@ -18,6 +18,8 @@ primary_audience: LLM
 
 # Project Prometheus Phase 0 阶段完成报告
 
+> ⚠️ **此文档已归档，保留仅供历史参考。** 记录 Phase 0 收官时（2026-07-28）的状态；Phase 1 已于 2026-08-01 完成，现状以 [`docs/experiments/AI_HANDOFF.md`](../docs/experiments/AI_HANDOFF.md) 与 [`project-prometheus-tasks/00-OVERVIEW.md`](../project-prometheus-tasks/00-OVERVIEW.md) 为准。
+
 ## 0. LLM 阅读约定
 
 本报告用于让后续 LLM 在不重放全部历史对话的情况下恢复 Phase 0 的工程上下文。

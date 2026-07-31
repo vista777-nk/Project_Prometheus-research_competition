@@ -69,8 +69,7 @@
 
 请通过以下方式联系：
 
-> **Email**: [项目维护者邮箱]  
-> **议题**: 在仓库中创建私有安全通告（如平台支持）  
+> **议题**: 在 [GitHub 仓库](https://github.com/vista777-nk/research_compitition) 创建私有安全通告（Security Advisories）
 > **响应时间**: 通常在 7 天内确认，30 天内给出修复方案
 
 **注意**：请勿在公开 Issue 中披露安全漏洞细节。

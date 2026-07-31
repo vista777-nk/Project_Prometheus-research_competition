@@ -401,12 +401,11 @@ mspm0_diff/
 │   ├── main.c                  1kHz 控制中断 + 主循环
 │   │
 │   ├── mspm0_conf.h            编译剖面开关
-│   └── startup_mspm0g3507.c    Cortex-M0+ 向量表 + Reset_Handler
-│
-│   （移植层接口在 ../common/mcu_port.h，与麦轮固件共用同一份）
-│   ├── port_stub.c             空实现 (CI)，但 SysTick 与控制中断是真的
-│   ├── port_driverlib.c        TI DriverLib 实现 (真实硬件)
-│   └── startup_mspm0g3507.c    Cortex-M0+ 向量表 + Reset_Handler
+│   ├── startup_mspm0g3507.c    Cortex-M0+ 向量表 + Reset_Handler
+│   │
+│   ├── port_stub.c             移植层空实现 (CI)，但 SysTick 与控制中断是真的
+│   └── port_driverlib.c        移植层 TI DriverLib 实现 (真实硬件)
+│       （移植层接口在 ../common/mcu_port.h，与麦轮固件共用同一份）
 └── test/                       70 个 Host 用例
 ```
 
