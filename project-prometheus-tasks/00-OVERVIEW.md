@@ -125,6 +125,25 @@ task-14 (传感器 + MAVLink) ── (独立) ── task-15
 > [标定 README §5](../src/deployment/calibration/README.md)：
 > PX4/MAVROS 的签名参数名（承 ADR-0010）、`camera_info_manager` 是否接受
 > 额外键、以及 `/car/openmv/image_raw` 到底有没有发布者。
+>
+> **2026-08-01 补充（task-15 收尾）**：首轮 CI（run #25 / `fe0cf66`）除
+> ARM64 镜像外全部通过，其中 `validate-deployment` 装了 CI 钉的
+> numpy<2 + OpenCV 4.x 并真跑了标定流水线 —— numpy 版本差异那笔账结清。
+> 为了让"通过"之外还能看到**逐项数值差**（容差留了 3~10 倍余量，
+> 系统性偏移可以躲在里面），流水线测试现在会打印实测值与本地基准的对比表。
+>
+> cppcheck 从 ADVISORY **升为阻塞**（[ADR-0012](../docs/decisions/ADR-0012.md)）。
+> 依据不是读日志（job log 要 admin 权限），而是 Actions 的 jobs API 会单独记录
+> 每一步的结论：该步骤带 `--error-exitcode=1`，run #24 与 #25 两次退出码都是 0，
+> 即**两次零发现**。ADR-0008 当初留的条件是"等它的输出被观测到"，现在兑现了。
+>
+> 升级时的取舍值得记：cppcheck 是四个阻塞工具里唯一**不钉版本**的
+> （没有官方预编译 Linux 二进制，钉版本要源码构建，每次 CI 加 3~6 分钟）。
+> ADR-0008 要求钉版本的**目的**是让人能区分"代码退化了"和"工具升级了"——
+> 这里改用报错文案达成同一目的，代价（判断从自动降级成人读一行）写在 ADR 里。
+>
+> 剩余欠账：超声波时序方案（编号定为 ADR-0013）、PX4/MAVROS 签名参数名、
+> `/car/openmv/image_raw` 的发布者 —— 后两笔只能等实机。
 
 ## 🚀 快速开始
 

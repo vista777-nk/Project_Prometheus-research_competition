@@ -86,6 +86,29 @@ NOISE_DENSITY_TOLERANCE_RATIO = 0.10   # 实测 +1.0% (gyro) / -1.2% (accel)
 
 IMU_SECONDS = 120.0
 
+#: 2026-07-31 本地基准 (Windows / Python 3.14 / OpenCV 5.0.0 / numpy 2.5.1)。
+#:
+#: 存在的理由: 本机装不上 CI 钉的 numpy<2.0.0 (没有 cp314 轮子), 所以上面那些
+#: 容差是在**与 CI 不同的一套版本**上测出来的。容差本身留了 3~10 倍余量,
+#: 单看绿灯说明不了两边的数是不是真的一致 —— 而"差在容差内但系统性偏移"
+#: 恰恰是版本差异会有的样子。
+#:
+#: 所以让测试把实测值连同基准一起打出来: 第一次 CI 运行的日志里就能直接读到
+#: 两套版本的逐项对比, 不必靠推断。差异显著时回来改容差并在 ADR-0011 里记一笔。
+LOCAL_BASELINE = {
+    "environment": "Python 3.14.6 / OpenCV 5.0.0 / numpy 2.5.1 (Windows)",
+    "fx": 520.917403,
+    "fy": 519.855720,
+    "cx": 321.941470,
+    "cy": 237.939336,
+    "rms": 0.137087,
+    "k1": 0.115673,
+    "k2": -0.211268,
+    "gyro_noise_density": 2.020377e-04,
+    "accel_noise_density": 1.482102e-03,
+    "gyro_bias_z": 0.001219,
+}
+
 
 class CalibrationPipelineTest(unittest.TestCase):
     """整条流水线跑一遍: 生成 → 标定 → 校验 → 转换 → 报告。"""
@@ -95,6 +118,8 @@ class CalibrationPipelineTest(unittest.TestCase):
     imu_csv = ""
     camera_yaml = ""
     imu_yaml = ""
+    #: 实测值, 由 test_01 / test_10 填, tearDownClass 打印
+    measured: dict = {}
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -109,8 +134,40 @@ class CalibrationPipelineTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
-        """清掉临时目录。"""
+        """打印实测值对比表, 然后清掉临时目录。"""
+        cls.print_measurement_report()
         shutil.rmtree(cls.workdir, ignore_errors=True)
+
+    @classmethod
+    def print_measurement_report(cls) -> None:
+        """把本次实测值与本地基准并排打出来。
+
+        断言只回答"在不在容差内", 这张表回答"和另一套 OpenCV/numpy 比差多少"。
+        后者是版本差异唯一能被看见的地方 —— 系统性偏移完全可以躲在容差里面。
+        """
+        if not cls.measured:
+            return
+        print("\n" + "=" * 72)
+        print("标定实测值 vs 本地基准")
+        print(f"  本次运行 : Python {sys.version.split()[0]} / "
+              f"OpenCV {cv2.__version__} / numpy {numpy.__version__}")
+        print(f"  本地基准 : {LOCAL_BASELINE['environment']}")
+        print("-" * 72)
+        print(f"  {'量':<22}{'本次':>16}{'基准':>16}{'相对差':>14}")
+        for key, value in cls.measured.items():
+            baseline = LOCAL_BASELINE.get(key)
+            if baseline is None:
+                continue
+            if abs(baseline) > 1e-12:
+                delta = f"{(value - baseline) / abs(baseline) * 100:+.4f}%"
+            else:
+                delta = f"{value - baseline:+.3e}"
+            print(f"  {key:<22}{value:>16.6f}{baseline:>16.6f}{delta:>14}"
+                  if abs(value) >= 1e-3 else
+                  f"  {key:<22}{value:>16.6e}{baseline:>16.6e}{delta:>14}")
+        print("=" * 72)
+        print("  两套版本的差异若超过 0.1%, 回 ADR-0011 §影响 记一笔并复核容差。")
+        print("=" * 72)
 
     def read_yaml(self, path: str) -> dict:
         """读回一份 YAML。"""
@@ -141,6 +198,11 @@ class CalibrationPipelineTest(unittest.TestCase):
         d = document["distortion_coefficients"]["data"]
         self.assertLess(abs(d[0] - sample.DIST_TRUE[0]), K1_TOLERANCE)
         self.assertLess(abs(d[1] - sample.DIST_TRUE[1]), K2_TOLERANCE)
+
+        type(self).measured.update({
+            "fx": k[0], "fy": k[4], "cx": k[2], "cy": k[5],
+            "rms": rms, "k1": d[0], "k2": d[1],
+        })
 
     def test_02_all_twelve_views_detected(self):
         """12 个视角应当全部检测到棋盘格 —— 检测率掉下来说明渲染或参数变了。"""
@@ -237,6 +299,12 @@ class CalibrationPipelineTest(unittest.TestCase):
             self.assertLess(abs(result[key] - truth) / truth,
                             NOISE_DENSITY_TOLERANCE_RATIO,
                             f"{key} = {result[key]:.4e}, 真值 {truth:.4e}")
+
+        type(self).measured.update({
+            "gyro_noise_density": result["gyro_noise_density"],
+            "accel_noise_density": result["accel_noise_density"],
+            "gyro_bias_z": result["gyro_bias"][2],
+        })
 
     def test_11_driver_stddev_conversion(self):
         """写给驱动的离散标准差 = 噪声密度 × √采样率。

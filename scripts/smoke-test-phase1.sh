@@ -184,6 +184,7 @@ have_file "平台架构"                    "project-prometheus-tasks/PLATFORM.m
 have_file "研究哲学"                    "project-prometheus-tasks/RESEARCH_PHILOSOPHY.md"
 have_file "ADR-0003 串口协议"           "docs/decisions/ADR-0003.md"
 have_file "ADR-0011 标定输出格式"       "docs/decisions/ADR-0011.md"
+have_file "ADR-0012 cppcheck 门禁"      "docs/decisions/ADR-0012.md"
 
 # =============================================================================
 section "8. 接口冒烟 —— 语法与解析"

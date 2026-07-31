@@ -335,14 +335,19 @@ jobs:
   #
   #   工具         版本      范围              提交前实测结果    本 job 行为
   #   ----------   -------   ---------------   ---------------   ----------
-  #   shellcheck   0.10.0    22 个 *.sh        warning 级 0 条   阻塞
-  #   yamllint     1.38.0    14 个 *.y[a]ml    0 条              阻塞
-  #   flake8       7.1.1     全部 *.py         0 条              阻塞
-  #   cppcheck     发行版版本 src/firmware      **未实测**        仅告警
+  #   shellcheck   0.10.0    26 个 *.sh        warning 级 0 条   阻塞
+  #   yamllint     1.38.0    16 个 *.y[a]ml    0 条              阻塞
+  #   flake8       7.1.1     58 个 *.py        0 条              阻塞
+  #   cppcheck     随镜像     src/firmware      CI #24/#25 0 条   阻塞 (task-15)
   #
-  # 三个阻塞工具全部**钉死版本号**。理由: 不钉版本的话, 上游加一条新规则就能
+  # 前三个阻塞工具**钉死版本号**。理由: 不钉版本的话, 上游加一条新规则就能
   # 把绿灯变红, 而看红灯的人无法区分"代码退化了"和"工具升级了"。
   # 钉版本的代价是要人工升级, 换来的是"红灯一定意味着代码有问题"。
+  #
+  # cppcheck 是唯一的例外 —— 它没有官方预编译二进制, 钉版本要从源码构建。
+  # 那条"能区分两种红灯"的要求改用报错文案达成, 理由与代价见 ADR-0012。
+  # 它在 task-13 交付时是 ADVISORY (输出一次都没跑过), task-15 观测到
+  # 两次 CI 均零发现后升为阻塞。
   #
   # 不在这里做 systemd 单元校验: `systemd-analyze verify` 已由 validate.sh §6b
   # 在 validate-deployment job 里真跑。同一个检查只实现一处。
@@ -433,24 +438,46 @@ jobs:
       - name: 传感器驱动骨架单元测试 (blocking)
         run: python3 -m pytest src/air_ground_car_bringup/test/host -q
 
-      # ⚠ 非阻塞, 且这不是"先宽松以后再收紧"的托词 ——
-      # 提交这一步时本地既没有 cppcheck 也没有 make, **它对固件 C 代码的输出
-      # 一次都没跑过**。把没实测过的检查设成阻塞, 等于用别人的 CI 当试验场。
-      # 首轮 CI 输出出来后再决定: 若告警可控就升为阻塞并删掉这段注释;
-      # 若噪声大则调 --suppress 或撤掉。在那之前它只是一份报告。
-      # (task-13 评审建议 2 / ADR-0008 §决策-1)
-      - name: cppcheck (ADVISORY — 输出未经实测, 见 ADR-0008)
-        continue-on-error: true
+      # (task-15) 从 ADVISORY 升为**阻塞**。
+      #
+      # 升的依据正是 ADR-0008 §决策-1 当初要等的那件事: 它的输出终于被观测到了。
+      # 本步骤带 --error-exitcode=1, 而 CI run #24 (task-14, 9bab4b8) 与
+      # #25 (task-15, fe0cf66) 两次的**步骤退出码都是 0** —— 也就是说它在
+      # warning/style/performance/portability 四类严重度上, 对本仓库的固件
+      # C 代码一条都没报。零发现的检查设成阻塞没有代价, 而留在告警态就是
+      # 每次 CI 打印一份没人看的报告。
+      #
+      # 与另外三个阻塞工具的一处**刻意偏差**: cppcheck 不钉版本号。
+      # shellcheck 钉得住是因为它有官方预编译二进制; cppcheck 没有,
+      # 从源码构建要给每次 CI 加 3~6 分钟。
+      #
+      # 钉版本要达成的目的是"让看红灯的人能区分**代码退化了**和**工具升级了**"。
+      # 这里换一种手段达成同一目的: 运行前把版本号打出来, 失败时把两种可能
+      # 直接写进报错。代价是判断从"自动"变成"人读一行", 收益是省掉每次几分钟。
+      # 详见 ADR-0012。
+      - name: cppcheck (blocking — 见 ADR-0012)
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends cppcheck
-          cppcheck --version
-          cppcheck --enable=warning,style,performance,portability \
+          version="$(cppcheck --version)"
+          echo "本次使用: ${version}"
+          echo "参照: CI run #24 / #25 上本步骤零发现 (ADR-0012 §决策-1)"
+          if cppcheck --enable=warning,style,performance,portability \
                    --std=c99 --error-exitcode=1 \
                    --suppress=missingIncludeSystem \
                    -I src/firmware/common \
                    src/firmware/common src/firmware/stm32_mecanum/src \
-                   src/firmware/mspm0_diff/src
+                   src/firmware/mspm0_diff/src; then
+            echo "cppcheck 零发现"
+          else
+            echo "::error::cppcheck 报了问题。两种可能, 先分清楚再动手:"
+            echo "  1) 固件 C 代码退化了 —— 按上面的行号改代码;"
+            echo "  2) ${version} 比上次跑的版本新, 多了一条规则 ——"
+            echo "     本步骤刻意不钉版本 (ADR-0012 §决策-2)。这种情况要么改代码"
+            echo "     迎合新规则, 要么加 --suppress 并在 ADR 里记一笔;"
+            echo "     **不要**把 --enable 调窄或把这一步改回 continue-on-error。"
+            exit 1
+          fi
 
   # ---------------------------------------------------------------------------
   # Task-15: Phase 1 冒烟 —— 毕业证书
