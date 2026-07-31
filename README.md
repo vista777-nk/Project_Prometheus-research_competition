@@ -46,13 +46,15 @@
 
 | 你想…… | 去看 |
 |---------|------|
+| **接手这个项目 / 明天上实机** | **[docs/AI_HANDOFF.md](./docs/AI_HANDOFF.md)** — 现状、已验证与未验证清单、上机顺序 |
 | 理解这个项目的"为什么" | [RESEARCH_PHILOSOPHY.md](./project-prometheus-tasks/RESEARCH_PHILOSOPHY.md) |
 | 理解系统架构 | [PLATFORM.md](./project-prometheus-tasks/PLATFORM.md) |
 | 查看模块间接口 | [ICD.md](./project-prometheus-tasks/ICD.md) |
 | 了解研究路线和时间线 | [ROADMAP.md](./project-prometheus-tasks/ROADMAP.md) |
 | 查看全部任务进度 | [00-OVERVIEW.md](./project-prometheus-tasks/00-OVERVIEW.md) |
 | 🆕 开始 Phase 1 固件开发 | [task-10](./project-prometheus-tasks/task-10-stm32-mecanum-firmware.md) · [task-11](./project-prometheus-tasks/task-11-mspm0-diff-firmware.md) |
-| 🆕 搭建树莓派部署 | [task-12](./project-prometheus-tasks/task-12-rpi-deployment.md) |
+| 🆕 搭建树莓派部署 | [task-12](./project-prometheus-tasks/task-12-drone-firmware-and-rpi-deployment.md) |
+| 🆕 标定与集成验证 | [task-15](./project-prometheus-tasks/task-15-calibration-validation.md) · [标定 README](./src/deployment/calibration/README.md) |
 | 搭建仿真环境 (Phase 0) | [task-01-env-setup.md](./project-prometheus-tasks/task-01-env-setup.md) |
 | 了解命名/编码/提交流程规范 | [CONVENTIONS.md](./CONVENTIONS.md) |
 | 查看架构决策记录 | [docs/decisions/](./docs/decisions/) |
