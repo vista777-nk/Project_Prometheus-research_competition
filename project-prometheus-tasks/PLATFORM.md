@@ -11,9 +11,9 @@
 | 项目 | 当前 (仿真) | 目标 (实机) |
 |------|------------|------------|
 | 无人机飞控 | PX4 SITL v1.14 | Pixhawk 6C (铝壳款) |
-| 无人机机载 | 树莓派5 (模拟) | 树莓派5 |
+| 无人机机载 | 树莓派5 (模拟) | 树莓派5（ARM64、8 GB、Debian 13、64 GB microSD 基线） |
 | 无人机传感器 | 深度相机 + GPS + IMU (Gazebo) | Intel RealSense D435i + M8N GPS + Pixhawk 6C 板载 IMU |
-| 车机主控 | 树莓派5 (模拟) | 树莓派5 +  下位机协处理器(麦轮底盘STM32F407VET6；差速底盘MSPM0G3507) |
+| 车机主控 | 树莓派5 (模拟) | 树莓派5（ARM64、8 GB、Debian 13、64 GB microSD 基线）+ 下位机协处理器(麦轮底盘STM32F407VET6；差速底盘MSPM0G3507) |
 | 车机传感器 | OpenMV + 思岚RPLIDAR A1 + 4×HC-SR04 + ICM42688 (Gazebo) | 同实物 |
 | 实验室服务器 | 本地 localhost (模拟) | 实验室 GPU 服务器 |
 | 底盘 A | 差速 (Gazebo) | TI 电赛亚克力底盘 + 520 编码器电机 |
@@ -36,6 +36,10 @@
 | 消息定义 | package `air_ground_interfaces` | 遵循 ICD 规范 |
 
 ---
+
+> 实机 Pi 的 Debian 13 是**容器宿主机**，不裸装 Noetic。Noetic 继续封装在
+> Ubuntu 20.04/Focal ARM64 镜像中。滚动硬件记录与换卡预检见
+> [`../docs/experiments/phase-1.5-hardware-baseline.md`](../docs/experiments/phase-1.5-hardware-baseline.md)。
 
 ## 三、架构总览（能力分层视角）
 

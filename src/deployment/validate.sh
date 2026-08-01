@@ -104,6 +104,14 @@ else
         tail -40 /tmp/agserverdeployment.log | sed 's/^/      /'
     fi
 
+    if "${PYTHON}" src/deployment/test/test_pi_preflight.py \
+            >/tmp/agpipreflight.log 2>&1; then
+        pass "树莓派主机预检测试 — $(grep -oE 'Ran [0-9]+ tests' /tmp/agpipreflight.log || echo '?')"
+    else
+        fail "树莓派主机预检测试"
+        tail -40 /tmp/agpipreflight.log | sed 's/^/      /'
+    fi
+
     # MAVLink 2 签名自测 (task-14)。退出码 2 = 没装 pymavlink, 报 SKIP 不算失败 ——
     # 与上面 validate_consistency.py 的降级约定一致。CI 上会真跑
     # (validate-deployment job 装了 pymavlink), 所以这里的 SKIP 不会掩盖问题。

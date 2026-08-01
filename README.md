@@ -110,8 +110,9 @@
 
 | 组件 | 版本 |
 |------|------|
-| Ubuntu | 20.04.6 |
-| ROS | Noetic (Python 3.8+) |
+| 仿真/服务器 | Ubuntu 20.04.6 |
+| 树莓派宿主 | Pi 5 · ARM64 · 8 GB · Debian 13 (Trixie) · 64 GB microSD |
+| ROS | Noetic (Python 3.8+；Pi 上运行于 Focal ARM64 容器) |
 | Gazebo | Classic 11 |
 | PX4 | v1.14 SITL |
 | Python | 3.8+ |
@@ -211,13 +212,17 @@ cd src/firmware/stm32_mecanum && make
 cd src/firmware/mspm0_diff && make
 
 # 9. 构建树莓派 Docker 镜像
-cd src/deployment && docker build -f docker/Dockerfile.edge -t air-ground-edge:v1 .
+docker build --platform linux/arm64 \
+  -f src/deployment/docker/Dockerfile.edge -t air-ground-edge:v1 .
 
 # 10. Phase 1 冒烟 —— 交付物存在性 + 语法 + 自测 + CI 归属 (任意 OS, 不需要 ROS)
 make smoke-phase1
 
 # 11. 部署与标定配置静态校验 (与 CI 跑同一份脚本)
 make validate-deployment
+
+# 12. 64 GB 新卡上的 Pi 基线预检；软件和接口装好后改用 --stage deploy
+python3 src/deployment/healthcheck/check_pi_host.py --stage base
 ```
 
 > 第 10、11 步在没有 numpy / OpenCV / pymavlink 的机器上会把相应检查报成
