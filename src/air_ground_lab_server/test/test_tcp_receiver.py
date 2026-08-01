@@ -4,6 +4,7 @@
 import base64
 import math
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -63,6 +64,32 @@ class TCPReceiverTest(unittest.TestCase):
         )
         self.assertEqual(config["port"], 9090)
         self.assertEqual(config["max_payload_bytes"], 10 * 1024 * 1024)
+
+    def test_server_bind_ip_is_distinct_from_advertised_ip(self):
+        with tempfile.TemporaryDirectory() as directory:
+            network = Path(directory) / "network.yaml"
+            network.write_text(
+                "edge_server_tcp:\n"
+                "  server_ip: 192.168.1.100\n"
+                "  server_bind_ip: 0.0.0.0\n"
+                "  server_port: 9090\n",
+                encoding="utf-8",
+            )
+            config = load_server_config(str(network), str(SERVER_CONFIG))
+        self.assertEqual(config["host"], "0.0.0.0")
+
+    def test_heartbeat_without_pose_uses_identity_quaternion(self):
+        payload = {
+            "protocol_version": 1,
+            "kind": "heartbeat",
+            "source": "car",
+            "timestamp": 10.0,
+        }
+        _, _, state = decode_telemetry(payload)
+        self.assertEqual(state.pose.orientation.x, 0.0)
+        self.assertEqual(state.pose.orientation.y, 0.0)
+        self.assertEqual(state.pose.orientation.z, 0.0)
+        self.assertEqual(state.pose.orientation.w, 1.0)
 
     def test_complete_payload_reconstructs_icd_messages(self):
         robot_id, observation, state = decode_telemetry(

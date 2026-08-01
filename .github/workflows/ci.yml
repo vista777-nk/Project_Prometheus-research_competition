@@ -84,9 +84,9 @@ jobs:
       - name: Run unit tests
         run: |
           source /opt/ros/noetic/setup.bash
-          source $WS/devel/setup.bash || true
-          cd $WS
-          catkin test --no-status || echo "Tests completed (check summary above)"
+          source "$WS/devel/setup.bash"
+          cd "$WS"
+          catkin test --no-status
         timeout-minutes: 15
 
       - name: Test summary
@@ -424,14 +424,15 @@ jobs:
       # (task-14) 驱动骨架: 先语法, 再逻辑。
       #
       # py_compile 单独跑一遍而不是靠 pytest 兜底: 骨架里有几个模块
-      # (real 后端未实现的分支、__main__ 段) pytest 不会导入,
+      # (真实依赖缺失分支、各节点的 __main__ 段) pytest 不会全部执行,
       # 语法错误就会一路溜进实机。
       - name: py_compile 传感器驱动骨架 (blocking)
         run: |
           python3 -m py_compile src/air_ground_car_bringup/scripts/*.py
           echo "全部驱动骨架语法正确"
 
-      # 提交前本地实测: 69 passed。断言覆盖 RPLIDAR 协议解析、IMU 量纲换算、
+      # Phase 1.5 实验室服务器本地实测: 81 passed。断言覆盖 UART/I2C Linux
+      # 访问层、RPLIDAR 协议解析、IMU 量纲换算、
       # 超声波回波换算、OpenMV JSON 校验, 以及**驱动话题与 car_preprocessor
       # 订阅的一致性** (test_topic_contract.py) —— 最后这条抓到过三处真实不一致,
       # 见 ADR-0009 §背景。

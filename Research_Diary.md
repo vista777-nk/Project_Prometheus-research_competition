@@ -970,6 +970,133 @@
           实测下载速率约 10 KB/s）。所以升级依据完全来自 CI 的步骤退出码，
           没有本地实测 —— 这一点写进了 ADR-0012 §影响，不假装有。
 
+###### 2026/8/1（Phase 1.5 接手 · 实验室服务器基线与部署失败关闭）
+
+    1.接手后的第一件事不是接硬件，而是验证前任留下的「已完成」到底有多少真证据。
+
+          当前机器正是 Ubuntu 20.04.6 实验室服务器，ROS Noetic、catkin、Docker 都在。
+          `make smoke-phase1` 得到通过 60、失败 0、跳过 1；跳过项仅是本机没装 pymavlink，
+          没把它写成通过。
+
+          第一次 `make build` 失败不是代码错：仓库从 `research_compitition` 重命名后，
+          Catkin 的 build/devel/install 缓存仍嵌着旧绝对路径。把四个生成目录完整保留到
+          `/tmp/project-prometheus-catkin-cache-before-rename/` 后重建，6 个项目包全部成功。
+          这说明工作区改名不只影响编辑器设置；生成缓存也是路径状态的一部分。
+
+    2.交接清单 U1 关闭：真实 `catkin test --no-status` 原始退出码为 0，
+          80 个测试、0 error、0 failure、0 skip。其中真 ROS 消息对照是 24 条，
+          不再是「替身与替身互相证明」。
+
+          有了测量，才删除 CI 里的 `|| echo`；同时去掉 `source devel/setup.bash || true`。
+          测试失败或构建后没有运行环境，现在都会真阻塞。决策见 ADR-0014。
+
+    3.交接欠账 D8 关闭，但没有假装真实驱动已经完成。
+
+          原链路是 `EDGE_MODE=real → car_edge_real.launch 默认 mock → 假数据 → 健康`。
+          改成三个互斥模式：real 只传 real，mock 必须显式且状态为 DEGRADED，
+          sim 才走仿真 launch。launch/YAML/节点三层缺省也全部从 mock 改为 real，
+          防止绕过 Docker 后重新出现同一问题。
+
+          关键不是正向三条，而是负向两条：未知模式必须失败；real launch 缺失时
+          必须失败、不得回退。`test_entrypoint_modes.py` 运行的是真 entrypoint，
+          只替换 rospack/roslaunch 环境，随后补上缺 `ROS_IP` 的负向路径，共 8 条。
+          决策见 ADR-0015；ADR-0013 仍保留
+          给需要实测 GPIO 时序的超声波 A/B/C 方案。
+
+    4.部署校验在这台服务器第一次真跑 systemd-analyze 时又抓到校验器环境漂移：
+          它扫描了 `/etc/systemd/system` 的宿主机单元，把 snapd 的版本告警算到项目头上；
+          受限环境的 Varlink socket 失败也被当成 unit 语法错。
+
+          现在 `SYSTEMD_UNIT_PATH` 只含项目与发行版目录，并只过滤具体的 Varlink/部署路径
+          环境信息，通用 parse 错误仍保留。最终 validate.sh：通过 46、失败 0、跳过 1。
+
+    5.下一步严格按硬件风险递增：先完成服务器仿真/E2E 基线，再做 STM32 串口真回路，
+          随后逐个落 UART/I2C 真后端；HC-SR04 必须先测时序再写 ADR-0013；
+          最后才处理 PX4 签名 A/B 对照与飞行。当前 `EDGE_MODE=real` 因真后端未实现而失败，
+          这是正确的红灯，不是新的阻塞策略缺陷。
+
+###### 2026/8/1（Phase 1.5 接手续 · UART/I²C 与实验室服务器真入口）
+
+    1.完成 UART / I²C Linux 访问层：pyserial 串口、SMBus 寄存器读写、依赖与镜像安装
+          同时落地。配置里的 ttyUSB0/ttyAMA2 也改成 udev 稳定名，并由 YAML / compose /
+          udev 三方契约测试守住。错误 ICM42688 WHO_AM_I 会在写寄存器前停止；RPLIDAR
+          半截握手不会再被当成连接成功；运行中拔线进入退避重连。
+
+    2.真实 roslaunch 抓到一个 Host 测试完全看不到的问题：catkin_install_python 在 devel
+          空间生成 relay，驱动顶层 import hardware_interface 时先命中同目录的同名 relay，
+          导入到的模块只有 relay 外壳，没有任何接口类。于是 81 条 Host 测试可以全绿，
+          真 ROS 节点却在 import 阶段全死。修复为驱动优先 relay 注入的真实源码目录；
+          mock 五节点持续运行 8 秒，real 无设备时由 required 节点让整套关闭。
+
+          这再次说明：纯 Python 测试验证的是逻辑，catkin relay / roslaunch / 参数装载属于
+          另一层环境事实，不能由前者代替。好在 required=true 让这次故障直接停机，
+          没留下只会发预处理空消息的假健康进程。
+
+    3.服务器侧也发现 Phase 0 入口不能直接当部署入口：server_only.launch 会同时启动
+          TCP 服务端与 edge_server_bridge 客户端连回 127.0.0.1。连接成功只证明机器能连
+          自己。新增 lab-server-real.launch，只保留五个服务端节点；同时把客户端通告地址
+          server_ip 与服务端监听地址 server_bind_ip 分开。决策见 ADR-0016。
+
+          在真实服务器以 ROS_IP=192.168.3.30 启动后，roslaunch 对外注册到该地址，
+          tcp_receiver.py 真监听 0.0.0.0:9090；从现网地址发送一帧 4-byte 长度前缀 JSON
+          heartbeat，/server/car/state 成功收到 robot_id=car。确认没有本地 bridge 客户端，
+          实验结束后 ROS 进程与端口均已清理。
+
+    4.真实 heartbeat 首帧还显示 RobotState 的 orientation.w=0：没有 pose 时 ROS 消息
+          的全零默认值不是合法四元数。修为单位四元数并加入同形态回归。
+
+          最终验证结果：6 包构建成功；catkin test 82/82；传感器 Host 81/81；
+          validate.sh 46 通过、0 失败、1 跳过；make test-all 全套通过；最终 E2E 33/33。
+          E2E 最终复测第一次在模型已成功 spawn 后遇到一次 Ogre AABB 断言，gzserver
+          随即退出；确认无残留后从干净环境重跑全绿，因此记为仿真图形栈偶发故障，
+          没有把失败尝试从实验记录里抹掉。新增 ruff 检查与 git diff --check 均无发现。
+
+    5.仍不能关闭 Phase 1.5：服务器当前只有 192.168.3.30，规划的机器人隔离网
+          192.168.1.100 未获授权配置；chronyc 未安装；没有任何机器人 USB/串口设备接入；
+          GPIO/HC-SR04 仍需 ADR-0013 实测；PX4、MAVROS 签名与真实标定也都没有硬件证据。
+          已完成的是可执行入口与失败边界，不是整机联调。
+
+###### 2026/8/1（Phase 1.5 接手续 · 中关村服务器常驻与跨校区边界）
+
+    1.负责人补充了一个会改变部署假设的事实：硬件在良乡组装，服务器留在中关村，
+          两地链路还可能不稳定。这不是把 192.168.1.100 换成另一个 IP 就能解决。
+          ROS 1 除 Master 11311 外还有每个节点随机绑定的 XML-RPC/TCPROS 端口，直接跨
+          校区会把短时断线变成半失效 ROS 图；现有 TCP JSON 又没有 TLS/对端认证，
+          不能把 9090 直接开放到校园网。ADR-0007 的外网重估条件已经触发。
+
+          ADR-0017 因此把边界改成：服务器 ROS 永远本地；跨校区只跨一个带重连的 TCP
+          会话，而且必须先经过经批准的 VPN/SSH 隧道。具体产品和地址等网络/硬件参数
+          确认后再填，不把猜测写进生效配置。
+
+    2.服务器审计还有两个容易在远程阶段出事故的事实。根分区已用 97%，只剩约 87 GiB，
+          而 /data2 还有约 1.1 TiB；真实服务器入口又只能依赖当前 SSH 终端手工启动。
+          时间侧则比“没有 chronyc”更好一点：systemd-timesyncd 当前明确显示
+          System clock synchronized=yes，所以没有为了装 chrony 而替换一个正在工作的
+          时间服务；仍需等两台 Pi 到位后实测三机相对偏差。
+
+    3.新增服务器 systemd 安装器、生产启动脚本、五节点+TCP 联合健康检查，以及
+          system/user 两套 unit。生产默认把 ROS Master 与 TCP 都钉在 127.0.0.1，
+          五个服务节点全部 required；roslaunch 即使返回 0，Restart=always 仍会恢复。
+          ROS 日志固定写 /data2/air-ground-server/ros-log。
+
+          系统级安装需要交互 sudo 密码，不能由当前自动会话取得；但 bit118 的
+          loginctl 状态是 Linger=yes，因此改用等价的用户 systemd 路径完成实机安装，
+          不是依赖登录会话的临时后台进程。服务和五分钟 timer 都已 enabled + active。
+
+    4.做了两次真实负向/正向证据：先 rosnode kill /world_model，required 节点让整套
+          roslaunch 停止，systemd 的 MainPID 从 1910133 变为 1910669、NRestarts=1，
+          随后五节点与 127.0.0.1:9090 全部恢复；再向常驻端口发送一帧真实长度前缀
+          heartbeat，/server/car/state 收到 robot_id=car、orientation.w=1.0。
+          11311 与 9090 经 ss 核对都只监听回环，没有新增校园网暴露面。
+
+    5.服务器 Python 实际用 /usr/bin/python3，里面已有 pymavlink/pyserial/OpenCV，
+          先前 SKIP 是 Anaconda 默认 python3 的 PATH 偏差，不是服务器缺包。显式使用
+          系统 Python 后 validate.sh 为 52 通过、0 失败、0 跳过，其中服务器常驻部署
+          9/9、systemd 10 个单元全过。暂停常驻服务后完成最终回归：Catkin 82/82，
+          Task-02~07 分别 9/7/17/28/11/15 全绿，E2E 33/33，Host 81/81，Phase 1
+          冒烟 61/61。之后恢复服务与 timer，最终健康 JSON 为 ok=true，11311/9090
+          仍只监听回环。
+
 ---
 
 ## 历史名称脚注

@@ -136,7 +136,7 @@ class RPLidarDriverTest(unittest.TestCase):
         self.rospy = configure()
 
     def test_start_scan_command_is_sent(self):
-        uart = MockUART()
+        uart = MockUART(SCAN_DESCRIPTOR)
         driver = RPLidarDriver(uart)
         self.assertTrue(driver.connect())
         self.assertIn(b"\xa5\x20", uart.written)
@@ -196,9 +196,37 @@ class RPLidarDriverTest(unittest.TestCase):
             any("打开" in message for _level, message in self.rospy.logs)
         )
 
+    def test_incomplete_descriptor_fails_connection(self):
+        """半截应答不能当作已连接，否则余下字节会被误当成扫描节点。"""
+        uart = MockUART(SCAN_DESCRIPTOR[:3])
+        driver = RPLidarDriver(uart)
+        self.assertFalse(driver.connect())
+        self.assertFalse(uart.is_open)
+        self.assertTrue(
+            any("应答不完整" in message for _level, message in self.rospy.logs)
+        )
+
+    def test_runtime_read_failure_triggers_reconnect(self):
+        """设备运行中被拔掉要进入退避，不能让节点进程直接退出。"""
+
+        class UnpluggedUART(MockUART):
+            def read(self, n, timeout_ms=100.0):
+                if self.is_open and self.written and not self._buffer:
+                    raise OSError(5, "Input/output error")
+                return super().read(n, timeout_ms)
+
+        uart = UnpluggedUART(SCAN_DESCRIPTOR)
+        driver = RPLidarDriver(uart)
+        self.assertTrue(driver.connect())
+        self.assertEqual(driver.step(), [])
+        self.assertFalse(uart.is_open)
+        self.assertTrue(
+            any("读取失败" in message for _level, message in self.rospy.logs)
+        )
+
     def test_stall_triggers_reconnect(self):
         """读不到字节超过 data_timeout 就得断开重连，而不是静静地不发数据。"""
-        uart = MockUART()
+        uart = MockUART(SCAN_DESCRIPTOR)
         driver = RPLidarDriver(uart)
         self.assertTrue(driver.connect())
         driver._last_data_at -= driver.data_timeout + 1.0

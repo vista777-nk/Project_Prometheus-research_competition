@@ -9,6 +9,9 @@ numpy>=1.22.0,<2.0.0
 # YAML 配置解析
 PyYAML>=6.0,<7.0
 
+# 实机 UART。I2C 使用发行版 python3-smbus，由 package.xml / Dockerfile 安装。
+pyserial>=3.5,<4.0.0
+
 # ROS 桥接 (由系统 apt 提供，此处仅作记录)
 # cv-bridge (ros-noetic-cv-bridge)
 

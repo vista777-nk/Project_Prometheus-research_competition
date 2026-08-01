@@ -62,12 +62,12 @@ def load_section(section: str) -> Dict[str, Any]:
 
 
 def resolve_backend() -> str:
-    """读取并校验 `~backend`，缺省 mock。
+    """读取并校验 `~backend`，缺省 real（失败关闭）。
 
     mock 模式下会打一条**醒目**的告警：话题上出现的是假数据，
     任何人接手一份 rosbag 时必须能从日志里看出来。
     """
-    backend = str(rospy.get_param("~backend", "mock")).lower()
+    backend = str(rospy.get_param("~backend", "real")).lower()
     if backend not in BACKENDS:
         raise ValueError(f"~backend must be one of {BACKENDS}, got '{backend}'")
     if backend == "mock":

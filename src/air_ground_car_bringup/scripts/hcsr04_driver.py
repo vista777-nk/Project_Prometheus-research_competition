@@ -14,12 +14,25 @@ LaserScan。ROS 订阅端类型不匹配时不会报错，只是**永远连不�
 相邻两路各自收到对方的回波（串扰），量出的距离偏小且不稳定。
 """
 
+import os
+import sys
 from typing import Dict, List, Optional, Tuple
 
 import rospy
-from hardware_interface import GPIOInterface, create_gpio
-from sensor_config import load_section, positive_float, require_keys, resolve_backend
 from sensor_msgs.msg import LaserScan
+
+# 见 rplidar_driver.py 同处注释：避开 catkin devel relay 的同名自导入。
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
+from hardware_interface import GPIOInterface, create_gpio  # noqa: E402
+from sensor_config import (  # noqa: E402
+    load_section,
+    positive_float,
+    require_keys,
+    resolve_backend,
+)
 
 SECTION = "hcsr04"
 REQUIRED_KEYS = (

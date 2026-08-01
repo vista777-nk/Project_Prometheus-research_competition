@@ -69,6 +69,7 @@ catkin_install_python(
     scripts/mecanum_controller.py
     scripts/hardware_interface.py
     scripts/mock_hardware.py
+    scripts/real_hardware.py
     scripts/sensor_config.py
     scripts/rplidar_driver.py
     scripts/icm42688_driver.py

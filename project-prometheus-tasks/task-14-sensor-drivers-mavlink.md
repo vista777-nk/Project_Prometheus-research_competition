@@ -932,6 +932,24 @@ mavlink_secret.key
 密钥文件的 `0600` 权限在 Windows 上验不了（MSYS 不落实 chmod），
 Linux/树莓派侧以 `umask 077` + `chmod 600` 双保险。
 
+## Phase 1.5 跟进偏差（2026-08-01）
+
+本节记录后续实机阶段的变化，不回写上面的 Phase 1 交付证据（69 条是当时真实数字）。
+
+- 新增 `real_hardware.py`：UART 使用 pyserial，I²C 使用 Linux SMBus；
+  `hardware_interface.create_uart/create_i2c("real")` 不再是占位拒绝路径。
+- RPLIDAR 与 OpenMV 统一使用 udev 稳定名 `/dev/rplidar`、`/dev/openmv`，并由
+  自动契约检查对齐 `real_sensors.yaml`、compose 与 udev；ICM42688 对齐 `/dev/i2c-1`。
+- 首次 real 连接失败会退出节点，所有实机 launch 节点均为 `required=true`；
+  运行中拔线才进入断开重连。错误 WHO_AM_I 会在写任何寄存器前失败关闭。
+- 真实 ROS 启动抓到 Catkin devel relay 的同名自导入：纯 Host 测试全绿，实际
+  roslaunch 却无法从 relay `hardware_interface.py` 导入接口。驱动现在优先真实源码目录；
+  mock 五节点已持续运行 8 秒，real 无设备时已验证整套关闭。
+- Host 套件当前 81/81，新增覆盖真实 UART/I²C 访问、半截 RPLIDAR 握手、运行中拔线、
+  错误芯片身份、实机 launch 必需节点契约。
+- HC-SR04 GPIO **仍未实现**；ADR-0013 继续预留给 A/B/C 时序实测，不用 Python sleep
+  填空。`enable_*` launch 参数只用于逐件台架验收，满配默认仍全部启用。
+
 ---
 
 ## 参考资料

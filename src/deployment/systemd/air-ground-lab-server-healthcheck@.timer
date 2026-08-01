@@ -1,0 +1,12 @@
+[Unit]
+Description=Periodic Air-Ground Laboratory Server Health Check (user %i)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+RandomizedDelaySec=15s
+Persistent=true
+Unit=air-ground-lab-server-healthcheck@%i.service
+
+[Install]
+WantedBy=timers.target

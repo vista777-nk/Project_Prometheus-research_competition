@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OpenMV 云台相机桥接骨架 —— 接口层与协议解析完整，UART 读写待实机填。
+"""OpenMV 云台相机桥 —— ROS/协议层与 Linux UART 访问层已实现。
 
 发布: /car/openmv/detections (std_msgs/String, JSON)
 配置: config/real_sensors.yaml §openmv
@@ -16,13 +16,26 @@
 """
 
 import json
+import os
+import sys
 import time
 from typing import Any, Dict, List, Optional
 
 import rospy
-from hardware_interface import UARTInterface, create_uart
-from sensor_config import load_section, positive_float, require_keys, resolve_backend
 from std_msgs.msg import String
+
+# 见 rplidar_driver.py 同处注释：避开 catkin devel relay 的同名自导入。
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
+from hardware_interface import HardwareError, UARTInterface, create_uart  # noqa: E402
+from sensor_config import (  # noqa: E402
+    load_section,
+    positive_float,
+    require_keys,
+    resolve_backend,
+)
 
 SECTION = "openmv"
 REQUIRED_KEYS = (
@@ -118,7 +131,14 @@ class OpenMVBridge:
     # --- 连接管理 -----------------------------------------------------------
     def connect(self) -> bool:
         """打开串口。失败返回 False，不抛异常。"""
-        if not self.uart.open(self.port, self.baudrate):
+        try:
+            opened = self.uart.open(self.port, self.baudrate)
+        except (HardwareError, OSError, RuntimeError) as error:
+            rospy.logwarn_throttle(
+                5.0, "[openmv_bridge] 打开 %s 异常: %s", self.port, error
+            )
+            return False
+        if not opened:
             rospy.logwarn_throttle(
                 5.0, "[openmv_bridge] 打开 %s 失败，%.1fs 后重试",
                 self.port, self.reconnect_interval,
@@ -147,7 +167,16 @@ class OpenMVBridge:
                 self._next_retry_at = now + self.reconnect_interval
                 return []
 
-        data = self.uart.read(self.read_chunk, timeout_ms=100.0)
+        try:
+            data = self.uart.read(self.read_chunk, timeout_ms=100.0)
+        except (HardwareError, OSError, RuntimeError) as error:
+            rospy.logwarn_throttle(
+                5.0, "[openmv_bridge] 读取失败，%.1fs 后重连: %s",
+                self.reconnect_interval, error,
+            )
+            self.disconnect()
+            self._next_retry_at = now + self.reconnect_interval
+            return []
         if not data:
             if now - self._last_data_at > self.data_timeout:
                 rospy.logwarn_throttle(
@@ -197,7 +226,10 @@ class OpenMVBridge:
 def main() -> None:
     """启动 OpenMV 桥接节点。"""
     rospy.init_node("openmv_bridge")
-    bridge = OpenMVBridge(create_uart(resolve_backend()))
+    backend = resolve_backend()
+    bridge = OpenMVBridge(create_uart(backend))
+    if backend == "real" and not bridge.connect():
+        raise RuntimeError("OpenMV real 后端首次连接失败，拒绝空转启动")
     bridge.run()
 
 

@@ -11,7 +11,7 @@ export PX4_AUTOPILOT_DIR := $(PX4_ROOT)
 	test-mecanum test-sensors test-bridge test-server test-all \
 	test-e2e quick-smoke test-smoke smoke-phase1 validate-deployment \
 	launch-drone launch-car launch-car-mecanum launch-server launch-full \
-	launch-full-mecanum kill status help
+	launch-server-real launch-full-mecanum kill status help
 
 build:
 	@bash -c 'source /opt/ros/noetic/setup.bash && cd "$(WS)" && catkin build --summarize --no-status'
@@ -78,6 +78,12 @@ launch-car-mecanum: build
 launch-server: build
 	@bash -c 'source "$(WS)/scripts/setup_runtime.sh" ros && roslaunch air_ground_bringup server_only.launch'
 
+# Phase 1.5 裸机服务器入口。默认只监听回环；跨校区连接必须走受控隧道。
+# systemd 常驻部署见 src/deployment/install_server.sh。
+NETWORK_CONFIG ?= $(WS)/src/air_ground_com_bridge/config/network_server.yaml
+launch-server-real: build
+	@bash -c 'set -e; : "$${ROS_IP:?ROS_IP 必须显式设置；服务器常驻默认用 127.0.0.1}"; source "$(WS)/scripts/setup_runtime.sh" ros; roslaunch air_ground_bringup lab-server-real.launch network_config:="$(NETWORK_CONFIG)"'
+
 launch-full: build
 	@xvfb-run -a -s '-screen 0 1280x1024x24 -nolisten tcp' bash -c 'export LIBGL_ALWAYS_SOFTWARE=1; source "$(WS)/scripts/setup_runtime.sh" px4 && roslaunch air_ground_bringup air_ground_sim.launch chassis:=diff gui:=false headless:=true'
 
@@ -117,6 +123,7 @@ help:
 	@echo "  make launch-car            Launch the differential-drive car"
 	@echo "  make launch-car-mecanum    Launch the mecanum car"
 	@echo "  make launch-server         Launch bridges and laboratory server"
+	@echo "  make launch-server-real    Launch the real lab server (requires ROS_IP)"
 	@echo "  make launch-full           Launch the full system with a diff car"
 	@echo "  make launch-full-mecanum   Launch the full system with a mecanum car"
 	@echo "  make kill                  Stop air-ground simulation processes"

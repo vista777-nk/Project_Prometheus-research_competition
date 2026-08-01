@@ -1,0 +1,39 @@
+[Unit]
+Description=Air-Ground Laboratory Server (bare-metal ROS Noetic, user %i)
+Documentation=file:///etc/air-ground/server.env
+After=network-online.target time-sync.target
+Wants=network-online.target time-sync.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=%i
+EnvironmentFile=/etc/air-ground/server.env
+ExecStart=/usr/local/lib/air-ground/launch_lab_server.sh
+ExecStartPost=/usr/local/lib/air-ground/check_lab_server.py --wait 30
+
+# roslaunch 可能在 required 节点退出后返回 0；Restart=always 才能保证服务恢复。
+Restart=always
+RestartSec=10
+TimeoutStartSec=60
+TimeoutStopSec=45
+KillSignal=SIGINT
+KillMode=control-group
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+ReadWritePaths=/data2/air-ground-server
+UMask=0027
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=air-ground-lab-server
+
+[Install]
+WantedBy=multi-user.target

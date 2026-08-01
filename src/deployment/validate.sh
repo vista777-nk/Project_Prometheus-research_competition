@@ -88,6 +88,22 @@ else
         tail -25 /tmp/agtest.log | sed 's/^/      /'
     fi
 
+    if "${PYTHON}" src/deployment/test/test_entrypoint_modes.py \
+            >/tmp/agentrypoint.log 2>&1; then
+        pass "entrypoint 模式测试 — $(grep -oE 'Ran [0-9]+ tests' /tmp/agentrypoint.log || echo '?')"
+    else
+        fail "entrypoint 模式测试"
+        tail -40 /tmp/agentrypoint.log | sed 's/^/      /'
+    fi
+
+    if "${PYTHON}" src/deployment/test/test_server_deployment.py \
+            >/tmp/agserverdeployment.log 2>&1; then
+        pass "服务器常驻部署测试 — $(grep -oE 'Ran [0-9]+ tests' /tmp/agserverdeployment.log || echo '?')"
+    else
+        fail "服务器常驻部署测试"
+        tail -40 /tmp/agserverdeployment.log | sed 's/^/      /'
+    fi
+
     # MAVLink 2 签名自测 (task-14)。退出码 2 = 没装 pymavlink, 报 SKIP 不算失败 ——
     # 与上面 validate_consistency.py 的降级约定一致。CI 上会真跑
     # (validate-deployment job 装了 pymavlink), 所以这里的 SKIP 不会掩盖问题。
@@ -226,7 +242,7 @@ section "6. systemd 单元"
 # StartLimitIntervalSec/StartLimitBurst: v230 起从 [Service] 移到了 [Unit],
 # 旧名 StartLimitInterval 留了兼容别名、新名没有。(CI 抓出来过一次。)
 misplaced=0
-for unit in src/deployment/systemd/*.service; do
+while IFS= read -r unit; do
     bad="$(awk '
         /^\[/       { sect = $0 }
         /^StartLimit(IntervalSec|Burst)=/ { if (sect != "[Unit]") print FILENAME ":" FNR ": " $0 " —— 应在 [Unit] 段" }
@@ -235,7 +251,7 @@ for unit in src/deployment/systemd/*.service; do
         misplaced=1
         echo "${bad}" | sed 's|^.*/systemd/|      |'
     fi
-done
+done < <(find src/deployment/systemd -name '*.service' -type f | sort)
 if [[ ${misplaced} -eq 0 ]]; then
     pass "StartLimit* 均在 [Unit] 段"
 else
@@ -253,10 +269,20 @@ if command -v systemd-analyze >/dev/null 2>&1; then
     #
     # 试过按文件名过滤来归类, 但那样"不带文件名的错误"会被静默丢掉 —— 又一个假绿灯。
     # 宁可一次报全: systemd 的报错本来就自带 路径:行号。
-    units=(src/deployment/systemd/*.service src/deployment/systemd/*.timer)
-    out="$(systemd-analyze verify "${units[@]}" 2>&1 || true)"
+    mapfile -t units < <(find src/deployment/systemd \
+        \( -name '*.service' -o -name '*.timer' \) -type f | sort)
+    # 只加载项目单元与发行版系统单元，不扫描 /etc/systemd/system 里的宿主机服务。
+    # 实验室服务器上曾因此把 snapd 的版本告警算成项目失败。
+    unit_path="${REPO_ROOT}/src/deployment/systemd:/lib/systemd/system:/usr/lib/systemd/system"
+    out="$(SYSTEMD_UNIT_PATH="${unit_path}" systemd-analyze verify "${units[@]}" 2>&1 || true)"
     # CI 上 /opt/air-ground 并不存在, "路径找不到"是预期告警, 只看真正的语法错误
-    real="$(echo "${out}"         | grep -vE 'Failed to (open|resolve)|does not exist|not found|No such file'         | grep -v '^[[:space:]]*$' || true)"
+    # 受限容器里 systemd 245 还会尝试建立 Varlink/socket 连接；这是分析器环境
+    # 的限制，不是 unit 语法。过滤条件保留具体前缀，不能吞掉通用 parse 错误。
+    real="$(echo "${out}" \
+        | grep -vE 'Failed to (open|resolve)|does not exist|not found|No such file' \
+        | grep -vE 'Failed to (bind to varlink socket|set up Varlink server)|connect\(\) failed' \
+        | grep -vE 'Command (/opt/air-ground|/usr/local/lib/air-ground|/home/[^/]+/\.local/lib/air-ground)/.* is not executable' \
+        | grep -v '^[[:space:]]*$' || true)"
     if [[ -z "${real}" ]]; then
         pass "${#units[@]} 个 systemd 单元语法正确"
     else
@@ -283,6 +309,27 @@ while IFS= read -r ref; do
 done < <(grep -rhoE '/opt/air-ground/(scripts|healthcheck|docker)/[A-Za-z0-9._-]+' \
     src/deployment/systemd/ 2>/dev/null | sort -u)
 
+# 实验室服务器单元安装到 /usr/local/lib，路径必须与 server/ 源文件一一对应。
+while IFS= read -r ref; do
+    [[ -n "${ref}" ]] || continue
+    filename="${ref##*/}"
+    if [[ ! -f "src/deployment/server/${filename}" ]]; then
+        fail "服务器 systemd 引用了仓库里不存在的文件: ${ref}"
+        xref_bad=1
+    fi
+done < <(grep -rhoE '/usr/local/lib/air-ground/[A-Za-z0-9._-]+' \
+    src/deployment/systemd/ 2>/dev/null | sort -u)
+
+while IFS= read -r ref; do
+    [[ -n "${ref}" ]] || continue
+    filename="${ref##*/}"
+    if [[ ! -f "src/deployment/server/${filename}" ]]; then
+        fail "用户服务器 systemd 引用了仓库里不存在的文件: ${ref}"
+        xref_bad=1
+    fi
+done < <(grep -rhoE '%h/\.local/lib/air-ground/[A-Za-z0-9._-]+' \
+    src/deployment/systemd/user/ 2>/dev/null | sort -u)
+
 # entrypoint 传的 roslaunch 参数名必须与 launch 文件声明的一致。
 # roslaunch 对未声明参数是**硬错误** (RLException: unused args),
 # task-12 §12.2 原文写的 chassis:= 与 car_edge.launch 的 default_chassis 对不上。
@@ -295,6 +342,17 @@ if grep -q 'default_chassis:=' src/deployment/docker/entrypoint.sh; then
     fi
 else
     fail "entrypoint 未传 default_chassis"
+    xref_bad=1
+fi
+
+# 实机模式必须显式把 real 后端传给 launch；mock 只能由显式模式选择，且必须
+# 写入降级状态。少任一条都会复活「EDGE_MODE=real 跑假数据但显示健康」的事故。
+if grep -q 'SENSOR_BACKEND="real"' src/deployment/docker/entrypoint.sh \
+   && grep -q 'backend:=${SENSOR_BACKEND}' src/deployment/docker/entrypoint.sh \
+   && grep -q 'EDGE_MODE=mock' src/deployment/docker/entrypoint.sh; then
+    pass "entrypoint 的 real/mock/sim 模式语义显式且失败关闭"
+else
+    fail "entrypoint 未锁住 real→real / mock→DEGRADED 契约"
     xref_bad=1
 fi
 
@@ -342,11 +400,9 @@ fi
 # ros-noetic-cv-bridge 与 python3-numpy, 在 arm64 上 pip 编译 opencv 代价太大)。
 # CI 的 ROS job 已改为直接 pip install -r requirements.txt, 不在这条检查范围内。
 pin_bad=0
-# 目前只有 pymavlink 一个包在两侧都有 pip 显式约束, 所以这是个单元素循环。
-# 保留循环形态而不是展开成直写: numpy/opencv 现在走 apt, 哪天改成 pip 装就要
-# 加进这个列表, 到时候只改一行。
-# shellcheck disable=SC2043
-for pkg in pymavlink; do
+# numpy/opencv 现在走 apt；这里只比对 Dockerfile 与根 requirements 都由 pip
+# 安装的协议/串口依赖。
+for pkg in pymavlink pyserial; do
     req_pin=$(grep -oE "^${pkg}[><=,.0-9]+" requirements.txt | head -1)
     img_pin=$(grep -oE "${pkg}[><=,.0-9]+" src/deployment/docker/Dockerfile.edge | head -1)
     if [[ -z "${req_pin}" || -z "${img_pin}" ]]; then

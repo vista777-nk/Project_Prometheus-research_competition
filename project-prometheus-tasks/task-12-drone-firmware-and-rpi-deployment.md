@@ -785,6 +785,34 @@ if __name__ == "__main__":
 | **task-15** | 集成验证直接跑 `healthcheck/check_nodes.py`（退出码即结论）+ `chronyc tracking` |
 | **换硬件平台** | 改 `Dockerfile.edge` 的 base image 与 compose 里的设备路径即可 |
 
+### Phase 1.5 跟进偏差（2026-08-01）
+
+task-14 交付 `car_edge_real.launch` 后，原来的「文件缺失才降级」前提已经失效，
+导致 `EDGE_MODE=real` 实际加载默认 mock 后端并显示健康。Phase 1.5 按
+[ADR-0015](../docs/decisions/ADR-0015.md) 修正为：
+
+- `real` 精确传 `backend:=real`，任何缺失都失败关闭；
+- `mock` 必须显式选择，并写入 DEGRADED 状态；
+- `sim` 才加载 `car_edge.launch`；
+- 未知模式与 real launch 缺失均拒绝启动，不再自动回退。
+
+新增 8 条运行入口本身的模式测试；部署校验在 Ubuntu 20.04 实验室服务器实测为
+通过 46、失败 0、跳过 1（仅本机缺 `pymavlink`）。原任务正文保留当时设计，不回写。
+
+同日继续推进后：UART/I²C real 后端已实现，生产车机 systemd 单元固定叠加
+`docker-compose.car-sensors.yml`，表达「满配实机」而非缺传感器仍显示健康；mock
+接口冒烟改为直接运行 `car_edge_real.launch backend:=mock`。实验室服务器另增
+`lab-server-real.launch`，不再使用 Phase 0 的本地 `edge_server_bridge` 连回自己。
+服务器现网 `192.168.3.30` 已完成 `0.0.0.0:9090` 真 socket 到
+`/server/car/state` 的解码验证；规划地址 `192.168.1.100` 与 chrony 仍未完成，
+见 ADR-0016。
+
+负责人随后确认硬件与服务器分处良乡/中关村，且远程链路可能不稳定。该事实触发
+ADR-0007 的外网重估条件；ADR-0017 将服务器改为本地 ROS + 回环 TCP，跨校区只允许
+后续批准的 VPN/SSH 隧道。新增 system/user 两套常驻 unit、9 条部署用例和联合健康
+检查；当前服务器已用 `Linger=yes` 用户服务实装，故障注入自动恢复。使用服务器
+`/usr/bin/python3` 跑完整部署校验为通过 52、失败 0、跳过 0。
+
 ---
 
 ## ⓘ 优化建议（混元3 评审）

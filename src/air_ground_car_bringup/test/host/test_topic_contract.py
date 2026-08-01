@@ -15,6 +15,7 @@ task-14 落地时这里抓到过三处真实不一致（详见 ADR-0009 §背景
 
 import ast
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from fixtures import CAR_EDGE_YAML, PACKAGE_ROOT, REAL_SENSORS_YAML, load_yaml
@@ -22,6 +23,7 @@ from fixtures import CAR_EDGE_YAML, PACKAGE_ROOT, REAL_SENSORS_YAML, load_yaml
 CAR_SENSORS_YAML = PACKAGE_ROOT / "config" / "car_sensors.yaml"
 PREPROCESSOR = PACKAGE_ROOT / "scripts" / "car_preprocessor.py"
 SENSOR_URDF = PACKAGE_ROOT / "urdf" / "car_sensors.urdf.xacro"
+REAL_LAUNCH = PACKAGE_ROOT / "launch" / "car_edge_real.launch"
 
 # ICD §2.1: ultrasonic_ranges 的语义是 [front, rear, left, right]
 ICD_ULTRASONIC_ORDER = ["front", "rear", "left", "right"]
@@ -146,6 +148,23 @@ class FrameIdContractTest(unittest.TestCase):
         self.assertIn("{name}", template)
         self.assertIn(
             f'<link name="{template.replace("{name}", "${name}")}">', self.urdf
+        )
+
+
+class RealLaunchSafetyContractTest(unittest.TestCase):
+    """实机节点退出必须终止 launch，不能留下预处理器制造假健康。"""
+
+    def test_every_real_launch_node_is_required(self):
+        root = ET.parse(REAL_LAUNCH).getroot()
+        nodes = root.findall("node")
+        self.assertTrue(nodes)
+        self.assertEqual(
+            [
+                node.attrib.get("name")
+                for node in nodes
+                if node.attrib.get("required") != "true"
+            ],
+            [],
         )
 
 

@@ -1,0 +1,13 @@
+# Phase 1.5 实验室服务器常驻配置（跨校区安全默认值）。
+#
+# TCP JSON 协议当前没有 TLS、客户端认证或消息签名，因此默认只监听回环。
+# 梁乡硬件接入时应通过经批准的 VPN / SSH 隧道把受控端点转发到此端口；不要
+# 直接把 9090 暴露到校园网或公网。远端地址与隧道方案确认后再新增本地覆盖。
+
+edge_server_tcp:
+  protocol: tcp
+  server_ip: 127.0.0.1
+  server_bind_ip: 127.0.0.1
+  server_port: 9090
+  socket_timeout: 1.0
+  max_payload_bytes: 10485760

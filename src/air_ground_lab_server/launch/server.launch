@@ -7,11 +7,13 @@
   <arg name="start_tcp" default="true"/>
   <arg name="start_world_model" default="true"/>
   <arg name="start_research_placeholders" default="true"/>
+  <arg name="required_nodes" default="false"/>
 
   <node if="$(arg start_tcp)"
         name="tcp_server"
         pkg="air_ground_lab_server"
         type="tcp_receiver.py"
+        required="$(arg required_nodes)"
         output="screen">
     <param name="network_config" value="$(arg network_config)"/>
     <param name="server_config" value="$(arg server_config)"/>
@@ -21,6 +23,7 @@
         name="world_model"
         pkg="air_ground_lab_server"
         type="world_model.py"
+        required="$(arg required_nodes)"
         output="screen">
     <rosparam command="load" file="$(arg server_config)"/>
   </node>
@@ -29,18 +32,21 @@
     <node name="slam_node"
           pkg="air_ground_lab_server"
           type="slam_node.py"
+          required="$(arg required_nodes)"
           output="screen">
       <rosparam command="load" file="$(arg server_config)"/>
     </node>
     <node name="eqa_engine"
           pkg="air_ground_lab_server"
           type="eqa_engine.py"
+          required="$(arg required_nodes)"
           output="screen">
       <rosparam command="load" file="$(arg server_config)"/>
     </node>
     <node name="coordinator"
           pkg="air_ground_lab_server"
           type="coordinator.py"
+          required="$(arg required_nodes)"
           output="screen">
       <rosparam command="load" file="$(arg server_config)"/>
     </node>

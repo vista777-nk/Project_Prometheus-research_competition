@@ -13,6 +13,7 @@
 1. compose 文件能被 YAML 解析，且顶层有 services 段
 2. `agcheck.REQUIRED_TOPICS` 与 edge yaml 里配置的话题名一致
 3. compose 里引用的 override 关系自洽（角色 override 不能覆盖公共镜像名）
+4. 实机传感器配置的设备路径与 compose 容器路径、udev 稳定名一致
 
 退出码：0 全通过 / 1 有不一致 / 2 依赖缺失导致降级检查（不算失败）
 """
@@ -178,6 +179,73 @@ def check_calibration_topics() -> int:
     return 0
 
 
+def _container_devices(path: Path) -> set[str]:
+    """取 compose ``devices`` 列表里的容器侧路径。"""
+    document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    devices = document["services"]["edge-node"].get("devices", [])
+    targets: set[str] = set()
+    for item in devices:
+        if isinstance(item, str):
+            parts = item.split(":")
+            targets.add(parts[1] if len(parts) >= 2 else parts[0])
+        elif isinstance(item, dict) and item.get("target"):
+            targets.add(str(item["target"]))
+    return targets
+
+
+def check_sensor_devices() -> int:
+    """YAML、compose 与 udev 必须对同一个稳定设备名达成一致。"""
+    if yaml is None:
+        print(f"{SKIPPED} 无 pyyaml，跳过传感器设备路径交叉检查")
+        return 0
+
+    config_path = (
+        REPO_ROOT / "src/air_ground_car_bringup/config/real_sensors.yaml"
+    )
+    car_compose = REPO_ROOT / "src/deployment/docker/docker-compose.car.yml"
+    sensor_compose = (
+        REPO_ROOT / "src/deployment/docker/docker-compose.car-sensors.yml"
+    )
+    udev_path = REPO_ROOT / "src/deployment/network/99-air-ground-devices.rules"
+    paths = (config_path, car_compose, sensor_compose, udev_path)
+    missing = [str(path) for path in paths if not path.exists()]
+    if missing:
+        print(f"{BAD} 传感器设备契约缺文件: {missing}")
+        return 1
+
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    sensor_targets = _container_devices(sensor_compose)
+    car_targets = _container_devices(car_compose)
+    expected_uart = {
+        str(config["rplidar"]["port"]),
+        str(config["openmv"]["port"]),
+    }
+    expected_i2c = f'/dev/i2c-{int(config["icm42688"]["bus"])}'
+
+    problems = []
+    absent_uart = sorted(expected_uart - sensor_targets)
+    if absent_uart:
+        problems.append(f"传感器 compose 缺容器路径 {absent_uart}")
+    if expected_i2c not in car_targets:
+        problems.append(f"车机 compose 缺容器路径 {expected_i2c}")
+
+    udev_text = udev_path.read_text(encoding="utf-8")
+    for device in sorted(expected_uart):
+        stable_name = Path(device).name
+        if f'SYMLINK+="{stable_name}"' not in udev_text:
+            problems.append(f"udev 未声明稳定名 {device}")
+
+    if problems:
+        print(f"{BAD} 实机传感器设备路径不一致")
+        for problem in problems:
+            print(f"      {problem}")
+        return 1
+
+    all_targets = sorted(expected_uart | {expected_i2c})
+    print(f"{OK} 传感器 YAML / compose / udev 设备路径一致: {all_targets}")
+    return 0
+
+
 def main() -> int:
     print("  --- compose 结构 ---")
     compose_failed, degraded = check_compose_files()
@@ -186,7 +254,10 @@ def main() -> int:
     topics_failed = check_required_topics()
     topics_failed += check_calibration_topics()
 
-    total = compose_failed + topics_failed
+    print("  --- 实机设备路径一致性 ---")
+    devices_failed = check_sensor_devices()
+
+    total = compose_failed + topics_failed + devices_failed
     if total:
         return 1
     return 2 if degraded else 0

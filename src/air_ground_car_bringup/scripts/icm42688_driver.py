@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ICM42688-P 6 轴 IMU 驱动骨架 —— 接口层与量纲换算完整，I2C 读写待实机填。
+"""ICM42688-P 6 轴 IMU 驱动 —— ROS/量纲层与 Linux I2C 访问层已实现。
 
 发布: /car/imu/data (sensor_msgs/Imu)   ← 与 Gazebo 仿真同一话题
 配置: config/real_sensors.yaml §icm42688
@@ -10,13 +10,26 @@
 """
 
 import math
+import os
+import sys
 import time
 from typing import Tuple
 
 import rospy
-from hardware_interface import I2CInterface, create_i2c
-from sensor_config import load_section, positive_float, require_keys, resolve_backend
 from sensor_msgs.msg import Imu
+
+# 见 rplidar_driver.py 同处注释：避开 catkin devel relay 的同名自导入。
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
+from hardware_interface import I2CInterface, create_i2c  # noqa: E402
+from sensor_config import (  # noqa: E402
+    load_section,
+    positive_float,
+    require_keys,
+    resolve_backend,
+)
 
 SECTION = "icm42688"
 REQUIRED_KEYS = (
@@ -143,9 +156,11 @@ class ICM42688Driver:
             if not whoami or whoami[0] != WHO_AM_I_VALUE:
                 got = whoami[0] if whoami else -1
                 rospy.logwarn(
-                    "[icm42688_driver] WHO_AM_I=0x%02X, 期望 0x%02X "
-                    "(mock 后端下这条告警是正常的)", got, WHO_AM_I_VALUE,
+                    "[icm42688_driver] WHO_AM_I=0x%02X, 期望 0x%02X，拒绝写寄存器",
+                    got, WHO_AM_I_VALUE,
                 )
+                self.i2c.close()
+                return False
             self.i2c.write_register(REG_PWR_MGMT0, bytes((PWR_MGMT0_LN,)))
             self.i2c.write_register(
                 REG_GYRO_CONFIG0,
@@ -243,7 +258,10 @@ class ICM42688Driver:
 def main() -> None:
     """启动 ICM42688 驱动节点。"""
     rospy.init_node("icm42688_driver")
-    driver = ICM42688Driver(create_i2c(resolve_backend()))
+    backend = resolve_backend()
+    driver = ICM42688Driver(create_i2c(backend))
+    if backend == "real" and not driver.connect():
+        raise RuntimeError("ICM42688 real 后端首次连接失败，拒绝空转启动")
     driver.run()
 
 

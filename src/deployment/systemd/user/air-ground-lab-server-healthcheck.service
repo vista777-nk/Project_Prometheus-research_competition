@@ -1,0 +1,15 @@
+[Unit]
+Description=Air-Ground Laboratory Server Health Check (user service)
+After=air-ground-lab-server.service
+Wants=air-ground-lab-server.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/air-ground/server.env
+ExecStart=%h/.local/lib/air-ground/check_lab_server.py
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=air-ground-lab-server-health
