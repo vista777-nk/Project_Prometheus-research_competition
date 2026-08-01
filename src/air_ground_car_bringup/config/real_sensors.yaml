@@ -6,13 +6,14 @@
 # 两边的**话题名与消息类型必须一致**, 否则 car_preprocessor.py 在实机上
 # 订不到任何东西, 而且不会有任何报错。test/test_topic_contract.py 守这条。
 #
-# backend: mock — 假数据后端, 任意 OS 可跑, 只验证节点/参数/话题能起来
-#          real — 真实硬件后端, Phase 1 未实现, 启动时会立刻抛异常 (ADR-0009)
-backend: mock
+# backend: real — 默认真硬件；未实现的访问层必须启动失败 (ADR-0009/0015)
+#          mock — 仅显式冒烟使用，entrypoint 会将整机标记为降级
+backend: real
 
 # --- 思岚 RPLIDAR A1 (UART 115200) ---
 rplidar:
-  port: /dev/ttyUSB0
+  # udev 稳定名；不要写会随枚举顺序漂移的 ttyUSB0。
+  port: /dev/rplidar
   baudrate: 115200
   topic: /car/scan
   # frame_id 与 urdf/car_sensors.urdf.xacro 里的 link 名一致
@@ -81,7 +82,8 @@ hcsr04:
 
 # --- OpenMV 云台相机 (UART) ---
 openmv:
-  port: /dev/ttyAMA2
+  # OpenMV USB CDC 的 udev 稳定名，与 compose 设备映射一致。
+  port: /dev/openmv
   baudrate: 115200
   topic: /car/openmv/detections
   read_chunk: 256

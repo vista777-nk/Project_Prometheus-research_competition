@@ -3,7 +3,8 @@
 > **读者是 AI，不是人。** 这份文档的目标是让一个没有任何本项目上下文的模型，
 > 在 15 分钟内达到可以安全动手的状态，并且**知道自己不知道什么**。
 >
-> 写于 2026-08-01，交接点：Phase 1 完成、次日取得实机与 Ubuntu 20.04 实验室服务器。
+> 写于 2026-08-01；同日 Phase 1.5 接手后已在 Ubuntu 20.04 实验室服务器完成
+> ROS 真环境基线与部署失败关闭，实机硬件联调继续按本文顺序推进。
 > 上一份同类文档是 [phase1-pre-departure-brief.md](../../obsolete-documentation/phase1-pre-departure-brief.md)（Phase 0→1 交接，已归档）。
 
 ---
@@ -35,9 +36,9 @@ curl -sSL "https://api.github.com/repos/vista777-nk/research_compitition/actions
 |---|---|
 | 分支 | `feat/task-XX`（**不是** main；main 落后很多，合并是人的决定） |
 | HEAD | `dc2b38e`（2026-08-01；此后的提交均为纯文档，代码状态同 `a419b98`） |
-| Phase | Phase 0 仿真 ✅ 9/9 · **Phase 1 固件+部署 ✅ 6/6** · Phase 2 未开始 |
+| Phase | Phase 0 仿真 ✅ 9/9 · Phase 1 基础设施 ✅ 6/6 · **Phase 1.5 实机接入进行中** · Phase 2 未开始 |
 | 最近 CI | run #25 (`fe0cf66`) 全绿；run #26 (`a419b98`) 是 cppcheck 转阻塞后的首跑；此后 4 个提交均为纯文档 |
-| ADR | 0001–0012 已用；**0013 已预留给「超声波时序方案 A/B/C」**，别占 |
+| ADR | 0001–0012、0014–0017 已用；**0013 已预留给「超声波时序方案 A/B/C」**，别占 |
 
 ⚠ **提交会自动推送**（VSCode 的 post-commit sync）。`git commit` 之后
 `origin/feat/task-XX` 立刻就前进了。**把每一次 commit 当成已公开**。
@@ -138,10 +139,13 @@ docs/decisions/ADR-*.md        决策记录，不可变
 | `python3 src/deployment/calibration/test/test_calib_pipeline.py` | `Ran 16 tests OK` + 实测值对比表 | numpy, opencv, pyyaml |
 | `python3 src/deployment/test/test-serial-loopback.py --self-test` | `通过 13 · 失败 0` | 仅标准库 |
 | `python3 src/deployment/test/test-observation-pipeline.py` | `Ran 10 tests OK` | numpy, opencv, pyyaml |
-| `python3 -m pytest src/air_ground_car_bringup/test/host -q` | `69 passed` | pytest, pyyaml |
+| `python3 -m pytest src/air_ground_car_bringup/test/host -q` | `81 passed` | pytest, pyyaml |
+| `python3 src/deployment/test/test_server_deployment.py` | `Ran 9 tests OK` | 仅标准库 |
 | `cd src/firmware/stm32_mecanum && make test` | Unity 全过 | gcc + make |
 | `cd src/firmware/mspm0_diff && make test` | 70 用例全过 | gcc + make |
-| `make test-unit` / `make test-all` / `make test-e2e` | — | **仅 Ubuntu 20.04 + ROS Noetic** |
+| `make test-unit` | `82 tests` | **仅 Ubuntu 20.04 + ROS Noetic** |
+| `make test-all` / `make test-e2e` | 全套回归 / `33/33` | Ubuntu 20.04 + ROS Noetic + Xvfb |
+| `python3 src/deployment/server/check_lab_server.py` | 5 个服务节点 + 本地 TCP 均健康 | 中关村服务器；常驻服务见 ADR-0017 |
 
 CI 有 7 个 job。四个阻塞 lint 工具：shellcheck 0.10.0（钉版本）、
 yamllint 1.38.0（钉）、flake8 7.1.1（钉）、cppcheck（**不钉**，理由见 ADR-0012）。
@@ -159,7 +163,13 @@ yamllint 1.38.0（钉）、flake8 7.1.1（钉）、cppcheck（**不钉**，理�
 | 标定流水线数值正确性 | 合成真值：fx +0.18% / cx −0.06px / RMS 0.137px / 陀螺噪声密度 +1.0% |
 | 串口帧协议三端一致 | 黄金帧逐字节，与 `mspm0_diff/test/test_protocol.c::test_pong_golden_frame` 同源 |
 | Observation 数据流 | 真 `CarPreprocessor` + 真 `WorldModelStore`，10 条 |
-| 部署配置静态正确性 | `validate.sh` 43 项，CI 上 systemd/compose 真解析 |
+| ROS 真环境基线 | Ubuntu 20.04.6 / Noetic：6 包构建成功；Phase 1 基线 80/80，新增服务器测试后当前 82/82（ADR-0014） |
+| 部署配置静态正确性 | 系统 Python 跑 `validate.sh` 52 项全过；45 个健康检查 + 8 个入口模式 + 9 个服务器常驻部署用例 |
+| 实机模式失败关闭 | real→real；mock→DEGRADED；sim→仿真；缺 real launch 不回退（ADR-0015） |
+| UART / I²C 真实访问层 | pyserial / Linux SMBus 生产类；Host 全套 81/81；错误芯片 ID、半截握手、运行中拔线均有负向用例 |
+| 真实 ROS 传感器入口 | mock 五节点持续运行 8s；real 在无设备服务器上整套关闭；同时抓出并修复 Catkin relay 同名自导入 |
+| 实验室服务器入口 | `192.168.3.30` 真机：5 个服务端节点、`0.0.0.0:9090`，TCP heartbeat 解码到 `/server/car/state`（ADR-0016） |
+| 服务器常驻与恢复 | `Linger=yes` 用户 systemd 已启用；required 节点故障注入后 `NRestarts=1`、五节点和 `127.0.0.1:9090` 自动恢复（ADR-0017） |
 | cppcheck 对固件 C 代码零发现 | CI run #24/#25 步骤退出码均为 0 |
 | numpy/OpenCV 版本差异不影响标定结论 | CI #25 用 numpy<2 + OpenCV 4.x 跑通全部 16 条 |
 
@@ -167,7 +177,6 @@ yamllint 1.38.0（钉）、flake8 7.1.1（钉）、cppcheck（**不钉**，理�
 
 | # | 事项 | 怎么验 | 没验的后果 |
 |:--:|------|-------|-----------|
-| U1 | `catkin test` 的真实结论 | 见 §7-A1。⚠ CI 里那一步是 `catkin test \|\| echo`，**吞掉退出码** | ROS 侧单元测试可能一直在失败而无人知道 |
 | U2 | `camera_info_manager` 是否接受 `air_ground_calibration` 额外键 | 加载一次标定 YAML 看有无 warning | 被拒则要改用 `--strict-camera-info` |
 | U3 | PX4 是否支持 MAVLink 签名、参数名 | `nsh> param show MAV_*` | ADR-0010 遗留，签名以为开着其实没开 |
 | U4 | MAVROS 签名参数入口 | `rosparam list \| grep -i sign` | 同上 |
@@ -178,25 +187,14 @@ yamllint 1.38.0（钉）、flake8 7.1.1（钉）、cppcheck（**不钉**，理�
 | U9 | 串口回路对**真硬件** | 见 §7-B | 目前只有 13 条无硬件自测 |
 | U10 | MSPM0 固件可烧录性 | 需接入 TI SDK + SysConfig，见其 README §7 | CI 产物是 `ci-link` 剖面，**烧进去电机不转** |
 | U11 | 两套 OpenCV 的逐项数值差 | 读下一次 CI 里 `test_calib_pipeline` 打印的对比表 | 系统性偏移可以躲在 3~10 倍容差里 |
+| U12 | UART / I²C 对**真实传感器** | 分别接 RPLIDAR、OpenMV、ICM42688，使用 §7-C 的单节点入口 | 当前证明了 OS 访问与失败语义，尚未证明具体线材/固件/电气连接 |
+| U13 | 跨校区隧道与时钟 | 确认 VPN/SSH 隧道后只测 TCP，不把 ROS 暴露跨 WAN；记录三机相对同一参考源的偏差 | 服务器本地健康不能证明良乡端可达或时间戳一致 |
 
-### U1 是最高优先级，理由
+### U1 已关闭（2026-08-01）
 
-`.github/workflows/ci.yml` 的 `build-and-test` job：
-
-```yaml
-- name: Run unit tests
-  run: |
-    catkin test --no-status || echo "Tests completed (check summary above)"
-```
-
-`|| echo` 把退出码吞了。这是本仓库已经清理过两次的同一族问题
-（"永远不会失败的检查"），但它还在。**在 Ubuntu 机器上手工跑一遍
-`catkin test` 拿到真实结论之前，不要把它改成阻塞**——按 ADR-0008，
-先测量再决定。测量结果写进日记，然后按 ADR-0012 的模式处理。
-
-特别注意：task-15 给 `test_ros_stub_fidelity.py` 加了 17 条新断言
-（Image/Odometry/Observation/WorldState 等替身与真消息类逐字段比对），
-**那 17 条从未在真 ROS 下跑过**——它们正是被 U1 这个洞遮住的东西。
+仓库重命名后先保留并移走含旧绝对路径的 Catkin 生成缓存，再在当前目录全量构建。
+6 个项目包构建成功，`catkin test --no-status` 原始退出码 0，80 个测试全部通过，
+其中真 ROS 消息忠实度对照 24 条。CI 已移除 `|| echo` 并改为阻塞；见 ADR-0014。
 
 ---
 
@@ -207,17 +205,27 @@ yamllint 1.38.0（钉）、flake8 7.1.1（钉）、cppcheck（**不钉**，理�
 ### A. Ubuntu 20.04 服务器（零硬件风险，先做）
 
 ```bash
-# A1 —— 最高优先级，解 U1
-bash setup_all.sh                       # 或按 task-01-env-setup.md
+# A1 —— 已完成；换服务器或重命名后用于复核
 make build
-catkin test --no-status ; echo "真实退出码: $?"   # ← 记下这个数
-catkin_test_results build/test_results  # 逐条看哪些失败
+catkin test --no-status
 ```
-把结论写进日记。若 `test_ros_stub_fidelity.py` 有失败：**改的是替身，不是驱动**
-——先对齐字段表。若全过，考虑把 CI 那一步的 `|| echo` 去掉（新 ADR）。
+当前基线：6 包构建成功、82/82、退出码 0。CI 已按 ADR-0014 阻塞。
 
 ```bash
-# A2 仿真基线仍然可用
+# A2 —— 已安装的服务器常驻入口（不要用会启动本地边缘客户端的 launch-server）
+systemctl --user status air-ground-lab-server.service
+systemctl --user list-timers air-ground-lab-server-healthcheck.timer
+python3 src/deployment/server/check_lab_server.py --json
+ss -ltn 'sport = :11311 or sport = :9090'
+```
+
+期望只有 `tcp_server/world_model/slam_node/eqa_engine/coordinator` 五个项目节点，
+不得出现 `edge_server_bridge` 或 `drone_car_bridge`；11311 与 9090 都只监听
+`127.0.0.1`。当前已完成真实 heartbeat 解码和 required 节点故障恢复；跨校区只准
+走后续批准的受控隧道，见 ADR-0017。
+
+```bash
+# A3 仿真基线仍然可用
 make test-all && make test-e2e
 ```
 中止条件：仿真基线跑不起来 → 先修基线，不要带着坏基线上硬件。
@@ -246,15 +254,23 @@ CHASSIS=mecanum bash src/deployment/test/test-serial-loopback.sh /dev/ttyAMA0
 
 ### C. 车机树莓派
 
-⚠ **先想明白 D8，再决定 `EDGE_MODE` 设什么**（2026-08-01 新增）：
-`car_edge_real.launch` 已被 task-14 交付（默认 `backend:=mock`），`entrypoint.sh`
-"文件不存在才降级"的前提已失效。`.env` 里若设 `EDGE_MODE=real`，车机会加载它
-跑 **mock 假数据、不触发降级、健康检查显示绿**——正是本仓库最警惕的假绿灯。
-在重新设计 mock/real 降级语义（改 `entrypoint.sh` + 写 ADR，见 §8-D8）之前，
-**`.env` 里必须显式设 `EDGE_MODE=sim`**——默认值恰恰就是 `real`
-（`.env.example`、`docker-compose.edge.yml`、`entrypoint.sh` 三处默认都是），
-"保持默认"会直接踩进 D8。设为 `sim` 让"没数据"保持显而易见，
-传感器话题按 C3 逐个核实。
+`EDGE_MODE` 已由 ADR-0015 固化为三种互斥语义：
+
+- `real`：只传 `backend:=real`，后端未实现/硬件不可用时明确失败，绝不回退；
+- `mock`：显式假硬件冒烟，健康检查必须返回 DEGRADED（退出码 4）；
+- `sim`：仿真适配器。
+
+实机联调只能用 `real`。UART / I²C Linux 访问层已经实现，但尚未接真实传感器；
+GPIO 仍等待 ADR-0013，因此整车满配 real 入口现在会失败，这是正确中止条件。
+逐件台架验收时用 `car_edge_real.launch` 的 `enable_*` 参数关闭其余传感器，
+不要把该临时子集当成满配部署。
+
+```bash
+# 例：只验 RPLIDAR；其余节点不启动
+roslaunch air_ground_car_bringup car_edge_real.launch \
+  enable_icm42688:=false enable_hcsr04:=false enable_openmv:=false \
+  enable_preprocessor:=false
+```
 
 ```bash
 sudo bash src/deployment/install.sh --role car --dry-run   # 先看要做什么
@@ -339,14 +355,15 @@ E3 签名 A/B 对照（ADR-0010 §决策-2 **强制**）：
 
 | # | 内容 | 结的条件 | 位置 |
 |:--:|------|---------|------|
-| D1 | `catkin test` 的 `\|\| echo` 吞退出码 | 先在 Ubuntu 上测量真实结论，再按 ADR-0008 决定 | `.github/workflows/ci.yml` build-and-test job |
+| D1 | ✅ 已关闭：ROS 80/80，CI 改为阻塞 | ADR-0014 | `.github/workflows/ci.yml` |
 | D2 | 超声波时序方案 A/B/C | 需实机测 GPIO 时序；**编号已预留 ADR-0013** | task-14 日记 |
 | D3 | PX4/MAVROS 签名参数名 | §7-E1/E2 | ADR-0010 §影响 |
 | D4 | `camera_info_manager` 额外键 | §7-D2 | ADR-0011 §决策-1 |
 | D5 | `/car/openmv/image_raw` 发布者 | §7-C3 | 标定 README §5 第 5 条 |
 | D6 | 两套 OpenCV 逐项数值差 | 读下次 CI 日志的对比表 | ADR-0011 §影响 |
 | D7 | 本地从未跑过 cppcheck | 有条件就补一次本地全量 | ADR-0012 §影响 |
-| D8 | `car_edge_real.launch` 已被 task-14 交付（默认 mock 后端），`entrypoint.sh` 的"文件不存在才降级"前提失效：`EDGE_MODE=real` 时跑 mock 假数据、**不降级、健康检查显示绿** | 重新设计 mock/real 降级语义（区分"文件存在但后端是 mock"与"真传感器在线"），改动需写 ADR | `entrypoint.sh` L116-128；`src/deployment/README.md` §5.4"现状" |
+| D8 | ✅ 已关闭：real/mock/sim 显式分离，real 失败关闭，mock 报 DEGRADED | ADR-0015；当前 8 条入口模式用例 | `entrypoint.sh`；部署 README §5.4 |
+| D9 | 跨校区受控隧道 + 两端时间偏差实测 | 需网络方案、两台 Pi 实机与现场时钟证据 | ADR-0017；`network_server.yaml` |
 
 ---
 
@@ -360,6 +377,20 @@ E3 签名 A/B 对照（ADR-0010 §决策-2 **强制**）：
   与 CI 钉的 numpy 1.x + OpenCV 4.x 不是同一套
 - 控制台是 GBK：跑任何输出中文的脚本前 `export PYTHONIOENCODING=utf-8:replace`
 - shellcheck 0.10.0 二进制曾放在 `/tmp/sc/shellcheck.exe`
+
+### 当前实验室服务器（2026-08-01 实测）
+
+- Ubuntu 20.04.6、ROS Noetic、Docker 28.1.1；3 × RTX A6000（每张 49140 MiB）
+- 当前有线地址 `192.168.3.30/24`；服务器与硬件分属中关村/良乡，旧同网
+  `192.168.1.100` 规划不再作为跨校区默认
+- `systemd-timesyncd` 当前显示 `System clock synchronized: yes`；`chronyc` 未安装，
+  仍不能声称与两台 Pi 的相对时间偏差已经验证
+- `air-ground-lab-server.service` 与五分钟健康 timer 已启用，用户 `Linger=yes`；
+  ROS/TCP 只监听回环，日志位于 `/data2/air-ground-server/ros-log`
+- 根分区使用率 97%（约 87 GiB 可用），`/data2` 约 1.1 TiB 可用；不要把项目日志迁回根分区
+- 未接机器人 USB/串口设备；只有 `/dev/i2c-0`、`/dev/i2c-1` 等主机设备
+- `python3` 默认指向 Anaconda 且没有 pytest；ROS/Catkin 用 `/usr/bin/python3`，
+  Host 测试本次借用了已有 `knn_wsr` 环境，不要因此修改系统 Python
 
 ### 跨平台陷阱（长期有效）
 | 陷阱 | 症状 | 对策 |

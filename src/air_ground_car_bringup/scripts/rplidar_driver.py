@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RPLIDAR A1 驱动骨架 —— 接口层与协议解析完整，硬件访问层待实机填。
+"""RPLIDAR A1 驱动 —— ROS/协议层与 Linux UART 访问层已实现。
 
 发布: /car/scan (sensor_msgs/LaserScan)   ← 与 Gazebo 仿真同一话题同一类型
 配置: config/real_sensors.yaml §rplidar
@@ -7,23 +7,32 @@
 分层（ADR-0009）:
     接口层    ROS 话题 / 参数 / 重连退避   —— 完整实现
     数据处理层 RPLIDAR 二进制协议解析      —— 完整实现，纯函数，可单测
-    硬件访问层 UART 读写                  —— 由 UARTInterface 注入，Phase 1 只有 mock
+    硬件访问层 UART 读写                  —— mock / pyserial real 可替换
 """
 
 import math
+import os
+import sys
 import time
 from typing import List, NamedTuple, Optional
 
 import rospy
-from hardware_interface import UARTInterface, create_uart
-from sensor_config import (
+from sensor_msgs.msg import LaserScan
+
+# catkin_install_python 在 devel 空间生成 relay；relay 目录里还有同名的
+# hardware_interface.py。若不优先源码目录，Python 会把 relay 自己当成模块导入。
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
+from hardware_interface import HardwareError, UARTInterface, create_uart  # noqa: E402
+from sensor_config import (  # noqa: E402
     finite_float,
     load_section,
     positive_float,
     require_keys,
     resolve_backend,
 )
-from sensor_msgs.msg import LaserScan
 
 SECTION = "rplidar"
 REQUIRED_KEYS = (
@@ -229,15 +238,37 @@ class RPLidarDriver:
     # --- 连接管理 -----------------------------------------------------------
     def connect(self) -> bool:
         """打开串口并进入标准扫描模式。失败返回 False，不抛异常。"""
-        if not self.uart.open(self.port, self.baudrate):
+        try:
+            opened = self.uart.open(self.port, self.baudrate)
+        except (HardwareError, OSError, RuntimeError) as error:
+            rospy.logwarn_throttle(
+                5.0, "[rplidar_driver] 打开 %s 异常: %s", self.port, error
+            )
+            return False
+        if not opened:
             rospy.logwarn_throttle(
                 5.0, "[rplidar_driver] 打开 %s 失败，%.1fs 后重试",
                 self.port, self.reconnect_interval,
             )
             return False
-        self.uart.write(bytes((SYNC_BYTE, CMD_STOP)))
-        self.uart.write(bytes((SYNC_BYTE, CMD_SCAN)))
-        descriptor = self.uart.read(DESCRIPTOR_LEN, timeout_ms=1000.0)
+        try:
+            self.uart.write(bytes((SYNC_BYTE, CMD_STOP)))
+            self.uart.write(bytes((SYNC_BYTE, CMD_SCAN)))
+            descriptor = self.uart.read(DESCRIPTOR_LEN, timeout_ms=1000.0)
+        except (HardwareError, OSError, RuntimeError) as error:
+            self.uart.close()
+            rospy.logwarn_throttle(
+                5.0, "[rplidar_driver] 启动扫描失败: %s", error
+            )
+            return False
+        if len(descriptor) != DESCRIPTOR_LEN:
+            self.uart.close()
+            rospy.logwarn_throttle(
+                5.0,
+                "[rplidar_driver] 扫描应答不完整: %d/%d 字节",
+                len(descriptor), DESCRIPTOR_LEN,
+            )
+            return False
         if descriptor and descriptor != SCAN_DESCRIPTOR:
             # 不当作致命错误: 部分固件版本的描述符尾字节不同，但数据帧格式一致。
             rospy.logwarn(
@@ -283,7 +314,16 @@ class RPLidarDriver:
                 self._next_retry_at = now + self.reconnect_interval
                 return []
 
-        data = self.uart.read(self.read_chunk, timeout_ms=100.0)
+        try:
+            data = self.uart.read(self.read_chunk, timeout_ms=100.0)
+        except (HardwareError, OSError, RuntimeError) as error:
+            rospy.logwarn_throttle(
+                5.0, "[rplidar_driver] 读取失败，%.1fs 后重连: %s",
+                self.reconnect_interval, error,
+            )
+            self.disconnect()
+            self._next_retry_at = now + self.reconnect_interval
+            return []
         if data:
             self._last_data_at = now
         else:
@@ -358,7 +398,10 @@ class RPLidarDriver:
 def main() -> None:
     """启动 RPLIDAR 驱动节点。"""
     rospy.init_node("rplidar_driver")
-    driver = RPLidarDriver(create_uart(resolve_backend()))
+    backend = resolve_backend()
+    driver = RPLidarDriver(create_uart(backend))
+    if backend == "real" and not driver.connect():
+        raise RuntimeError("RPLIDAR real 后端首次连接失败，拒绝空转启动")
     driver.run()
 
 

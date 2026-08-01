@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """验证 ROS 替身与真实消息定义一致 —— 本测试只在有 ROS 的环境里跑。
 
-`test/host/` 下那 69 个用例全部跑在 `ros_stub.py` 的假消息类上。
+`test/host/` 下的用例（Phase 1.5 当前 81 条）跑在 `ros_stub.py` 的假消息类上。
 那些用例能证明驱动逻辑对，但证明不了**替身本身**对：
 如果替身把 `angle_increment` 抄成了 `angle_step`，驱动跟着写 `angle_step`，
 两边一致，测试全绿，实机上 LaserScan 的角分辨率永远是 0。

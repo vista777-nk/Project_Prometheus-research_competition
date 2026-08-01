@@ -134,6 +134,22 @@ class OpenMVBridgeTest(unittest.TestCase):
         bridge = OpenMVBridge(FailingUART())
         self.assertEqual(bridge.step(), [])
 
+    def test_runtime_read_failure_triggers_reconnect(self):
+        """运行中串口异常只能断开并退避，不能杀掉整个节点。"""
+
+        class UnpluggedUART(MockUART):
+            def read(self, n, timeout_ms=100.0):
+                raise OSError(5, "Input/output error")
+
+        uart = UnpluggedUART()
+        bridge = OpenMVBridge(uart)
+        self.assertTrue(bridge.connect())
+        self.assertEqual(bridge.step(), [])
+        self.assertFalse(uart.is_open)
+        self.assertTrue(
+            any("读取失败" in message for _level, message in self.rospy.logs)
+        )
+
     def test_stall_triggers_reconnect(self):
         uart = MockUART()
         bridge = OpenMVBridge(uart)

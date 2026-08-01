@@ -46,6 +46,7 @@ services:
     environment:
       AIR_GROUND_ROLE: ${ROLE:-car}
       AIR_GROUND_CHASSIS: ${CHASSIS:-diff}
+      # real=真硬件(失败关闭) | mock=假硬件(降级) | sim=仿真
       EDGE_MODE: ${EDGE_MODE:-real}
       ROS_MASTER_URI: ${ROS_MASTER_URI:-http://192.168.1.100:11311}
       # 多网卡 (以太网 + WiFi + 4G) 下必须显式指定本机对外地址,

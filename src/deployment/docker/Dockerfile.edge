@@ -46,6 +46,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3-osrf-pycommon \
         python3-lxml \
         python3-future \
+        python3-smbus \
         ros-noetic-mavros \
         ros-noetic-mavros-extras \
         ros-noetic-mavros-msgs \
@@ -88,7 +89,7 @@ RUN pip3 install --no-cache-dir --upgrade --retries 5 --timeout 120 \
 
 RUN pip3 install --no-cache-dir --retries 5 --timeout 120 \
         "pymavlink>=2.4.39,<3.0.0" \
-        "pyserial>=3.5"
+        "pyserial>=3.5,<4.0.0"
 
 # 装完立刻验证能 import。
 #

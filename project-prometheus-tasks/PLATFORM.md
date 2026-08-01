@@ -116,7 +116,7 @@ STM32F407 / MSPM0G3507 (Layer 1)           Pixhawk 6C (Layer 1)
 │   │   ├── car_diff.launch
 │   │   ├── car_mecanum.launch
 │   │   ├── car_edge.launch
-│   │   └── car_edge_real.launch  # 实机模式（task-14，默认 mock 后端）
+│   │   └── car_edge_real.launch  # 实机模式（默认 real；mock 必须显式选择）
 │   ├── config/
 │   │   ├── car_sensors.yaml
 │   │   ├── car_edge.yaml           # 边缘节点配置（Task-07）
@@ -149,7 +149,9 @@ STM32F407 / MSPM0G3507 (Layer 1)           Pixhawk 6C (Layer 1)
 │   ├── launch/
 │   │   └── air_ground_com_bridge.launch
 │   ├── config/
-│   │   └── network.yaml
+│   │   ├── network.yaml             # 仿真回环
+│   │   ├── network_lab.yaml         # 同一受控实验室网
+│   │   └── network_server.yaml      # 跨校区服务器回环默认
 │   ├── scripts/
 │   │   ├── drone_car_bridge.py     # MAVLink ↔ ROS
 │   │   └── edge_server_bridge.py   # ROS ↔ TCP JSON
@@ -160,7 +162,8 @@ STM32F407 / MSPM0G3507 (Layer 1)           Pixhawk 6C (Layer 1)
 │   │   ├── air_ground_sim.launch
 │   │   ├── drone_only.launch
 │   │   ├── car_only.launch
-│   │   └── server_only.launch
+│   │   ├── server_only.launch
+│   │   └── lab-server-real.launch
 │   └── package.xml
 │
 └── air_ground_lab_server/                  # 实验室服务器 (Layer 2~3)
@@ -178,7 +181,7 @@ STM32F407 / MSPM0G3507 (Layer 1)           Pixhawk 6C (Layer 1)
 ```
 
 > 注：`src/` 下另有 `firmware/`（STM32/MSPM0 下位机固件，非 ROS）与
-> `deployment/`（树莓派部署 + 标定工具链，非 ROS），结构见各自 README。
+> `deployment/`（树莓派部署 + 服务器 systemd + 标定工具链，非 ROS），结构见各自 README。
 
 ---
 
@@ -235,8 +238,9 @@ roslaunch air_ground_drone_bringup drone_edge.launch
 roslaunch air_ground_car_bringup car_edge.launch chassis:=diff
 roslaunch air_ground_com_bridge air_ground_com_bridge.launch
 
-# 实验室服务器
-roslaunch air_ground_lab_server server.launch
+# 中关村实验室服务器（已安装为 Linger 用户服务）
+systemctl --user status air-ground-lab-server.service
+python3 src/deployment/server/check_lab_server.py --json
 ```
 
 ---
@@ -289,7 +293,8 @@ map                    ← 全局固定坐标系 (GPS/地标融合)
 | 环境 | 方案 | 精度 |
 |------|------|:---:|
 | 仿真 | `use_sim_time:=true`（rosmaster 统一管理） | 毫秒 |
-| 实机局域网 | chrony（NTP），车机作为 NTP server，无人机/服务器 sync | 毫秒 |
+| 良乡实机局域网 | chrony（NTP），车机作为 NTP server、无人机 sync | 毫秒 |
+| 中关村服务器 | 校园/公共 NTP；与良乡设备另做同参考源偏差实测 | 毫秒（待实测） |
 | 实机户外 | PTP（IEEE 1588），需要硬件时间戳支持 | 微秒 |
 
 ### 验证方法
@@ -298,6 +303,7 @@ map                    ← 全局固定坐标系 (GPS/地标融合)
 # 检查各机器与服务器的时钟偏差
 ssh drone-pi  "chronyc tracking | grep 'System time'"
 ssh car-pi    "chronyc tracking | grep 'System time'"
+timedatectl status   # 中关村服务器；还需记录三机相对同一参考源的偏差
 # 偏差应 < 10ms
 ```
 

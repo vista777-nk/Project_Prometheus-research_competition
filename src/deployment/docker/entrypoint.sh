@@ -9,21 +9,25 @@
 # =============================================================================
 set -euo pipefail
 
-# shellcheck disable=SC1091
-source /opt/ros/noetic/setup.bash
-# shellcheck disable=SC1091
-source /home/airground/catkin_ws/devel/setup.bash
+# shellcheck disable=SC1090
+source "${AIR_GROUND_ROS_SETUP:-/opt/ros/noetic/setup.bash}"
+# shellcheck disable=SC1090
+source "${AIR_GROUND_WS_SETUP:-/home/airground/catkin_ws/devel/setup.bash}"
 
 ROLE="${AIR_GROUND_ROLE:-car}"
 CHASSIS="${AIR_GROUND_CHASSIS:-diff}"
-EDGE_MODE="${EDGE_MODE:-real}"      # real=实机 | sim=仿真
+EDGE_MODE="${EDGE_MODE:-real}"      # real=真硬件 | mock=假硬件(降级) | sim=仿真
 export ROS_MASTER_URI="${ROS_MASTER_URI:-http://localhost:11311}"
 
 # ROS_IP 不设的话, 多网卡 (WiFi + 4G + 以太网) 的树莓派会随机挑一个地址注册到
 # Master, 结果是 Master 能看到节点、但订阅方连不上它。实机上必须显式指定。
-if [[ -n "${ROS_IP:-}" ]]; then
-    export ROS_IP
+if [[ -z "${ROS_IP:-}" ]]; then
+    echo "[entrypoint] 启动中止: ROS_IP 未设置" >&2
+    echo "[entrypoint]   在 /opt/air-ground/.env 写入本机对机器人可达的固定地址。" >&2
+    echo "[entrypoint]   不允许由 ROS 在多网卡设备上猜测通告地址。" >&2
+    exit 1
 fi
+export ROS_IP
 
 echo "=========================================="
 echo " Air-Ground Edge Node"
@@ -43,8 +47,8 @@ echo "=========================================="
 # 写进 /home/airground/.ros/log/ —— 这是 compose 里 bind 到宿主机
 # /var/log/air-ground 的目录, 于是容器外的 healthcheck/check_nodes.py 读得到。
 #
-# 长期该住在哪: task-14 的 Capability 消息 (见 ICD.md) 才是"我这台车现在有哪些
-# 能力"的正确归宿。在 task-14 落地前, 这个文件是最小可用的替代。
+# 运行期能力应由 task-14 已交付的 Capability 消息表达；这个文件只记录
+# roslaunch 之前就能确定的启动模式与镜像身份，供容器外健康检查读取。
 STATE_DIR="${AIR_GROUND_STATE_DIR:-/home/airground/.ros/log}"
 STATE_FILE="${STATE_DIR}/edge-state.env"
 
@@ -59,7 +63,9 @@ write_state() {
         echo "# 由 entrypoint.sh 在每次容器启动时重写。手工改它没有意义。"
         echo "AIR_GROUND_ROLE=${ROLE}"
         echo "AIR_GROUND_CHASSIS=${CHASSIS}"
+        echo "AIR_GROUND_EDGE_MODE=${EDGE_MODE}"
         echo "AIR_GROUND_LAUNCH=${LAUNCH_FILE:-}"
+        echo "AIR_GROUND_SENSOR_BACKEND=${SENSOR_BACKEND:-}"
         echo "AIR_GROUND_IMAGE=${AIR_GROUND_BUILD_COMMIT:-local}"
         echo "AIR_GROUND_DEGRADED=${DEGRADED}"
         echo "AIR_GROUND_DEGRADED_REASON=${DEGRADED_REASON}"
@@ -113,28 +119,58 @@ esac
 case "${ROLE}" in
     car)
         LAUNCH_PKG="air_ground_car_bringup"
-        if [[ "${EDGE_MODE}" == "real" ]]; then
-            LAUNCH_FILE="car_edge_real.launch"
-            # car_edge_real.launch 由 task-14 (实机传感器驱动) 提供, 现在还不存在。
-            # 与其让 roslaunch 抛一句 "cannot load file", 不如在这里说清楚状况并降级。
-            if ! rospack find "${LAUNCH_PKG}" >/dev/null 2>&1 \
-               || [[ ! -f "$(rospack find ${LAUNCH_PKG})/launch/${LAUNCH_FILE}" ]]; then
-                echo "[entrypoint] ⚠ ${LAUNCH_FILE} 尚未提供 (由 task-14 交付)," >&2
-                echo "[entrypoint]   本次降级为 car_edge.launch (仿真侧同款边缘节点)。" >&2
-                echo "[entrypoint]   实机传感器驱动不会启动, 这是预期行为。" >&2
-                LAUNCH_FILE="car_edge.launch"
+        SENSOR_BACKEND=""
+        case "${EDGE_MODE}" in
+            real)
+                LAUNCH_FILE="car_edge_real.launch"
+                SENSOR_BACKEND="real"
+                ;;
+            mock)
+                LAUNCH_FILE="car_edge_real.launch"
+                SENSOR_BACKEND="mock"
                 DEGRADED=1
-                DEGRADED_REASON="car_edge_real.launch 未提供 (task-14 未交付), 已降级为 car_edge.launch —— 实机传感器驱动未启动"
-            fi
-        else
-            LAUNCH_FILE="car_edge.launch"
+                DEGRADED_REASON="EDGE_MODE=mock —— 传感器节点使用假硬件后端，数据不得作为实机证据"
+                ;;
+            sim)
+                LAUNCH_FILE="car_edge.launch"
+                ;;
+            *)
+                die "未知车机模式 '${EDGE_MODE}'" \
+                    "EDGE_MODE 只接受 real、mock 或 sim。" \
+                    "实机部署用 real；无硬件接口冒烟用 mock；仿真用 sim。"
+                ;;
+        esac
+
+        package_path="$(rospack find "${LAUNCH_PKG}" 2>/dev/null)" ||
+            die "找不到 ROS package '${LAUNCH_PKG}'" \
+                "确认镜像中的 catkin 工作空间已成功构建。"
+        if [[ ! -f "${package_path}/launch/${LAUNCH_FILE}" ]]; then
+            die "找不到 ${LAUNCH_PKG}/launch/${LAUNCH_FILE}" \
+                "EDGE_MODE=${EDGE_MODE} 不会自动降级；修复镜像或显式选择其他模式。"
         fi
+
         write_state
-        exec roslaunch "${LAUNCH_PKG}" "${LAUNCH_FILE}" "default_chassis:=${CHASSIS}"
+        launch_args=("default_chassis:=${CHASSIS}")
+        if [[ -n "${SENSOR_BACKEND}" ]]; then
+            launch_args+=("backend:=${SENSOR_BACKEND}")
+        fi
+        exec roslaunch "${LAUNCH_PKG}" "${LAUNCH_FILE}" "${launch_args[@]}"
         ;;
 
     drone)
+        case "${EDGE_MODE}" in
+            real|sim) ;;
+            mock)
+                die "无人机角色不支持 EDGE_MODE=mock" \
+                    "无人机的 SITL 与 Pixhawk 都经 MAVROS 适配；请选择 real 或 sim。"
+                ;;
+            *)
+                die "未知无人机模式 '${EDGE_MODE}'" \
+                    "EDGE_MODE 只接受 real 或 sim。"
+                ;;
+        esac
         LAUNCH_FILE="drone_edge.launch"
+        SENSOR_BACKEND="mavros"
         write_state
         exec roslaunch air_ground_drone_bringup "${LAUNCH_FILE}"
         ;;

@@ -16,7 +16,8 @@
 #   · ROS Master (roscore) 由本镜像承担, 两台 Pi 向它注册
 #   · TCP :9090 边缘上行接收端口
 #
-# 现在需要跑服务器侧, 用仓库根的 `make launch-server-only` 在裸机上启动。
+# 现在需要跑服务器侧，用 `src/deployment/install_server.sh` 安装裸机 systemd
+# 常驻服务；临时调试仍可用 `ROS_IP=127.0.0.1 make launch-server-real`。
 # =============================================================================
 
 FROM ros:noetic-ros-base-focal
@@ -24,5 +25,5 @@ FROM ros:noetic-ros-base-focal
 LABEL description="Air-Ground Lab Server (PLACEHOLDER — not implemented, see Phase 2)"
 
 RUN echo 'Dockerfile.server 是 Phase 2 占位, 尚未实现。' >&2 \
-    && echo '当前请在裸机上用 make launch-server-only 启动服务器侧。' >&2 \
+    && echo '当前请在裸机上安装 air-ground-lab-server@.service。' >&2 \
     && exit 1

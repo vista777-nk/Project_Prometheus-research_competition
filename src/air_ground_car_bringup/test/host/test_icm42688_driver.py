@@ -106,11 +106,13 @@ class ICM42688DriverTest(unittest.TestCase):
             message.linear_acceleration_covariance[8], 0.001 ** 2
         )
 
-    def test_wrong_who_am_i_warns_but_continues(self):
+    def test_wrong_who_am_i_fails_closed_before_writes(self):
         i2c = seed_i2c((0, 0, 0), (0, 0, 0))
         i2c.registers[REG_WHO_AM_I] = 0x12
         driver = ICM42688Driver(i2c)
-        self.assertTrue(driver.connect())
+        self.assertFalse(driver.connect())
+        self.assertFalse(i2c.is_open)
+        self.assertEqual(i2c.writes, [])
         self.assertTrue(
             any("WHO_AM_I" in message for _level, message in self.rospy.logs)
         )

@@ -19,6 +19,8 @@ simulation_adapter:
 edge_server_tcp:
   protocol: tcp
   server_ip: 127.0.0.1
+  # 服务端监听地址与客户端目标地址分开；仿真两者都在本机。
+  server_bind_ip: 127.0.0.1
   server_port: 9090
   reconnect_interval: 3.0
   connect_timeout: 2.0

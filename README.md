@@ -4,13 +4,13 @@
 >
 > 不是"最厉害的本科项目"。是一套能够持续演进五年以上的机器人研究平台。
 
-[![Phase](https://img.shields.io/badge/phase1-firmware__deployment-blue)](./project-prometheus-tasks/ROADMAP.md)
+[![Phase](https://img.shields.io/badge/phase1.5-hardware__integration-yellow)](./project-prometheus-tasks/ROADMAP.md)
 [![Phase0](https://img.shields.io/badge/phase0_tasks-9/9-brightgreen)](./project-prometheus-tasks/00-OVERVIEW.md)
 [![Phase1](https://img.shields.io/badge/phase1_tasks-6/6-brightgreen)](./project-prometheus-tasks/00-OVERVIEW.md)
-[![ROS Tests](https://img.shields.io/badge/ROS_tests-56/56-brightgreen)](./project-prometheus-tasks/task-09-validation.md)
+[![ROS Tests](https://img.shields.io/badge/ROS_tests-82/82-brightgreen)](./docs/decisions/ADR-0014.md)
 [![E2E](https://img.shields.io/badge/E2E-33/33-brightgreen)](./project-prometheus-tasks/task-09-validation.md)
 [![Firmware Host](https://img.shields.io/badge/firmware_host-133/133-brightgreen)](./src/firmware/README.md)
-[![Deploy Validate](https://img.shields.io/badge/deploy_validate-43-brightgreen)](./src/deployment/README.md)
+[![Deploy Validate](https://img.shields.io/badge/deploy_validate-46-brightgreen)](./src/deployment/README.md)
 [![Smoke Phase1](https://img.shields.io/badge/smoke_phase1-61-brightgreen)](./project-prometheus-tasks/task-15-calibration-validation.md)
 [![ROS](https://img.shields.io/badge/ROS-Noetic-brightgreen)](https://wiki.ros.org/noetic)
 [![PX4](https://img.shields.io/badge/PX4-v1.14-blueviolet)](https://px4.io/)
@@ -35,6 +35,7 @@
 |------|:---:|------|
 | **Phase 0: 仿真框架** | ✅ 完成 (9/9) | 无人机 SITL · 差速底盘 · 麦轮底盘 · 传感器 · 通信桥 · 边缘服务器 · 集成总装 · 验证 |
 | **Phase 1: 固件+部署先行** | ✅ 完成 (6/6) | STM32 麦轮固件 ✅ · MSPM0 差速固件 ✅ · 树莓派部署 (无人机+车机) ✅ · CI 流水线 ✅ · 传感器驱动骨架 + MAVLink 签名 ✅ · 标定工具链 + 集成验证 ✅ |
+| **Phase 1.5: 实机接入** | 🟡 进行中 | ROS 82/82 ✅ · UART/I²C Linux 后端 ✅ · 中关村服务器常驻/恢复 ✅ · GPIO/组装/受控隧道/标定待完成 |
 | Phase 2: EQA 论文 | 🔴 2026.09~12 | VLM + SLAM + 空地联合探索 |
 | Phase 3: 竞赛季 | 🔴 2027.01~08 | 全国电赛 + CRAIC2027 |
 | Phase 4: 毕设 | 🔴 2027~2028 | World Model · 3DGS · Dreamer |
@@ -98,7 +99,7 @@
 |---------|:---:|------|:---:|
 | `air_ground_interfaces` | Layer 3 | 10 个自定义消息 + 2 个服务 + 1 个 Action | — |
 | `air_ground_drone_bringup` | Layer 1 | PX4 SITL 无人机 + 深度相机/GPS/IMU | ✅ |
-| `air_ground_car_bringup` | Layer 1 | 差速/麦轮双底盘 + 车载传感器 + 云台 + 实机驱动骨架 | 16/16 + 69 |
+| `air_ground_car_bringup` | Layer 1 | 差速/麦轮双底盘 + 车载传感器 + 云台 + 实机驱动 | ROS 40/40 + Host 81/81 |
 | `air_ground_com_bridge` | Layer 2 | MAVLink UDP 桥 + TCP JSON 桥 | 17/17 |
 | `air_ground_lab_server` | Layer 2~3 | TCP 接收 + World Model + 研究占位节点 | ✅ |
 | `air_ground_bringup` | Orchestration | 单 Gazebo 世界的顶层集成 Launch | ✅ |
@@ -120,7 +121,7 @@
 ## 仓库结构
 
 ```
-research_compitition/
+project-prometheus/
 ├── README.md                           ← 你在这里
 ├── CONVENTIONS.md                      ← 命名/编码/提交规范
 ├── SECURITY.md                         ← 安全策略
@@ -130,7 +131,7 @@ research_compitition/
 ├── scripts/                            ← 运行环境 setup + Phase 1 冒烟脚本
 ├── docs/
 │   ├── architecture/                   ← 能力矩阵 (capability_matrix.md)
-│   ├── decisions/                      ← ADR (架构决策记录, ADR-0001~0012)
+│   ├── decisions/                      ← ADR (架构决策记录, ADR-0001~0016；0013 预留)
 │   └── experiments/                    ← 实验记录 + AI_HANDOFF.md (交接必读)
 ├── project-prometheus-tasks/           ← 核心项目文档
 │   ├── 00-OVERVIEW.md                  ← 总索引 + 任务清单

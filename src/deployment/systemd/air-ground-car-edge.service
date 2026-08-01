@@ -62,11 +62,13 @@ ExecStartPre=/opt/air-ground/scripts/require-image.sh
 ExecStart=/usr/bin/docker compose \
     -f /opt/air-ground/docker/docker-compose.edge.yml \
     -f /opt/air-ground/docker/docker-compose.car.yml \
+    -f /opt/air-ground/docker/docker-compose.car-sensors.yml \
     up --abort-on-container-exit --no-build
 
 ExecStop=/usr/bin/docker compose \
     -f /opt/air-ground/docker/docker-compose.edge.yml \
     -f /opt/air-ground/docker/docker-compose.car.yml \
+    -f /opt/air-ground/docker/docker-compose.car-sensors.yml \
     down --timeout 30
 
 Restart=always

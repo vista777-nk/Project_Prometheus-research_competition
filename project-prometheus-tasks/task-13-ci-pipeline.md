@@ -415,6 +415,16 @@ flake8     7.1.1   31 个 *.py       0 条
 validate.sh                         通过 26 · 失败 0 · 跳过 1
 ```
 
+### Phase 1.5 跟进偏差（2026-08-01）
+
+本任务当时沿用的 ROS 测试步骤带 `catkin test ... || echo`，会吞掉真实失败状态。
+交接清单要求先在真 ROS 环境测量再决定门禁强度；Phase 1.5 已在 Ubuntu 20.04.6 / Noetic
+实验室服务器完成：6 个项目包构建成功，80 个测试、0 error、0 failure，原始退出码 0。
+
+因此按 [ADR-0014](../docs/decisions/ADR-0014.md) 删除 `catkin test` 的 `|| echo`，
+并要求 `devel/setup.bash` 必须成功加载。ROS 测试现为真实阻塞门禁。原文中
+「不要动已有 build-and-test」是 task-13 当时的范围约束，不再代表当前结论。
+
 > ⚠ **yamllint 在 Windows 上会假报 9 条 `wrong new line character`**：
 > `.gitattributes` 给 `*.yaml` 只声明了 `text` 没声明 `eol=lf`，工作区是 CRLF
 > 而 git blob 是 LF。要按 Linux 侧内容核对，不能直接扫工作区。

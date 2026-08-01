@@ -5,19 +5,27 @@
   与 car_edge.launch 的区别: 那份只起 car_preprocessor (数据来自 Gazebo 插件),
   这份额外起 4 个实机传感器驱动, 由它们发布 Layer 1 原始话题。
 
-  backend:=mock (默认) — 假数据后端。验证节点能起、参数能读、话题能建、
-                          断流重连能走到; **不产生任何真实读数**。
-  backend:=real         — 真实硬件后端, Phase 1 未实现, 节点会立刻抛异常退出。
+  backend:=real (默认) — UART/I2C 访问真设备；GPIO 未决时整套启动失败。
+  backend:=mock        — 假数据后端。只验证节点/参数/话题与重连路径；
+                         **必须显式指定，不产生任何真实读数**。
                           这是刻意的: 一个"能跑但读不到硬件"的空实现,
                           会让实机上安静地发布全零数据 (ADR-0008 那类假绿灯)。
 
   用法:
     roslaunch air_ground_car_bringup car_edge_real.launch
-    roslaunch air_ground_car_bringup car_edge_real.launch backend:=real
+    roslaunch air_ground_car_bringup car_edge_real.launch backend:=mock
+    # 单传感器台架联调（整车默认仍全部启用）
+    roslaunch air_ground_car_bringup car_edge_real.launch \
+      enable_icm42688:=false enable_hcsr04:=false enable_openmv:=false
 -->
 <launch>
-  <arg name="backend" default="mock"/>
+  <arg name="backend" default="real"/>
   <arg name="default_chassis" default="diff"/>
+  <arg name="enable_rplidar" default="true"/>
+  <arg name="enable_icm42688" default="true"/>
+  <arg name="enable_hcsr04" default="true"/>
+  <arg name="enable_openmv" default="true"/>
+  <arg name="enable_preprocessor" default="true"/>
   <arg name="sensor_config"
        default="$(find air_ground_car_bringup)/config/real_sensors.yaml"/>
   <arg name="edge_config"
@@ -26,6 +34,8 @@
   <node name="rplidar_driver"
         pkg="air_ground_car_bringup"
         type="rplidar_driver.py"
+        if="$(arg enable_rplidar)"
+        required="true"
         output="screen">
     <rosparam command="load" file="$(arg sensor_config)"/>
     <param name="backend" value="$(arg backend)"/>
@@ -34,6 +44,8 @@
   <node name="icm42688_driver"
         pkg="air_ground_car_bringup"
         type="icm42688_driver.py"
+        if="$(arg enable_icm42688)"
+        required="true"
         output="screen">
     <rosparam command="load" file="$(arg sensor_config)"/>
     <param name="backend" value="$(arg backend)"/>
@@ -42,6 +54,8 @@
   <node name="hcsr04_driver"
         pkg="air_ground_car_bringup"
         type="hcsr04_driver.py"
+        if="$(arg enable_hcsr04)"
+        required="true"
         output="screen">
     <rosparam command="load" file="$(arg sensor_config)"/>
     <param name="backend" value="$(arg backend)"/>
@@ -50,6 +64,8 @@
   <node name="openmv_bridge"
         pkg="air_ground_car_bringup"
         type="openmv_bridge.py"
+        if="$(arg enable_openmv)"
+        required="true"
         output="screen">
     <rosparam command="load" file="$(arg sensor_config)"/>
     <param name="backend" value="$(arg backend)"/>
@@ -60,6 +76,8 @@
   <node name="car_preprocessor"
         pkg="air_ground_car_bringup"
         type="car_preprocessor.py"
+        if="$(arg enable_preprocessor)"
+        required="true"
         output="screen">
     <rosparam command="load" file="$(arg edge_config)"/>
     <param name="default_chassis" value="$(arg default_chassis)"/>

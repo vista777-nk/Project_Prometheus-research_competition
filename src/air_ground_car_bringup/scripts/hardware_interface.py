@@ -10,12 +10,12 @@
 后端选择由参数 `~backend` 决定：
 
     mock — 假数据后端，任意 OS 可跑，CI 与无硬件冒烟测试用
-    real — 真实硬件后端，**Phase 1 未实现**，调用时立刻抛异常
+    real — UART / I2C 使用 Linux 实机后端；GPIO 仍等待 ADR-0013 的时序实测
 
-`real` 刻意不提供"能跑但是空转"的实现。一个 open() 永远返回 True、
+`real` 刻意不提供"能跑但是空转"的占位实现。一个 open() 永远返回 True、
 read() 永远返回空的假后端，会让实机上的驱动安静地发布全零数据 ——
-那是本仓库反复记录过的那类假绿灯 (ADR-0008)。要么真的读到硬件，
-要么在启动时就大声失败。
+那是本仓库反复记录过的那类假绿灯 (ADR-0008)。UART / I2C 要么访问真实
+Linux 设备，要么明确失败；GPIO 无法满足微秒时序前继续拒绝构造。
 
 设计理由详见 ADR-0009。
 """
@@ -120,11 +120,11 @@ _BACKENDS = ("mock", "real")
 
 
 def _reject_real(kind: str):
-    """构造 real 后端时统一的失败路径。"""
+    """拒绝尚未通过实机决策的 real 后端。"""
     raise NotImplementedError(
-        f"{kind} 的 real 后端在 Phase 1 未实现 —— "
-        "骨架只交付接口层与数据处理层，硬件访问层留给实机阶段填。"
-        "见 ADR-0009。当前请用 backend:=mock 启动。"
+        f"{kind} 的 real 后端尚未实现 —— "
+        "HC-SR04 的微秒级时序必须先完成 ADR-0013 的 A/B/C 实机测量，"
+        "不能用 Python sleep 猜测。当前仅可用 backend:=mock 做接口冒烟。"
     )
 
 
@@ -134,7 +134,8 @@ def create_uart(backend: str) -> UARTInterface:
         from mock_hardware import MockUART
         return MockUART()
     if backend == "real":
-        _reject_real("UART")
+        from real_hardware import RealUART
+        return RealUART()
     raise ValueError(f"unknown backend '{backend}', expected one of {_BACKENDS}")
 
 
@@ -144,7 +145,8 @@ def create_i2c(backend: str) -> I2CInterface:
         from mock_hardware import MockI2C
         return MockI2C()
     if backend == "real":
-        _reject_real("I2C")
+        from real_hardware import RealI2C
+        return RealI2C()
     raise ValueError(f"unknown backend '{backend}', expected one of {_BACKENDS}")
 
 

@@ -1,9 +1,11 @@
-# 树莓派边缘节点部署
+# 树莓派边缘节点与实验室服务器部署
 
 > **Task-12** · Phase 1 基础设施 · 两台树莓派5（车机 + 无人机）共用一套配置
 >
-> 状态：配置完成并通过静态校验（45 个 Host 用例 + 43 项静态检查）·
-> **尚未在真实树莓派上执行过**，已知限制见 §9；⚠ `EDGE_MODE=real` 假绿灯风险见 §5.4「现状」
+> 状态：配置完成并通过静态校验（45 个健康检查 Host 用例 + 8 个入口模式用例 +
+> 9 个服务器常驻部署用例 + 52 项静态检查）· **尚未在真实树莓派上执行过**，
+> 服务器常驻服务已实机安装；已知限制见 §9；
+> `EDGE_MODE` 的失败关闭语义见 §5.4 与 ADR-0015
 
 ---
 
@@ -17,9 +19,9 @@
 | 无人机 | `192.168.1.20` | Pixhawk 6C · RealSense D435i · 3DR(air) | `drone_edge.launch` |
 
 ```
-实验室服务器 192.168.1.100  (ROS Master + GPU)
-        ↕ TCP :9090
-车机 Pi 192.168.1.10 ←─3DR 无线─→ 无人机 Pi 192.168.1.20
+中关村服务器：本地 ROS Master + TCP 回环 :9090
+        ↕ 经批准的 VPN / SSH 隧道（方案与地址待网络协调）
+良乡车机 Pi 192.168.1.10 ←─3DR 无线─→ 无人机 Pi 192.168.1.20
    ↕ /dev/mcu (下位机)              ↕ /dev/pixhawk (飞控)
 ```
 
@@ -45,6 +47,17 @@ sudo systemctl enable --now air-ground-healthcheck.timer
 
 完整流程见 §4。
 
+服务器侧首次安装：
+
+```bash
+make build
+# 当前服务器已启用 Linger，可无 root 安装为用户常驻服务
+bash src/deployment/install_server.sh --user-service --enable
+python3 src/deployment/server/check_lab_server.py
+```
+
+服务器默认不向校园网暴露 ROS 或 9090，理由与后续接入边界见 §5.6 和 ADR-0017。
+
 ---
 
 ## 3. 目录结构
@@ -54,6 +67,11 @@ src/deployment/
 ├── validate.sh                     ★ 静态校验入口，本地与 CI 跑同一份
 ├── validate_consistency.py           跨文件一致性（compose 结构 / 话题名）
 ├── install.sh                        装到树莓派上，幂等
+├── install_server.sh                 装服务器 systemd 常驻服务，幂等
+├── server/
+│   ├── server.env.example            服务器本机配置样例（ROS/TCP 默认回环）
+│   ├── launch_lab_server.sh          systemd 生产启动入口
+│   └── check_lab_server.py           五节点 + TCP 联合健康检查
 │
 ├── docker/
 │   ├── Dockerfile.edge               边缘节点镜像（两个角色共用）
@@ -69,7 +87,10 @@ src/deployment/
 │   ├── air-ground-car-edge.service
 │   ├── air-ground-drone-edge.service
 │   ├── air-ground-healthcheck.service
-│   └── air-ground-healthcheck.timer
+│   ├── air-ground-healthcheck.timer
+│   ├── air-ground-lab-server@.service
+│   ├── air-ground-lab-server-healthcheck@.service
+│   └── air-ground-lab-server-healthcheck@.timer
 │
 ├── scripts/
 │   ├── require-image.sh              启动前确认镜像在本地
@@ -85,7 +106,7 @@ src/deployment/
 │
 ├── chrony/
 │   ├── chrony-car-server.conf        车机 = NTP 服务器
-│   └── chrony-client.conf            无人机 + 实验室服务器
+│   └── chrony-client.conf            无人机 + 同网服务器（跨校区不使用）
 │
 ├── ssh/
 │   ├── sshd_hardening.conf
@@ -118,6 +139,8 @@ src/deployment/
 ├── test/                             集成验证（task-15 Part B）
 │   ├── test-serial-loopback.sh       入口，转发给 .py
 │   ├── test-serial-loopback.py     ★ 帧协议第三份实现 + 13 条自测
+│   ├── test_entrypoint_modes.py    ★ real/mock/sim 路由 + 负向验证 8 条
+│   ├── test_server_deployment.py   ★ 服务器常驻/恢复/安全默认值 9 条
 │   └── test-observation-pipeline.py  真预处理器 + 真 World Model，10 条
 │
 └── logging/
@@ -311,10 +334,25 @@ CLI 包装进程。
 
 compose 的 `devices:` 里列的设备**不存在时容器直接启动失败**。
 
-这对下位机和飞控是想要的行为（没有它们边缘节点本来也没意义，失败要响）；
-对 USB 传感器不是 —— "雷达没插导致整台车的边缘节点起不来"是让故障范围
-被配置放大。因此 RPLIDAR / OpenMV 放在 `docker-compose.car-sensors.yml`，
-接上了才叠加。
+这对下位机和飞控是想要的行为（没有它们边缘节点本来也没意义，失败要响）。
+RPLIDAR / OpenMV 单独放在 `docker-compose.car-sensors.yml`，让台架可以只叠加
+已经接好的设备；但生产 `air-ground-car-edge.service` 表达的是**满配实机**，会
+固定叠加这一层，缺任一设备即停止启动。不能把缺传感器的系统记成满配实验。
+
+无硬件接口冒烟不通过生产 systemd 单元运行，直接使用：
+
+```bash
+roslaunch air_ground_car_bringup car_edge_real.launch backend:=mock
+```
+
+单传感器实机台架可用 launch 的 `enable_*` 参数关闭其余节点；这些参数只用于
+逐件验收，整车默认仍全部为 `true`。例如仅验 RPLIDAR：
+
+```bash
+roslaunch air_ground_car_bringup car_edge_real.launch \
+  enable_icm42688:=false enable_hcsr04:=false enable_openmv:=false \
+  enable_preprocessor:=false
+```
 
 ### 5.4 健康检查管什么、不管什么
 
@@ -333,27 +371,26 @@ compose 的 `devices:` 里列的设备**不存在时容器直接启动失败**�
 `check_topics.py` 里写明了这个边界，并给出容器内的替代命令。
 **不把发布者存在性叫作"心跳"**。
 
-**第 5 层是"跑着，但不是满配"。** `EDGE_MODE=real` 而
-`car_edge_real.launch` 的 **real 后端尚未实现**时（见下方"现状"），车机拿不到真实
-传感器数据。此时话题全都在发、Master 也正常，前四层**一片绿**，
-但实机传感器驱动并没有真的在工作。
+**第 5 层是"跑着，但不是满配"。** 自 ADR-0015 起，车机模式只有三种：
 
-> **现状（2026-08-01）**：`car_edge_real.launch` 已被 task-14 交付（文件存在），
-> 但默认 `backend:=mock`（4 个驱动节点起来发**假数据**），`backend:=real` 会抛异常退出。
-> 而 `entrypoint.sh`（L116-128）的降级逻辑前提是"该文件不存在才降级"——由于文件现已存在，
-> `EDGE_MODE=real` 时会**直接加载它跑 mock 后端、不触发降级、健康检查显示绿**。
-> 这正是 ADR-0008 警惕的"假绿灯"。`entrypoint.sh` 的注释与降级语义已过时，
-> 需重新设计 mock/real 判定（**代码待办，本文档仅更正事实，未改动代码**）。
+| `EDGE_MODE` | 实际启动 | 健康结论 |
+|---|---|---|
+| `real` | `car_edge_real.launch backend:=real` | 后端不可用就启动失败，绝不回退 |
+| `mock` | `car_edge_real.launch backend:=mock` | `DEGRADED`（退出码 4），数据不得作为实机证据 |
+| `sim` | `car_edge.launch` | 明确的仿真适配器 |
+
+未知拼写会直接失败。launch、YAML 与节点缺省后端也全部是 `real`，所以绕过
+Docker 直接启动时同样失败关闭。完整取舍见 [ADR-0015](../../docs/decisions/ADR-0015.md)。
 
 只打一条 echo 是不够的——它留在容器日志里，上位机看不见。所以 entrypoint
 在 roslaunch **之前**把结论写进 `/var/log/air-ground/edge-state.env`
 （bind mount，容器外可读），`check_nodes.py` 读它并以退出码 **4** 报出：
 
-旧行为示例（彼时 `car_edge_real.launch` 尚未交付，会触发降级；现行行为见上方「现状」段）：
+显式 mock 模式的报告示例：
 
 ```
 [2026-07-31T12:00:00] DEGRADED: 降级运行 (role=car, 话题齐全但能力集不完整)
-  car_edge_real.launch 未提供 (task-14 未交付), 已降级为 car_edge.launch —— 实机传感器驱动未启动
+  EDGE_MODE=mock —— 传感器节点使用假硬件后端，数据不得作为实机证据
 ```
 
 三处配合，缺一个就静默失效，因此 `validate.sh` §7 会交叉校验：
@@ -393,6 +430,37 @@ compose 的 `devices:` 里列的设备**不存在时容器直接启动失败**�
 
 以下任一情况出现时，**动手之前**先回到 ADR-0007 §决策-3 重估：
 接外网 · 迁 ROS 2 · 同机跑第二个互不信任的负载。
+中关村服务器与良乡硬件分离已经触发第一项，重估结论见 ADR-0017。
+
+### 5.6 实验室服务器的 Phase 1.5 裸机入口
+
+`make launch-server` 是 Phase 0 单机仿真入口，会同时启动 TCP 服务端和
+`edge_server_bridge` 客户端连回自己。实机服务器必须使用：
+
+```bash
+# 临时前台调试（默认回环）
+ROS_IP=127.0.0.1 make launch-server-real
+
+# 当前服务器 Linger=yes：用户服务在 SSH 断开和服务器重启后仍会恢复
+bash src/deployment/install_server.sh --user-service --enable
+systemctl --user status air-ground-lab-server.service
+python3 src/deployment/server/check_lab_server.py
+```
+
+若管理员希望统一改成系统服务，使用
+`sudo bash src/deployment/install_server.sh --user "$USER" --enable`；它安装模板实例
+`air-ground-lab-server@${USER}.service`。两种方式不要同时启用，以免争抢 11311/9090。
+
+真实入口只启动 `tcp_server`、`world_model`、`slam_node`、`eqa_engine`、
+`coordinator`，五个节点全部 required。systemd 在启动后检查节点与 TCP，之后每
+五分钟由 timer 复查；ROS 日志写到 `/data2/air-ground-server/ros-log`，避免服务器
+根分区继续承受日志增长。
+
+服务器位于中关村、硬件位于良乡后，ADR-0007 的外网重估条件已经触发。当前 TCP
+JSON 没有 TLS/客户端认证，ROS 1 还有随机节点端口，因此默认配置
+`network_server.yaml` 让 ROS Master 和 TCP :9090 都只监听回环。后续必须通过经批准
+的 VPN/SSH 隧道接入，不能直接开放校园网端口。`network_lab.yaml` 只保留给三机确实
+位于同一受控隔离网的场景。完整决策见 ADR-0017；原同网真实 socket 证据见 ADR-0016。
 
 ## 6. 与任务文档（task-12）的偏差
 
@@ -426,7 +494,7 @@ bash src/deployment/validate.sh
 | 检查项 | 本地(Git-Bash) | Linux CI |
 |--------|:---:|:---:|
 | shell 语法 `bash -n` | ✓ | ✓ |
-| Python 语法 + 45 个单元测试 | ✓ | ✓ |
+| Python 语法 + 45 个健康检查 + 8 个入口模式 + 9 个服务器部署用例 | ✓ | ✓ |
 | 串口协议自测 13 条（黄金帧 / CRC / 拆帧） | ✓ | ✓ |
 | 标定流水线 16 条（合成真值） | 需 numpy+OpenCV | ✓ |
 | compose 结构 + 话题名一致性（含标定采集话题） | ✓ | ✓ |
@@ -486,7 +554,9 @@ bash src/deployment/validate.sh
   修复见 `Dockerfile.edge` §Python 依赖的注释——**该修复同样未能在本地验证**，
   是照着"pip 20.0.2 不认 PEP 600 轮子标签"这条推断做的，
   并同时堵住了另外两条可能的失败路径（apt 预装 lxml/future、pip 升级）。
-- **`systemd-analyze verify` 未在本地执行过**（非 Linux），由 CI 校验。
+- **`systemd-analyze verify` 已在 Ubuntu 20.04 实验室服务器执行**。校验器会隔离
+  `/etc/systemd/system` 的宿主机单元，并过滤受限环境的 Varlink 连接噪声；项目
+  10 个系统/用户单元通过。
 - **udev 规则里的 VID/PID 与序列号需上机核对。** 3DR 数传和 RPLIDAR
   都用 CP2102 芯片（`10c4:ea60`），必须靠序列号区分。规则里留的是
   `REPLACE_WITH_*_SERIAL` 占位符 —— 不填的话那两条规则不匹配任何设备，
@@ -494,11 +564,9 @@ bash src/deployment/validate.sh
   也不要两个设备随机抢同一个名字。
 - **`setup-3dr-radio.py` 未在真实电台上验证。** AT 命令集依据 SiK 固件
   公开文档。默认只读，首次上机先确认能进命令模式再考虑 `--apply`。
-- **`car_edge_real.launch` 的 real 后端尚未实现**（文件已被 task-14 交付，默认
-  `backend:=mock` 发假数据，`backend:=real` 抛异常退出）。当前 `entrypoint.sh`
-  的降级前提是"文件不存在"，而文件已存在，故 `EDGE_MODE=real` 时会加载它跑
-  mock 后端、**不触发降级**（见 §5.4"现状"）。**上机验收时车机跑的是 mock 假数据、
-  健康检查显示绿**——这是需要警惕的状态，不是"传感器已通"。该降级语义待重新设计。
+- **UART / I²C real 后端已实现但尚未接真实传感器验证**；HC-SR04 GPIO 仍等待
+  ADR-0013 的时序 A/B/C 实测。满配 `car_edge_real.launch` 默认 real 且任一必需节点
+  退出会关闭整套；无硬件冒烟必须显式用 `backend:=mock`。
 - **降级状态目前只覆盖 `car_edge_real.launch` 这一种情况。** 传感器掉线、
   相机没枚举到之类的部分能力缺失还没有对应的判定——那需要 task-14 的
   `Capability` 消息，不是一个启动期状态文件能表达的。

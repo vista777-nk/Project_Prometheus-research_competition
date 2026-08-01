@@ -61,7 +61,9 @@ def load_server_config(
     tcp = server_root.get("tcp")
     if not isinstance(network, dict) or not isinstance(tcp, dict):
         raise ValueError("edge_server_tcp and tcp must be mappings")
-    host = str(network["server_ip"])
+    # server_ip 是边缘节点要连接的通告地址；多网卡服务器通常监听 0.0.0.0，
+    # 二者不能复用一个字段。旧仿真配置未写时回退，保持 Phase 0 行为。
+    host = str(network.get("server_bind_ip", network["server_ip"]))
     ipaddress.ip_address(host)
     port = int(network["server_port"])
     if not 1 <= port <= 65535:
@@ -239,6 +241,9 @@ def decode_telemetry(
     state.header.stamp = stamp
     state.header.frame_id = "map"
     state.robot_id = robot_id
+    # heartbeat 可以不带 pose；geometry_msgs 的全零默认值不是合法四元数。
+    # 无姿态数据时使用单位四元数，避免 TF/下游归一化得到 NaN。
+    state.pose.orientation.w = 1.0
     pose_value = payload.get("pose")
     if pose_value is not None:
         pose = require_mapping(pose_value, "pose")
