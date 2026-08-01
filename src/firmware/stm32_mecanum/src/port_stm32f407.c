@@ -77,7 +77,6 @@ static void system_clock_config(void)
     /* PLLM=8, PLLN=336, PLLP=2 (编码值 0), PLLQ=7 (USB 48MHz, 本项目未用) */
     RCC->PLLCFGR = 8uL
                  | (336uL << 6)
-                 | (0uL << 16)
                  | RCC_PLLCFGR_PLLSRC_HSE
                  | (7uL << 24);
 
@@ -117,8 +116,8 @@ uint32_t port_millis(void)
 
 void port_delay_ms(uint32_t ms)
 {
-    const uint32_t start = s_tick_ms;
-    while ((s_tick_ms - start) < ms) {
+    const uint32_t start = port_millis();
+    while ((port_millis() - start) < ms) {
         /* 忙等。无符号减法天然处理回绕。 */
     }
 }

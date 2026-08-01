@@ -55,8 +55,8 @@ uint32_t port_millis(void)
 
 void port_delay_ms(uint32_t ms)
 {
-    const uint32_t start = s_millis;
-    while ((s_millis - start) < ms) {
+    const uint32_t start = port_millis();
+    while ((port_millis() - start) < ms) {
         /* 忙等 */
     }
 }

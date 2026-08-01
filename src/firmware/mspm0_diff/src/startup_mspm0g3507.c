@@ -78,16 +78,21 @@ void (* const g_vector_table[])(void) = {
 void Reset_Handler(void)
 {
     /* 1. 把 .data 的初值从 Flash 搬到 SRAM */
-    uint32_t *src = &_sidata;
-    uint32_t *dst = &_sdata;
-    while (dst < &_edata) {
-        *dst++ = *src++;
+    uintptr_t src_addr = (uintptr_t)&_sidata;
+    uintptr_t dst_addr = (uintptr_t)&_sdata;
+    const uintptr_t data_end = (uintptr_t)&_edata;
+    while (dst_addr < data_end) {
+        *(uint32_t *)dst_addr = *(const uint32_t *)src_addr;
+        dst_addr += sizeof(uint32_t);
+        src_addr += sizeof(uint32_t);
     }
 
     /* 2. .bss 清零 */
-    dst = &_sbss;
-    while (dst < &_ebss) {
-        *dst++ = 0uL;
+    dst_addr = (uintptr_t)&_sbss;
+    const uintptr_t bss_end = (uintptr_t)&_ebss;
+    while (dst_addr < bss_end) {
+        *(uint32_t *)dst_addr = 0uL;
+        dst_addr += sizeof(uint32_t);
     }
 
     /* 3. 进 main。正常情况下不返回。 */
