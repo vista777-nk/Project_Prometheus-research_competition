@@ -141,6 +141,7 @@ docs/decisions/ADR-*.md        决策记录，不可变
 | `python3 src/deployment/test/test-observation-pipeline.py` | `Ran 10 tests OK` | numpy, opencv, pyyaml |
 | `python3 -m pytest src/air_ground_car_bringup/test/host -q` | `81 passed` | pytest, pyyaml |
 | `python3 src/deployment/test/test_server_deployment.py` | `Ran 9 tests OK` | 仅标准库 |
+| `python3 src/deployment/test/test_pi_preflight.py` | `Ran 9 tests OK` | 仅标准库 |
 | `cd src/firmware/stm32_mecanum && make test` | Unity 全过 | gcc + make |
 | `cd src/firmware/mspm0_diff && make test` | 70 用例全过 | gcc + make |
 | `make test-unit` | `82 tests` | **仅 Ubuntu 20.04 + ROS Noetic** |
@@ -164,7 +165,7 @@ yamllint 1.38.0（钉）、flake8 7.1.1（钉）、cppcheck（**不钉**，理�
 | 串口帧协议三端一致 | 黄金帧逐字节，与 `mspm0_diff/test/test_protocol.c::test_pong_golden_frame` 同源 |
 | Observation 数据流 | 真 `CarPreprocessor` + 真 `WorldModelStore`，10 条 |
 | ROS 真环境基线 | Ubuntu 20.04.6 / Noetic：6 包构建成功；Phase 1 基线 80/80，新增服务器测试后当前 82/82（ADR-0014） |
-| 部署配置静态正确性 | 系统 Python 跑 `validate.sh` 52 项全过；45 个健康检查 + 8 个入口模式 + 9 个服务器常驻部署用例 |
+| 部署配置静态正确性 | 系统 Python 跑 `validate.sh`；45 个健康检查 + 8 个入口模式 + 9 个服务器常驻部署 + 9 个 Pi 主机预检用例 |
 | 实机模式失败关闭 | real→real；mock→DEGRADED；sim→仿真；缺 real launch 不回退（ADR-0015） |
 | UART / I²C 真实访问层 | pyserial / Linux SMBus 生产类；Host 全套 81/81；错误芯片 ID、半截握手、运行中拔线均有负向用例 |
 | 真实 ROS 传感器入口 | mock 五节点持续运行 8s；real 在无设备服务器上整套关闭；同时抓出并修复 Catkin relay 同名自导入 |

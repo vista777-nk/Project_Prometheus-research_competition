@@ -3,7 +3,8 @@
 > **Task-12** · Phase 1 基础设施 · 两台树莓派5（车机 + 无人机）共用一套配置
 >
 > 状态：配置完成并通过静态校验（45 个健康检查 Host 用例 + 8 个入口模式用例 +
-> 9 个服务器常驻部署用例 + 52 项静态检查）· **尚未在真实树莓派上执行过**，
+> 9 个服务器常驻部署用例 + 9 个 Pi 主机预检用例；`validate.sh` 55/55）·
+> **尚未在真实树莓派上执行过**，
 > 服务器常驻服务已实机安装；已知限制见 §9；
 > `EDGE_MODE` 的失败关闭语义见 §5.4 与 ADR-0015
 
@@ -115,6 +116,7 @@ src/deployment/
 │
 ├── healthcheck/
 │   ├── agcheck.py                    ★ 纯判定逻辑，无 I/O
+│   ├── check_pi_host.py              Pi 5 / Debian 13 / 64 GB 两阶段预检
 │   ├── check_nodes.py                systemd timer 入口
 │   ├── check_topics.py               人用的排查工具
 │   ├── alert.sh                      journald / LED / 蜂鸣器
@@ -140,6 +142,7 @@ src/deployment/
 │   ├── test-serial-loopback.sh       入口，转发给 .py
 │   ├── test-serial-loopback.py     ★ 帧协议第三份实现 + 13 条自测
 │   ├── test_entrypoint_modes.py    ★ real/mock/sim 路由 + 负向验证 8 条
+│   ├── test_pi_preflight.py        ★ Pi 主机基线与负向验证 9 条
 │   ├── test_server_deployment.py   ★ 服务器常驻/恢复/安全默认值 9 条
 │   └── test-observation-pipeline.py  真预处理器 + 真 World Model，10 条
 │
@@ -157,7 +160,8 @@ src/deployment/
 
 ### 4.1 烧录与首次登录
 
-1. Raspberry Pi Imager 烧 **Raspberry Pi OS Lite (64-bit, Bookworm)**
+1. Raspberry Pi Imager 烧 **64 位 Debian 13（Trixie）树莓派系统**，目标卡按
+   **标称 64 GB** 验收（代表机当前的 32 GB 卡只用于采样，将被替换）
 2. 烧录前在 Imager 的高级选项里设好：主机名（`car-pi` / `drone-pi`）、
    用户名 `airground`、**勾选启用 SSH 并粘贴公钥**
 3. 首次开机后：
@@ -167,6 +171,21 @@ sudo apt update && sudo apt full-upgrade -y
 sudo raspi-config       # Interface Options: 启用 I2C、Serial Port（关登录终端、开硬件串口）
 sudo reboot
 ```
+
+换卡后先跑基线预检；Docker 与接口配置完成后再跑部署预检：
+
+```bash
+python3 src/deployment/healthcheck/check_pi_host.py --stage base
+python3 src/deployment/healthcheck/check_pi_host.py --stage deploy --role car
+# 无人机使用 --role drone
+```
+
+确认的 Pi 5 / Debian 13 / 8 GB / 64 GB 基线、实测状态和待定项见
+[`../../docs/experiments/phase-1.5-hardware-baseline.md`](../../docs/experiments/phase-1.5-hardware-baseline.md)。
+
+> ROS Noetic 不在 Debian 13 宿主机裸装。它继续运行在
+> `ros:noetic-ros-base-focal` ARM64 容器中；宿主机只安装 Docker、设备规则、
+> 时间同步和 systemd 单元。
 
 > 树莓派5 的硬件串口默认被登录终端占用。不关掉的话，下位机的数据会
 > 被当成控制台输入 —— 现象是串口能打开但收到的全是乱码。
@@ -494,7 +513,7 @@ bash src/deployment/validate.sh
 | 检查项 | 本地(Git-Bash) | Linux CI |
 |--------|:---:|:---:|
 | shell 语法 `bash -n` | ✓ | ✓ |
-| Python 语法 + 45 个健康检查 + 8 个入口模式 + 9 个服务器部署用例 | ✓ | ✓ |
+| Python 语法 + 45 个健康检查 + 8 个入口模式 + 9 个服务器部署 + 9 个 Pi 预检用例 | ✓ | ✓ |
 | 串口协议自测 13 条（黄金帧 / CRC / 拆帧） | ✓ | ✓ |
 | 标定流水线 16 条（合成真值） | 需 numpy+OpenCV | ✓ |
 | compose 结构 + 话题名一致性（含标定采集话题） | ✓ | ✓ |
