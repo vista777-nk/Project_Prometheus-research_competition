@@ -9,9 +9,9 @@
 # =============================================================================
 set -euo pipefail
 
-# shellcheck disable=SC1091
+# shellcheck disable=SC1090
 source "${AIR_GROUND_ROS_SETUP:-/opt/ros/noetic/setup.bash}"
-# shellcheck disable=SC1091
+# shellcheck disable=SC1090
 source "${AIR_GROUND_WS_SETUP:-/home/airground/catkin_ws/devel/setup.bash}"
 
 ROLE="${AIR_GROUND_ROLE:-car}"
