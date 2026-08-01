@@ -1,6 +1,6 @@
 # 无人机树莓派5 硬件连接
 
-> task-12 §12.5 的落地版。车机侧的连接见 [`../README.md`](../README.md) §硬件接线。
+> task-12 §12.5 的落地版。车机侧的连接见 [task-12 §12.5](../../../project-prometheus-tasks/task-12-drone-firmware-and-rpi-deployment.md) 的硬件清单与 [`../README.md`](../README.md) §1 角色表。
 
 无人机 Pi 的连接比车机敏感：Pixhawk USB 断开等于飞控失联，D435i 带宽不足会
 让深度图悄悄降质而**不报任何错误**。

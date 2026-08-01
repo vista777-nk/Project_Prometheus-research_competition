@@ -252,11 +252,10 @@ Capability:  Spatial Understanding
 ```
 docs/
     decisions/
-        ADR-0001-why-ros-noetic.md
-        ADR-0002-why-server-not-parse-mavlink.md
-        ADR-0003-why-observation-not-image.md
-        ADR-0004-why-px4-v1.14.md
-        ...
+        ADR-0001.md
+        ADR-0002.md
+        ADR-0003.md
+        ...                 # 命名格式 ADR-NNNN.md，编号不复用、已采纳不修改
 ```
 
 每个 ADR 文件遵循统一格式：

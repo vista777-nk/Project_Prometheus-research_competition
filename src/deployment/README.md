@@ -2,8 +2,8 @@
 
 > **Task-12** · Phase 1 基础设施 · 两台树莓派5（车机 + 无人机）共用一套配置
 >
-> 状态：配置完成并通过静态校验（31 个 Host 用例 + 7 类静态检查）·
-> **尚未在真实树莓派上执行过**，已知限制见 §9
+> 状态：配置完成并通过静态校验（45 个 Host 用例 + 43 项静态检查）·
+> **尚未在真实树莓派上执行过**，已知限制见 §9；⚠ `EDGE_MODE=real` 假绿灯风险见 §5.4「现状」
 
 ---
 
@@ -73,6 +73,7 @@ src/deployment/
 │
 ├── scripts/
 │   ├── require-image.sh              启动前确认镜像在本地
+│   ├── update-image.sh               离线镜像包更新（见 §4.3）
 │   └── wait-for-device.sh            等设备枚举，超时大声失败
 │
 ├── network/
@@ -333,13 +334,22 @@ compose 的 `devices:` 里列的设备**不存在时容器直接启动失败**�
 **不把发布者存在性叫作"心跳"**。
 
 **第 5 层是"跑着，但不是满配"。** `EDGE_MODE=real` 而
-`car_edge_real.launch` 还没交付（task-14）时，entrypoint 会降级为
-`car_edge.launch`。此时话题全都在发、Master 也正常，前四层**一片绿**，
-但实机传感器驱动根本没起来。
+`car_edge_real.launch` 的 **real 后端尚未实现**时（见下方"现状"），车机拿不到真实
+传感器数据。此时话题全都在发、Master 也正常，前四层**一片绿**，
+但实机传感器驱动并没有真的在工作。
+
+> **现状（2026-08-01）**：`car_edge_real.launch` 已被 task-14 交付（文件存在），
+> 但默认 `backend:=mock`（4 个驱动节点起来发**假数据**），`backend:=real` 会抛异常退出。
+> 而 `entrypoint.sh`（L116-128）的降级逻辑前提是"该文件不存在才降级"——由于文件现已存在，
+> `EDGE_MODE=real` 时会**直接加载它跑 mock 后端、不触发降级、健康检查显示绿**。
+> 这正是 ADR-0008 警惕的"假绿灯"。`entrypoint.sh` 的注释与降级语义已过时，
+> 需重新设计 mock/real 判定（**代码待办，本文档仅更正事实，未改动代码**）。
 
 只打一条 echo 是不够的——它留在容器日志里，上位机看不见。所以 entrypoint
 在 roslaunch **之前**把结论写进 `/var/log/air-ground/edge-state.env`
 （bind mount，容器外可读），`check_nodes.py` 读它并以退出码 **4** 报出：
+
+旧行为示例（彼时 `car_edge_real.launch` 尚未交付，会触发降级；现行行为见上方「现状」段）：
 
 ```
 [2026-07-31T12:00:00] DEGRADED: 降级运行 (role=car, 话题齐全但能力集不完整)
@@ -484,10 +494,11 @@ bash src/deployment/validate.sh
   也不要两个设备随机抢同一个名字。
 - **`setup-3dr-radio.py` 未在真实电台上验证。** AT 命令集依据 SiK 固件
   公开文档。默认只读，首次上机先确认能进命令模式再考虑 `--apply`。
-- **`car_edge_real.launch` 尚不存在**（task-14 交付）。`EDGE_MODE=real`
-  时 entrypoint 会检测到并降级为 `car_edge.launch`，写状态文件，
-  健康检查以退出码 4 报出（见 §5.4）。**上机验收时车机必然处于降级状态**，
-  这是预期的，不是配置错误。
+- **`car_edge_real.launch` 的 real 后端尚未实现**（文件已被 task-14 交付，默认
+  `backend:=mock` 发假数据，`backend:=real` 抛异常退出）。当前 `entrypoint.sh`
+  的降级前提是"文件不存在"，而文件已存在，故 `EDGE_MODE=real` 时会加载它跑
+  mock 后端、**不触发降级**（见 §5.4"现状"）。**上机验收时车机跑的是 mock 假数据、
+  健康检查显示绿**——这是需要警惕的状态，不是"传感器已通"。该降级语义待重新设计。
 - **降级状态目前只覆盖 `car_edge_real.launch` 这一种情况。** 传感器掉线、
   相机没枚举到之类的部分能力缺失还没有对应的判定——那需要 task-14 的
   `Capability` 消息，不是一个启动期状态文件能表达的。

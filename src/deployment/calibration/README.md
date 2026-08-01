@@ -26,7 +26,7 @@ python3 validate-calibration.py imu_intrinsics.yaml
 
 # 报告 + 归档
 python3 generate-calib-report.py camera_intrinsics.yaml imu_intrinsics.yaml \
-    -o calibration_db/2026-08-01_car/REPORT.md
+    -o calibration_db/<标定日期>_car/REPORT.md   # 如 2026-08-02_car
 ```
 
 依赖：`numpy` · `opencv-python-headless` · `PyYAML`（版本约束见仓库根 `requirements.txt`）。

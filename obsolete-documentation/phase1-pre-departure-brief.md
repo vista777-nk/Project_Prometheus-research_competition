@@ -1,5 +1,7 @@
 # Phase 1 Pre-Departure Brief — 给 AI Subagent 的上下文摘要
 
+> ⚠️ **此文档已归档，保留仅供历史参考。** 写于 Phase 0→1 交接（2026-07-28）；Phase 1 已于 2026-08-01 完成，现状以 [`docs/experiments/AI_HANDOFF.md`](../docs/experiments/AI_HANDOFF.md) 为准。
+
 > **目标读者**: AI LLM Agent（DeepSeek / ChatGPT / Claude / 混元 等）  
 > **日期**: 2026-07-28  
 > **状态**: Phase 0 仿真框架 9/9 全部完成，用户尚未回国，希望提前启动 Phase 1 软件工作

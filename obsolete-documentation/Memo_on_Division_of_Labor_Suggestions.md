@@ -1,3 +1,9 @@
+# Memo on Division of Labor Suggestions（人机分工建议备忘录）
+
+> ⚠️ **此文档已归档，保留仅供历史参考。** 项目早期（2026-07）的人机分工讨论，现行规范以 `CONVENTIONS.md` 与 `project-prometheus-tasks/RESEARCH_PHILOSOPHY.md` 为准。
+
+---
+
 ~~msiexec.exe /i https://awscli.amazonaws.com/AWSCLIV2.msi~~
 
 ~~aws configure~~

@@ -86,7 +86,8 @@ STM32F407 / MSPM0G3507 (Layer 1)           Pixhawk 6C (Layer 1)
 │   │   ├── SemanticLandmark.msg
 │   │   ├── Mission.msg
 │   │   ├── MissionStatus.msg
-│   │   └── Capability.msg
+│   │   ├── Capability.msg
+│   │   └── SensorFusion.msg / ChassisState.msg / ServerCommand.msg  # 过渡别名，待删除 (ICD §八)
 │   ├── srv/
 │   │   ├── SwapChassis.srv
 │   │   └── QueryWorldState.srv
@@ -99,21 +100,27 @@ STM32F407 / MSPM0G3507 (Layer 1)           Pixhawk 6C (Layer 1)
 │   │   ├── drone_sensors.launch # 传感器话题适配
 │   │   └── drone_edge.launch    # 边缘预处理节点（Task-07）
 │   ├── config/
-│   │   └── drone_sensors.yaml
+│   │   ├── drone_sensors.yaml
+│   │   ├── drone_edge.yaml         # 边缘节点配置（Task-07）
+│   │   └── mavros_signing.yaml     # MAVLink 签名参数模板（task-14，签名段待实机核实）
 │   ├── scripts/
 │   │   ├── drone_preprocessor.py   # 传感器→Observation（Task-07）
 │   │   ├── gps_converter.py        # NavSatFix→本地ENU
 │   │   └── test_drone.sh           # Task-02 无头验收
 │   └── test/
-│       └── test_gps_converter.py
+│       ├── test_gps_converter.py
+│       └── test_drone_preprocessor.py
 │
 ├── air_ground_car_bringup/                 # 车机启动与配置
 │   ├── launch/
 │   │   ├── car_diff.launch
 │   │   ├── car_mecanum.launch
-│   │   └── car_edge.launch
+│   │   ├── car_edge.launch
+│   │   └── car_edge_real.launch  # 实机模式（task-14，默认 mock 后端）
 │   ├── config/
 │   │   ├── car_sensors.yaml
+│   │   ├── car_edge.yaml           # 边缘节点配置（Task-07）
+│   │   ├── real_sensors.yaml       # 实机传感器参数（task-14）
 │   │   ├── chassis_params.yaml
 │   │   ├── diff_chassis_control.yaml
 │   │   └── mecanum_chassis_control.yaml
@@ -121,21 +128,32 @@ STM32F407 / MSPM0G3507 (Layer 1)           Pixhawk 6C (Layer 1)
 │   │   ├── car_preprocessor.py     # 传感器→Observation
 │   │   ├── mecanum_controller.py   # 麦轮逆运动学
 │   │   ├── chassis_swapper.py      # 底盘热切换
-│   │   └── gimbal_controller.py    # 云台控制
-│   └── urdf/
-│       ├── car_base.urdf.xacro
-│       ├── car_sensors.urdf.xacro
-│       ├── diff_chassis.urdf.xacro
-│       └── mecanum_chassis.urdf.xacro
+│   │   ├── gimbal_controller.py    # 云台控制
+│   │   ├── rplidar_driver.py       # 实机驱动骨架（task-14）
+│   │   ├── icm42688_driver.py      #   同上
+│   │   ├── hcsr04_driver.py        #   同上
+│   │   ├── openmv_bridge.py        #   同上
+│   │   ├── hardware_interface.py   # 硬件后端抽象（task-14）
+│   │   ├── mock_hardware.py        # mock 后端（task-14）
+│   │   └── sensor_config.py        # 传感器配置加载（task-14）
+│   ├── urdf/
+│   │   ├── car_base.urdf.xacro
+│   │   ├── car_sensors.urdf.xacro
+│   │   ├── diff_chassis.urdf.xacro
+│   │   └── mecanum_chassis.urdf.xacro
+│   └── test/
+│       ├── test_*.py               # 工作空间单元测试
+│       └── host/                   # 无 ROS 环境的 Host 测试（ros_stub.py，task-14/15）
 │
 ├── air_ground_com_bridge/                  # 空地通信桥 (Layer 2)
 │   ├── launch/
 │   │   └── air_ground_com_bridge.launch
 │   ├── config/
 │   │   └── network.yaml
-│   └── scripts/
-│       ├── drone_car_bridge.py     # MAVLink ↔ ROS
-│       └── edge_server_bridge.py   # ROS ↔ TCP JSON
+│   ├── scripts/
+│   │   ├── drone_car_bridge.py     # MAVLink ↔ ROS
+│   │   └── edge_server_bridge.py   # ROS ↔ TCP JSON
+│   └── test/                       # 桥单元测试 + 运行时对端
 │
 ├── air_ground_bringup/                     # 顶层集成启动 (Task-08)
 │   ├── launch/
@@ -145,18 +163,22 @@ STM32F407 / MSPM0G3507 (Layer 1)           Pixhawk 6C (Layer 1)
 │   │   └── server_only.launch
 │   └── package.xml
 │
-└── air_ground_lab_server/                  # 实验室服务器 (Layer 4)
+└── air_ground_lab_server/                  # 实验室服务器 (Layer 2~3)
     ├── launch/
     │   └── server.launch
     ├── config/
     │   └── server_params.yaml
-    └── scripts/
-        ├── tcp_receiver.py         # TCP → ROS
-        ├── world_model.py          # World Model (核心)
-        ├── slam_node.py            # SLAM
-        ├── eqa_engine.py           # EQA 推理
-        └── coordinator.py          # 空地协同
+    ├── scripts/
+    │   ├── tcp_receiver.py         # TCP → ROS
+    │   ├── world_model.py          # World Model (核心)
+    │   ├── slam_node.py            # SLAM (占位)
+    │   ├── eqa_engine.py           # EQA 推理 (占位)
+    │   └── coordinator.py          # 空地协同
+    └── test/                       # 服务器组件单元测试
 ```
+
+> 注：`src/` 下另有 `firmware/`（STM32/MSPM0 下位机固件，非 ROS）与
+> `deployment/`（树莓派部署 + 标定工具链，非 ROS），结构见各自 README。
 
 ---
 
@@ -181,7 +203,7 @@ STM32F407 / MSPM0G3507 (Layer 1)           Pixhawk 6C (Layer 1)
 
 ```
 无人机 (PX4)
-  MAVLink UDP :14550 ──────────────────┐
+  MAVLink UDP :18570 (SITL 实测) ──────┐
                                         ▼
                           drone_car_bridge (车机上)
                             ↓ ROS topics (/drone/*)
@@ -298,8 +320,8 @@ ssh car-pi    "chronyc tracking | grep 'System time'"
 | AD-09 | 底盘检测逻辑依赖 `rostopic list` 探测 (P2-06) | ℹ️ | 仿真可用；实机改用硬件引脚（MSPM0 GPIO）检测 |
 | AD-10 | PX4 v1.14 无 `iris_depth_camera` 专用 airframe | ℹ️ 设计约束 | 使用官方 Iris airframe，并以完整路径覆盖深度相机 SDF |
 | AD-11 | GPS HOME 默认值固定在仿真配置中 (P3-06) | ℹ️ | 已从源码移至 YAML；实机部署时通过 ROS 参数覆盖 |
-| AD-12 | 缺少 CI/CD、性能监控、代码风格强制 | ℹ️ | 项目稳定后引入 |
+| AD-12 | 缺少 CI/CD、性能监控、代码风格强制 | ✅ 部分 | task-13 已建 CI（7 job，含全仓 lint 门禁）；性能监控仍待引入 |
 
 ---
 
-*版本: v6.1 · 日期: 2026-07-26 · 作者: DeepSeek (经 ChatGPT、混元3、豆包、执行端subagent集群审阅后重构) · 与 ICD.md 配套*
+*版本: v6.2 · 日期: 2026-08-01 · 作者: DeepSeek (经 ChatGPT、混元3、豆包、执行端subagent集群审阅后重构) · 与 ICD.md 配套；v6.2：包结构树对齐 Phase 1 交付（task-07/14 文件、test 目录、firmware/deployment 指引）、SITL 端口更正为 18570*

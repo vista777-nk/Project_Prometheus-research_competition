@@ -76,7 +76,7 @@ feat(task-04): 实现麦轮底盘逆运动学控制器
 
 - 新增 mecanum_controller.py
 - 支持 /car/cmd_vel → 四轮转速解算
-- 添加底盘类型动态切换服务 /car/switch_chassis
+- 添加底盘类型动态切换服务 /car/swap_chassis
 - 通过 task-04 冒烟测试
 
 Ref: task-04-mecanum-chassis.md
@@ -103,7 +103,9 @@ research_compitition/                   # 仓库根目录 (Git root)
 ├── .gitignore                          # Git 忽略规则
 │
 ├── Research_Diary.md                   # 科研日记 (持续更新)
-├── Memo_on_Division_of_Labor_Suggestions.md  # 备忘录类文档
+├── Makefile                            # 构建/测试/启动统一入口
+├── setup_all.sh                        # Ubuntu 环境一键搭建
+├── scripts/                            # 运行环境 setup + Phase 1 冒烟脚本
 │
 ├── project-prometheus-tasks/           # 📁 核心项目文档
 │   ├── 00-OVERVIEW.md                  #   总索引
@@ -111,18 +113,19 @@ research_compitition/                   # 仓库根目录 (Git root)
 │   ├── PLATFORM.md                     #   平台架构
 │   ├── ICD.md                          #   接口控制文档
 │   ├── ROADMAP.md                      #   研究路线
-│   └── task-01~09-*.md                 #   实施任务
+│   └── task-01~15-*.md                 #   实施任务
 │
 ├── docs/                               # 📁 长期文档
+│   ├── architecture/                   #   能力矩阵 (capability_matrix.md)
 │   ├── decisions/                      #   ADR (架构决策记录)
 │   │   ├── ADR-0001.md                 #
 │   │   └── ...
-│   └── experiments/                    #   实验记录 (未来)
-│       └── ...
+│   └── experiments/                    #   实验记录 + AI 交接文档
+│       └── AI_HANDOFF.md               #
 │
 ├── obsolete-documentation/             # 📁 归档 (历史文档，只读)
 │
-└── src/                                # 📁 源代码 (未来，ROS workspace 映射)
+└── src/                                # 📁 源代码 (ROS 包 + firmware/ + deployment/)
     └── ...
 ```
 
@@ -135,11 +138,11 @@ research_compitition/                   # 仓库根目录 (Git root)
 | **不以数字开头** | ❌ `1-docs/` → ✅ `docs/` | |
 | **不嵌套过深** | 最大深度 3 层 | `docs/decisions/ADR-0001.md` ✅ |
 
-> **注意**：当前仓库中 `Project_Prometheus_Tasks/` 和 `Obsolete_or_Outdated_Documentation/` 使用了混合命名风格。已于 2026-07-27 统一重命名为 `project-prometheus-tasks/` 和 `obsolete-documentation/`。**在新创建的目录中，严格遵守 kebab-case。**
+> **注意**：当前仓库中 `Project_Prometheus_Tasks/` 和 `Obsolete_or_Outdated_Documentation/` 使用了混合命名风格。已于 2026-07-28 统一重命名为 `project-prometheus-tasks/` 和 `obsolete-documentation/`（`obsolete-documentation/` 内部的个别历史文件保留原文件名，归档只读）。**在新创建的目录中，严格遵守 kebab-case。**
 
 ### 2.3 ROS 工作空间映射
 
-仿真代码的 ROS 工作空间位于 `~/air_ground_sim_ws/`（Ubuntu 端），其 `src/` 目录通过 Git submodule 或符号链接与仓库的 `src/` 关联：
+仿真代码的 ROS 工作空间位于 `~/air_ground_sim_ws/`（Ubuntu 端），其 `src/` 目录与仓库的 `src/` 关联（仓库 `src/` 即真实源码，可通过符号链接挂入工作空间；本仓库不使用 Git submodule）：
 
 ```
 ~/air_ground_sim_ws/          # ROS 工作空间 (在 Ubuntu 上)
@@ -172,7 +175,7 @@ research_compitition/                   # 仓库根目录 (Git root)
 | YAML 配置 | `snake_case.yaml` | `sensor_config.yaml`, `robot_params.yaml` |
 | Shell 脚本 | `snake_case.sh` | `setup_all.sh`, `test_bridge.sh` |
 | URDF/Xacro | `snake_case.urdf.xacro` | `diff_chassis.urdf.xacro` |
-| ADR 文档 | `ADR-NNNN-kebab-case.md` | `ADR-0001-adopt-conventional-commits.md` |
+| ADR 文档 | `ADR-NNNN.md` | `ADR-0001.md`, `ADR-0012.md` |
 
 ### 3.2 ROS 命名
 
@@ -241,7 +244,7 @@ air_ground_<功能>
 
 | 模式 | 示例 |
 |------|------|
-| 切换底盘 | `/car/switch_chassis` |
+| 切换底盘 | `/car/swap_chassis` |
 | 起飞/降落 | `/drone/takeoff`, `/drone/land` |
 | 查询能力 | `/car/get_capability` |
 
@@ -396,4 +399,4 @@ class ObservationAggregator:
 
 ---
 
-*版本: v1.0 · 日期: 2026-07-25 · 起草者: DeepSeek（依据 ChatGPT 终审意见整理）*
+*版本: v1.1 · 日期: 2026-08-01 · 起草者: DeepSeek（依据 ChatGPT 终审意见整理）；v1.1：服务名示例更正为 /car/swap_chassis、目录树对齐现状、重命名日期更正*

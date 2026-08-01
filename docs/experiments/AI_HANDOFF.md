@@ -4,7 +4,7 @@
 > 在 15 分钟内达到可以安全动手的状态，并且**知道自己不知道什么**。
 >
 > 写于 2026-08-01，交接点：Phase 1 完成、次日取得实机与 Ubuntu 20.04 实验室服务器。
-> 上一份同类文档是 [phase1-pre-departure-brief.md](./experiments/phase1-pre-departure-brief.md)（Phase 0→1 交接）。
+> 上一份同类文档是 [phase1-pre-departure-brief.md](../../obsolete-documentation/phase1-pre-departure-brief.md)（Phase 0→1 交接，已归档）。
 
 ---
 
@@ -34,9 +34,9 @@ curl -sSL "https://api.github.com/repos/vista777-nk/research_compitition/actions
 | 项 | 值 |
 |---|---|
 | 分支 | `feat/task-XX`（**不是** main；main 落后很多，合并是人的决定） |
-| HEAD | `a419b98`（2026-08-01） |
+| HEAD | `dc2b38e`（2026-08-01；此后的提交均为纯文档，代码状态同 `a419b98`） |
 | Phase | Phase 0 仿真 ✅ 9/9 · **Phase 1 固件+部署 ✅ 6/6** · Phase 2 未开始 |
-| 最近 CI | run #25 (`fe0cf66`) 全绿；run #26 (`a419b98`) 是 cppcheck 转阻塞后的首跑 |
+| 最近 CI | run #25 (`fe0cf66`) 全绿；run #26 (`a419b98`) 是 cppcheck 转阻塞后的首跑；此后 4 个提交均为纯文档 |
 | ADR | 0001–0012 已用；**0013 已预留给「超声波时序方案 A/B/C」**，别占 |
 
 ⚠ **提交会自动推送**（VSCode 的 post-commit sync）。`git commit` 之后
@@ -241,10 +241,20 @@ CHASSIS=mecanum bash src/deployment/test/test-serial-loopback.sh /dev/ttyAMA0
 ```bash
 # B2 MSPM0G3507 差速 —— 预期有摩擦
 ```
-⚠ CI 产出的是 `ci-link` 剖面，**移植层为空实现，不可烧录**（ADR-0004 §决策-4）。
+⚠ CI 产出的是 `ci-link` 剖面，**移植层为空实现，不可烧录**（ADR-0004 §决策-3）。
 要接 TI MSPM0 SDK + SysConfig，见 `src/firmware/mspm0_diff/README.md` §7。解 U10。
 
 ### C. 车机树莓派
+
+⚠ **先想明白 D8，再决定 `EDGE_MODE` 设什么**（2026-08-01 新增）：
+`car_edge_real.launch` 已被 task-14 交付（默认 `backend:=mock`），`entrypoint.sh`
+"文件不存在才降级"的前提已失效。`.env` 里若设 `EDGE_MODE=real`，车机会加载它
+跑 **mock 假数据、不触发降级、健康检查显示绿**——正是本仓库最警惕的假绿灯。
+在重新设计 mock/real 降级语义（改 `entrypoint.sh` + 写 ADR，见 §8-D8）之前，
+**`.env` 里必须显式设 `EDGE_MODE=sim`**——默认值恰恰就是 `real`
+（`.env.example`、`docker-compose.edge.yml`、`entrypoint.sh` 三处默认都是），
+"保持默认"会直接踩进 D8。设为 `sim` 让"没数据"保持显而易见，
+传感器话题按 C3 逐个核实。
 
 ```bash
 sudo bash src/deployment/install.sh --role car --dry-run   # 先看要做什么
@@ -336,6 +346,7 @@ E3 签名 A/B 对照（ADR-0010 §决策-2 **强制**）：
 | D5 | `/car/openmv/image_raw` 发布者 | §7-C3 | 标定 README §5 第 5 条 |
 | D6 | 两套 OpenCV 逐项数值差 | 读下次 CI 日志的对比表 | ADR-0011 §影响 |
 | D7 | 本地从未跑过 cppcheck | 有条件就补一次本地全量 | ADR-0012 §影响 |
+| D8 | `car_edge_real.launch` 已被 task-14 交付（默认 mock 后端），`entrypoint.sh` 的"文件不存在才降级"前提失效：`EDGE_MODE=real` 时跑 mock 假数据、**不降级、健康检查显示绿** | 重新设计 mock/real 降级语义（区分"文件存在但后端是 mock"与"真传感器在线"），改动需写 ADR | `entrypoint.sh` L116-128；`src/deployment/README.md` §5.4"现状" |
 
 ---
 
@@ -401,4 +412,4 @@ Step 1 的验收在 ROADMAP §本阶段目标，其中一条要求
 
 ---
 
-*交接人：Claude Opus 5 · 2026-08-01 · HEAD `a419b98`*
+*交接人：Claude Opus 5 · 2026-08-01 · HEAD `dc2b38e`*

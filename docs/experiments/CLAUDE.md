@@ -1,12 +1,12 @@
 # CLAUDE.md
 
 > 本文件会被自动读入上下文，因此**刻意保持简短**。
-> 详细交接见 **[docs/AI_HANDOFF.md](./docs/AI_HANDOFF.md)** —— 动手之前先读它。
+> 详细交接见 **[AI_HANDOFF.md](./AI_HANDOFF.md)** —— 动手之前先读它。
 
 ## 项目
 
 空地联合具身智能研究平台（无人机 + 可换底盘地面车 + 实验室服务器），
-目标是 Phase 2 的 EQA 论文。Phase 0 仿真 ✅ · Phase 1 固件+部署 ✅ · Phase 2 未开始。
+目标是 Phase 2 的 EQA 论文。Phase 0 仿真 ✅ · Phase 1 固件+部署 ✅（2026-08-01）· Phase 2 未开始。
 
 工作分支是 `feat/task-XX`，不是 `main`。**commit 会自动推送到 origin。**
 
