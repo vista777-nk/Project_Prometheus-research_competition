@@ -69,12 +69,12 @@ class TopicContractTest(unittest.TestCase):
 
     def test_ultrasonic_prefix_matches_preprocessor(self):
         self.assertEqual(
-            self.real["hcsr04"]["topic_prefix"].rstrip("/"),
+            self.real["chassis_bridge"]["topic_prefix"].rstrip("/"),
             self.edge["topics"]["ultrasonic_prefix"].rstrip("/"),
         )
 
     def test_ultrasonic_directions_match_icd_order(self):
-        directions = list(self.real["hcsr04"]["directions"])
+        directions = list(self.real["chassis_bridge"]["directions"])
         self.assertEqual(directions, ICD_ULTRASONIC_ORDER)
         self.assertEqual(
             directions, list(read_module_constant(PREPROCESSOR, "DIRECTIONS"))
@@ -83,10 +83,12 @@ class TopicContractTest(unittest.TestCase):
     def test_ultrasonic_range_matches_preprocessor_clamp(self):
         """预处理器按自己的量程夹取，两边不一致会把有效读数夹掉。"""
         self.assertEqual(
-            self.real["hcsr04"]["min_range"], self.edge["ultrasonic_min_range"]
+            self.real["chassis_bridge"]["min_range"],
+            self.edge["ultrasonic_min_range"],
         )
         self.assertEqual(
-            self.real["hcsr04"]["max_range"], self.edge["ultrasonic_max_range"]
+            self.real["chassis_bridge"]["max_range"],
+            self.edge["ultrasonic_max_range"],
         )
 
 
@@ -113,14 +115,16 @@ class SimulationParityTest(unittest.TestCase):
 
     def test_ultrasonic_matches_simulation(self):
         self.assertEqual(
-            list(self.real["hcsr04"]["directions"]),
+            list(self.real["chassis_bridge"]["directions"]),
             list(self.sim["ultrasonic"]["directions"]),
         )
         self.assertEqual(
-            self.real["hcsr04"]["min_range"], self.sim["ultrasonic"]["min_range"]
+            self.real["chassis_bridge"]["min_range"],
+            self.sim["ultrasonic"]["min_range"],
         )
         self.assertEqual(
-            self.real["hcsr04"]["max_range"], self.sim["ultrasonic"]["max_range"]
+            self.real["chassis_bridge"]["max_range"],
+            self.sim["ultrasonic"]["max_range"],
         )
 
 
@@ -144,7 +148,7 @@ class FrameIdContractTest(unittest.TestCase):
 
     def test_ultrasonic_frame_template_matches_urdf_macro(self):
         """URDF 里这四个 link 由 xacro 宏生成，只能比对模板本身。"""
-        template = self.real["hcsr04"]["frame_id_template"]
+        template = self.real["chassis_bridge"]["frame_id_template"]
         self.assertIn("{name}", template)
         self.assertIn(
             f'<link name="{template.replace("{name}", "${name}")}">', self.urdf

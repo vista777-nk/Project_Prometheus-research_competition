@@ -121,20 +121,20 @@ def test_real_uart_rejects_closed_device_from_serial_constructor():
 def test_real_i2c_reads_and_writes_single_and_block_registers():
     module = FakeSMBusModule()
     i2c = RealI2C(module)
-    assert i2c.open(1, 0x68)
+    assert i2c.open(1, 0x69)
     assert module.bus.number == 1
     assert i2c.read_register(0x1F, 4) == b"\x00\x01\x02\x03"
     i2c.write_register(0x4E, b"\x0f")
     i2c.write_register(0x50, b"\x08\x09")
     assert module.bus.writes == [
-        ("byte", 0x68, 0x4E, 0x0F),
-        ("block", 0x68, 0x50, [0x08, 0x09]),
+        ("byte", 0x69, 0x4E, 0x0F),
+        ("block", 0x69, 0x50, [0x08, 0x09]),
     ]
 
 
 def test_real_i2c_open_failure_is_retryable():
     i2c = RealI2C(FakeSMBusModule(fail=True))
-    assert not i2c.open(1, 0x68)
+    assert not i2c.open(1, 0x69)
     with pytest.raises(HardwareError, match="尚未打开"):
         i2c.read_register(0x75, 1)
 
@@ -148,7 +148,7 @@ def test_real_i2c_rejects_non_7_bit_device_address():
 def test_real_i2c_close_is_idempotent():
     module = FakeSMBusModule()
     i2c = RealI2C(module)
-    assert i2c.open(1, 0x68)
+    assert i2c.open(1, 0x69)
     bus = module.bus
     i2c.close()
     i2c.close()

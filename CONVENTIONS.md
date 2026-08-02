@@ -97,7 +97,7 @@ Ref: task-04-mecanum-chassis.md
 ### 2.1 仓库目录约定
 
 ```
-research_compitition/                   # 仓库根目录 (Git root)
+project-prometheus/                     # 仓库根目录 (Git root)
 ├── README.md                           # 项目简介与导航
 ├── CONVENTIONS.md                      # 本文档
 ├── .gitignore                          # Git 忽略规则
@@ -399,4 +399,4 @@ class ObservationAggregator:
 
 ---
 
-*版本: v1.1 · 日期: 2026-08-01 · 起草者: DeepSeek（依据 ChatGPT 终审意见整理）；v1.1：服务名示例更正为 /car/swap_chassis、目录树对齐现状、重命名日期更正*
+*版本: v1.2 · 日期: 2026-08-03 · 起草者: DeepSeek（依据 ChatGPT 终审意见整理）；v1.2：仓库根目录名同步为 project-prometheus*

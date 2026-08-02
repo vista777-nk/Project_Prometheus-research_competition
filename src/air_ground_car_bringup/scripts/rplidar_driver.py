@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RPLIDAR A1 驱动 —— ROS/协议层与 Linux UART 访问层已实现。
+"""RPLIDAR A2M12 驱动 —— ROS/协议层与 Linux UART 访问层已实现。
 
 发布: /car/scan (sensor_msgs/LaserScan)   ← 与 Gazebo 仿真同一话题同一类型
 配置: config/real_sensors.yaml §rplidar
@@ -36,7 +36,7 @@ from sensor_config import (  # noqa: E402
 
 SECTION = "rplidar"
 REQUIRED_KEYS = (
-    "port", "baudrate", "topic", "frame_id", "samples", "scan_rate",
+    "model", "port", "baudrate", "topic", "frame_id", "samples", "scan_rate",
     "min_range", "max_range", "angle_min", "angle_max",
     "reconnect_interval", "data_timeout",
 )
@@ -183,7 +183,7 @@ class ScanAccumulator:
 
 
 class RPLidarDriver:
-    """RPLIDAR A1 驱动。通过依赖注入 UARTInterface 与硬件解耦。"""
+    """RPLIDAR A2M12 驱动。通过依赖注入 UARTInterface 与硬件解耦。"""
 
     def __init__(self, uart: UARTInterface) -> None:
         """读取 `~rplidar` 配置段、建立发布器。"""
@@ -191,8 +191,13 @@ class RPLidarDriver:
         require_keys(config, REQUIRED_KEYS, "~" + SECTION)
 
         self.uart = uart
+        self.model = str(config["model"])
+        if self.model != "A2M12":
+            raise ValueError("本实机基线只接受 RPLIDAR A2M12")
         self.port = str(config["port"])
         self.baudrate = int(config["baudrate"])
+        if self.baudrate != 256000:
+            raise ValueError("RPLIDAR A2M12 必须使用官方规格 256000 bps")
         self.frame_id = str(config["frame_id"])
         self.samples = int(config["samples"])
         if self.samples < 2:

@@ -17,8 +17,8 @@
  * 控制周期抖动，积分项和微分项会跟着一起失真。
  *
  * Cortex-M0+ 无 FPU 也无硬件除法，浮点全是库调用。控制中断里的开销估算见 README §5.2：
- * 约 2000–3000 个周期 @80MHz ≈ 25–38µs，占 1ms 周期的 3–4%，余量充足。
- * (这是数量级估计，不是实测值 —— 真实数字要等上板后用 GPIO 翻转 + 示波器量。)
+ * 约 2000–3000 个周期 @32MHz ≈ 63–94µs，占 1ms 周期的 6–10%，理论上仍有余量。
+ * (这是数量级估计，不是实测值；真实数字要等上板后用 GPIO 翻转 + 示波器量。)
  *
  * 铁律：本固件只做运动控制。不做感知、不做决策、不做通信路由。
  * 电赛合规：主控为 TI MSPM0G3507，运动闭环全部在本芯片内完成 (ADR-0004)。
@@ -265,6 +265,7 @@ int main(void)
     port_control_timer_init(CONTROL_FREQ_HZ);
 
     uint32_t last_telemetry_ms = port_millis();
+    uint32_t last_ultrasonic_ms = last_telemetry_ms;
     uint8_t rx_chunk[64];
 
     while (1) {
@@ -286,7 +287,16 @@ int main(void)
             publish_telemetry();
         }
 
-        /* 4. 状态灯 */
+        /* 4. 底盘模块的 HC-SR04 快照；没有完整快照时不发送假帧。 */
+        if ((now_ms - last_ultrasonic_ms) >= ULTRASONIC_PERIOD_MS) {
+            uint16_t ranges_mm[4];
+            last_ultrasonic_ms = now_ms;
+            if (port_ultrasonic_snapshot_mm(ranges_mm)) {
+                protocol_send_ultrasonic(ranges_mm);
+            }
+        }
+
+        /* 5. 状态灯 */
         update_status_led(now_ms);
     }
 }

@@ -1,21 +1,32 @@
-# Mechanical metadata shared by the interchangeable chassis implementations.
+# 两个底盘模块的机械元数据。2026-08-03 电子/机械组提供装配测量值；
+# 有效半径含当前轮胎压缩估计，负载装好后仍须以直线里程标定微调。
 diff_chassis:
   type: differential_drive
-  track_width: 0.18
-  wheel_radius: 0.033
+  track_width: 0.166
+  wheel_radius: 0.031
   max_linear_speed: 1.0
   max_angular_speed: 3.0
-  motor_encoder_ppr: 11
-  encoder_note: effective wheel counts depend on gearbox ratio and x4 quadrature
+  motor_encoder_ppr: 13
+  motor_gear_ratio: 30
+  encoder_quadrature: 4
+  encoder_counts_per_output_rev: 1560
+  motor_no_load_rpm_at_12v: 360
+  encoder_note: 已按供应资料冻结；上板手转一整圈仍须核对计数与方向
 
 mecanum_chassis:
   type: mecanum
-  track_width: 0.18
-  wheel_base: 0.20
-  wheel_radius: 0.033
+  track_width: 0.166
+  wheel_base: 0.124
+  wheel_radius: 0.0395
   max_linear_speed: 0.8
   max_angular_speed: 2.0
+  motor_encoder_ppr: 13
+  motor_gear_ratio: 30
+  encoder_quadrature: 4
+  encoder_counts_per_output_rev: 1560
+  motor_no_load_rpm_at_12v: 360
 
 chassis_detect:
+  note: simulation_only — 实机由 MCU PONG 身份核对，不猜测 GPIO
   diff_pin: 1
   mecanum_pin: 0

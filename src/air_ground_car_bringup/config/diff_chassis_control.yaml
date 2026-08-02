@@ -24,8 +24,8 @@ car:
     left_wheel: [left_wheel_joint]
     right_wheel: [right_wheel_joint]
     publish_rate: 30
-    wheel_separation: 0.18
-    wheel_radius: 0.033
+    wheel_separation: 0.166
+    wheel_radius: 0.031
     wheel_separation_multiplier: 1.0
     left_wheel_radius_multiplier: 1.0
     right_wheel_radius_multiplier: 1.0

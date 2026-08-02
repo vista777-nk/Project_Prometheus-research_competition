@@ -17,6 +17,7 @@ source "${AIR_GROUND_WS_SETUP:-/home/airground/catkin_ws/devel/setup.bash}"
 ROLE="${AIR_GROUND_ROLE:-car}"
 CHASSIS="${AIR_GROUND_CHASSIS:-diff}"
 EDGE_MODE="${EDGE_MODE:-real}"      # real=真硬件 | mock=假硬件(降级) | sim=仿真
+DRONE_VISION="${DRONE_VISION:-d435i}"
 export ROS_MASTER_URI="${ROS_MASTER_URI:-http://localhost:11311}"
 
 # ROS_IP 不设的话, 多网卡 (WiFi + 4G + 以太网) 的树莓派会随机挑一个地址注册到
@@ -34,6 +35,9 @@ echo " Air-Ground Edge Node"
 echo "   Role      : ${ROLE}"
 echo "   Chassis   : ${CHASSIS}"
 echo "   Edge mode : ${EDGE_MODE}"
+if [[ "${ROLE}" == "drone" ]]; then
+    echo "   Vision    : ${DRONE_VISION}"
+fi
 echo "   Master    : ${ROS_MASTER_URI}"
 echo "   ROS_IP    : ${ROS_IP:-<unset, 多网卡下有风险>}"
 echo "   Image     : ${AIR_GROUND_BUILD_COMMIT:-local} @ ${AIR_GROUND_BUILD_TIME:-unknown}"
@@ -66,6 +70,7 @@ write_state() {
         echo "AIR_GROUND_EDGE_MODE=${EDGE_MODE}"
         echo "AIR_GROUND_LAUNCH=${LAUNCH_FILE:-}"
         echo "AIR_GROUND_SENSOR_BACKEND=${SENSOR_BACKEND:-}"
+        echo "AIR_GROUND_DRONE_VISION=${DRONE_VISION}"
         echo "AIR_GROUND_IMAGE=${AIR_GROUND_BUILD_COMMIT:-local}"
         echo "AIR_GROUND_DEGRADED=${DEGRADED}"
         echo "AIR_GROUND_DEGRADED_REASON=${DEGRADED_REASON}"
@@ -169,9 +174,29 @@ case "${ROLE}" in
                     "EDGE_MODE 只接受 real 或 sim。"
                 ;;
         esac
-        LAUNCH_FILE="drone_edge.launch"
+        if [[ "${EDGE_MODE}" == "real" ]]; then
+            case "${DRONE_VISION}" in
+                d435i) ;;
+                pi_dual)
+                    die "DRONE_VISION=pi_dual 尚未具备可验证的实机驱动配置" \
+                        "请先确认两枚 Raspberry Pi Camera 的型号、CSI 端口和 libcamera profile。" \
+                        "确认前不得静默冒充 D435i 数据源；当前可用值为 d435i。"
+                    ;;
+                *)
+                    die "未知无人机视觉模式 '${DRONE_VISION}'" \
+                        "DRONE_VISION 只接受 d435i 或 pi_dual。"
+                    ;;
+            esac
+            LAUNCH_FILE="drone-edge-real.launch"
+        else
+            LAUNCH_FILE="drone_edge.launch"
+        fi
         SENSOR_BACKEND="mavros"
         write_state
+        if [[ "${EDGE_MODE}" == "real" ]]; then
+            exec roslaunch air_ground_drone_bringup "${LAUNCH_FILE}" \
+                "vision_mode:=${DRONE_VISION}"
+        fi
         exec roslaunch air_ground_drone_bringup "${LAUNCH_FILE}"
         ;;
 

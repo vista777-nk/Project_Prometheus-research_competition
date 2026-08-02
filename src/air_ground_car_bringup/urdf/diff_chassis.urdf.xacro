@@ -3,9 +3,9 @@
   <xacro:include
     filename="$(find air_ground_car_bringup)/urdf/car_base.urdf.xacro"/>
 
-  <xacro:property name="wheel_radius" value="0.033"/>
+  <xacro:property name="wheel_radius" value="0.031"/>
   <xacro:property name="wheel_width" value="0.026"/>
-  <xacro:property name="wheel_separation" value="0.18"/>
+  <xacro:property name="wheel_separation" value="0.166"/>
   <xacro:property name="wheel_mass" value="0.05"/>
   <xacro:property name="caster_radius" value="0.012"/>
   <xacro:property name="caster_mass" value="0.01"/>
@@ -40,7 +40,8 @@
       <child link="${side}_wheel"/>
       <origin xyz="0 ${y} ${wheel_radius}" rpy="${-pi / 2.0} 0 0"/>
       <axis xyz="0 0 1"/>
-      <limit effort="5.0" velocity="35.0"/>
+      <!-- 40 rad/s 覆盖供应资料 360±20 RPM 的空载公差上限（约 39.8 rad/s）。 -->
+      <limit effort="5.0" velocity="40.0"/>
       <dynamics damping="0.02" friction="0.0"/>
     </joint>
 

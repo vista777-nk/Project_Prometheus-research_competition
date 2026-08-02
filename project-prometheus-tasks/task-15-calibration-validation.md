@@ -9,6 +9,11 @@
 > **落地与本文的偏差见文末 [§与原方案的偏差](#与原方案的偏差)** —— 有七处，
 > 其中三处是本文与仓库现状直接冲突（话题名、输出格式、冒烟测试路径与 job 名）。
 > 决策记录见 [ADR-0011](../docs/decisions/ADR-0011.md)。
+>
+> **2026-08-02 实机 BOM 覆盖**：无人机视觉是可换 D435i CB/双 Pi Camera；
+> 车载 OpenMV/ICM42688/A2M12 是一套共享载荷。标定数据必须记录
+> `vision_mode`、所装底盘、载荷安装位姿和硬件序列标识；换底盘或换视觉载荷后
+> 不得复用旧外参。双 CSI 相机 profile 未确认前不关闭该模式验收。
 
 ---
 
@@ -650,6 +655,7 @@ echo "========================================="
 - [x] `test-serial-loopback.sh` 可发送 PING 并判断是否收到 PONG (含 board_type/chassis_type 校验) —— 13 项自测全过
 - [x] `test-observation-pipeline.py` 3 个测试用例通过 ⚠ 实际 10 个用例，且测的是真 `CarPreprocessor` 而非模拟件（ADR-0011）
 - [x] `smoke-test-phase1.sh` 可检查所有 Phase 1 文件存在性 + CI job 存在性 —— 61 项全绿
+- [x] 2026-08-03 Phase 1.5 跟进：增加“任意分支 push 必须触发 CI”契约守卫，当前基线 65 项全绿
 - [x] Phase 1 冒烟测试在 GitHub Actions 中可运行 —— 含删除交付物的负向测试
 - [x] **三问检查** (每完成一个 Task)：Platform 是否更稳定？ / Research 是否更自由？ / 未来替换硬件是否更简单？ —— 见文末「三问检查」记录
 
@@ -775,7 +781,7 @@ LiDAR 降采样与 `angle_increment` 同步放大、无效距离写 −1.0、
 于是那段代码不被任何门禁覆盖——而它是 ADR-0003 帧协议的**第三份独立实现**。
 
 现在：拆成 `test-serial-loopback.py`（逻辑 + `--self-test`）与
-`test-serial-loopback.sh`（转发入口，保留本文的用法）。13 条协议自测在没有
+`test-serial-loopback.sh`（转发入口，保留本文的用法）。确认 BOM 后的 10 条协议自测在没有
 硬件的机器上跑，黄金帧与固件的 `test_protocol.c::test_pong_golden_frame` 同源。
 
 自测第 10 条记录了一个**本来就存在**的行为：线路上一个杂散 `0xA5` 会让

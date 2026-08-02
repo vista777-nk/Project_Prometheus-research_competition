@@ -10,15 +10,16 @@
 
 | 项目 | 当前 (仿真) | 目标 (实机) |
 |------|------------|------------|
-| 无人机飞控 | PX4 SITL v1.14 | Pixhawk 6C (铝壳款) |
+| 无人机飞控 | PX4 SITL v1.14 | Pixhawk 6C + PM07 + M9N |
 | 无人机机载 | 树莓派5 (模拟) | 树莓派5（ARM64、8 GB、Debian 13、64 GB microSD 基线） |
-| 无人机传感器 | 深度相机 + GPS + IMU (Gazebo) | Intel RealSense D435i + M8N GPS + Pixhawk 6C 板载 IMU |
-| 车机主控 | 树莓派5 (模拟) | 树莓派5（ARM64、8 GB、Debian 13、64 GB microSD 基线）+ 下位机协处理器(麦轮底盘STM32F407VET6；差速底盘MSPM0G3507) |
-| 车机传感器 | OpenMV + 思岚RPLIDAR A1 + 4×HC-SR04 + ICM42688 (Gazebo) | 同实物 |
+| 无人机传感器 | 深度相机 + GPS + IMU (Gazebo) | D435i CB 或双 Pi Camera；M9N；Pixhawk IMU |
+| 车机主控 | 树莓派5 (模拟) | 一套共享 Pi 5 载荷；麦轮 STM32F407VET6 / 差速 MSPM0G3507 控制模块 |
+| 车机传感器 | OpenMV + 2D LiDAR + 4×超声波 + IMU (Gazebo) | OpenMV + RPLIDAR A2M12 + ICM42688（共享）；每底盘 4×HC-SR04（MCU 管理） |
 | 实验室服务器 | 本地 localhost (模拟) | 实验室 GPU 服务器 |
-| 底盘 A | 差速 (Gazebo) | TI 电赛亚克力底盘 + 520 编码器电机 |
-| 底盘 B | 麦轮 (Gazebo) | R5 系列麦轮底板 + 520 电机 |
-| 空地通信 | UDP localhost (模拟 3DR 数传) | 3DR SiK 数传电台 |
+| 底盘 A | 差速 (Gazebo) | R5 标准板尺寸 + 65 mm 轮 + MC520P30 ×2 + DRV8871 ×2 |
+| 底盘 B | 麦轮 (Gazebo) | R5 标准板尺寸 + 80 mm 麦轮 + MC520P30 ×4 + DRV8871 ×4 |
+| 无人机本体 | iris (Gazebo) | F450 延长脚架 + A2212 980KV ×4 + BL32 30A ×4 + 1045 桨/护罩 |
+| 飞控遥测 | UDP localhost | 915 MHz/500 mW：空中端接 TELEM1，地面端接地面站 |
 | 车服通信 | TCP localhost (模拟 WiFi) | WiFi / 4G |
 
 ---
@@ -67,14 +68,18 @@
 ### 物理部署映射
 
 ```
-实验室服务器 (Layer 4)
-    ↕ TCP
-车机边缘树莓派5 (Layer 2) ←── MAVLink UDP ──→ 无人机边缘树莓派5 (Layer 2)
+中关村服务器 (Layer 4)
+    ↕ 受控隧道中的单一 TCP 会话
+良乡共享车载 Pi (Layer 2)                  良乡无人机 Pi (Layer 2)
+    ↕ /dev/mcu（同一协议）                     ↕ TELEM2 / MAVROS
+MSPM0 差速模块 或 STM32 麦轮模块             Pixhawk 6C ──TELEM1── 915 MHz 地面站
     ↕                                        ↕
-STM32F407 / MSPM0G3507 (Layer 1)           Pixhawk 6C (Layer 1)
-    ↕                                        ↕
-底盘 (差速 或 麦轮)                          电机 / 深度相机 / GPS
+电机/编码器/IA6B/HC-SR04                    IA6B/PM07/M9N/ESC；可换视觉载荷
 ```
+
+共享车载 Pi、ICM42688、A2M12 和云台/OpenMV 是一套物理载荷；它一次只能装在一个
+底盘上。`SwapChassis` 是换装后的软件选择/身份核对接口，不代表两个底盘同时在线或
+存在自动机械切换机构。硬件所有权和未定参数见 ADR-0018。
 
 ---
 
@@ -102,7 +107,9 @@ STM32F407 / MSPM0G3507 (Layer 1)           Pixhawk 6C (Layer 1)
 │   ├── launch/
 │   │   ├── drone_sitl.launch    # PX4 SITL + Gazebo
 │   │   ├── drone_sensors.launch # 传感器话题适配
-│   │   └── drone_edge.launch    # 边缘预处理节点（Task-07）
+│   │   ├── drone_edge.launch    # 边缘预处理节点（Task-07）
+│   │   ├── drone-edge-real.launch      # MAVROS + 真机视觉 + 预处理
+│   │   └── drone-vision-d435i.launch   # D435i 可换载荷
 │   ├── config/
 │   │   ├── drone_sensors.yaml
 │   │   ├── drone_edge.yaml         # 边缘节点配置（Task-07）
@@ -135,7 +142,8 @@ STM32F407 / MSPM0G3507 (Layer 1)           Pixhawk 6C (Layer 1)
 │   │   ├── gimbal_controller.py    # 云台控制
 │   │   ├── rplidar_driver.py       # 实机驱动骨架（task-14）
 │   │   ├── icm42688_driver.py      #   同上
-│   │   ├── hcsr04_driver.py        #   同上
+│   │   ├── chassis_protocol.py     # MCU 协议/CRC/帧解析
+│   │   ├── chassis_bridge.py       # /cmd_vel + 遥测/超声波桥
 │   │   ├── openmv_bridge.py        #   同上
 │   │   ├── hardware_interface.py   # 硬件后端抽象（task-14）
 │   │   ├── mock_hardware.py        # mock 后端（task-14）
@@ -321,17 +329,17 @@ timedatectl status   # 中关村服务器；还需记录三机相对同一参考
 |---|------|:---:|---------|
 | AD-01 | 双 Gazebo 部署（资源翻倍 + 服务冲突） | ✅ | Task-08 已改为 PX4 Launch 独占 Gazebo，车模型注入同一世界 |
 | AD-02 | 仿真-实机 MAVLink 桥断层（P1-11） | ⚠️ | 实机部署阶段重写 `drone_car_bridge` |
-| AD-03 | EQA/VLM 图像带宽矛盾：3DR 24KB/s vs JPEG 10KB+ | ⚠️ | ROADMAP 已记录；VLM 必须走 WiFi/4G |
+| AD-03 | 低带宽遥测电台不适合图像 | ✅ 边界已定 | 电台只接 Pixhawk TELEM1；图像走受控 IP/TCP |
 | AD-04 | TCP JSON 传输不适合生产环境图像流 | ⚠️ | v2 迁移到 ROS2/DDS 或 ZeroMQ |
 | AD-05 | Coordinator 既做决策又做翻译（违反分层） | ⚠️ | 引入 Edge 端 `mission_executor` 节点 |
 | AD-06 | World Model 可能成为单点性能瓶颈 | ⚠️ | 高频数据走 topic bus，低频查询走 service |
 | AD-07 | World State 暂无 TF 广播 (只发布 topic 不发布 transform) | ⚠️ | 与 §九 TF 树一起规划 |
 | AD-08 | 麦轮 low-friction 近似：Gazebo 不仿真辊子物理 | ℹ️ 设计取舍 | 仿真仅验证控制逻辑；横向运动精度以实机为准 |
-| AD-09 | 底盘检测逻辑依赖 `rostopic list` 探测 (P2-06) | ℹ️ | 仿真可用；实机改用硬件引脚（MSPM0 GPIO）检测 |
+| AD-09 | 仿真底盘检测依赖 `rostopic list` | ✅ 实机隔离 | 实机由 `/dev/mcu` PONG 的 board/chassis 身份失败关闭 |
 | AD-10 | PX4 v1.14 无 `iris_depth_camera` 专用 airframe | ℹ️ 设计约束 | 使用官方 Iris airframe，并以完整路径覆盖深度相机 SDF |
-| AD-11 | GPS HOME 默认值固定在仿真配置中 (P3-06) | ℹ️ | 已从源码移至 YAML；实机部署时通过 ROS 参数覆盖 |
+| AD-11 | GPS HOME 默认值固定在仿真配置中 (P3-06) | ✅ 隔离 | HOME 只供 SITL 转换；实机直接转发 Pixhawk EKF 的 MAVROS local pose |
 | AD-12 | 缺少 CI/CD、性能监控、代码风格强制 | ✅ 部分 | task-13 已建 CI（7 job，含全仓 lint 门禁）；性能监控仍待引入 |
 
 ---
 
-*版本: v6.2 · 日期: 2026-08-01 · 作者: DeepSeek (经 ChatGPT、混元3、豆包、执行端subagent集群审阅后重构) · 与 ICD.md 配套；v6.2：包结构树对齐 Phase 1 交付（task-07/14 文件、test 目录、firmware/deployment 指引）、SITL 端口更正为 18570*
+*版本: v6.3 · 日期: 2026-08-02 · 与 ICD.md、ADR-0018 配套；本版同步确认 BOM、五个物理模块及实机接口所有权*

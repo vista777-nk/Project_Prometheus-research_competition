@@ -2,7 +2,7 @@
 
 > 本文档是项目入口。详细内容已拆分为四个专题文件。
 >
-> **当前进度**：Phase 0 仿真框架 9/9 ✅ · Phase 1 基础设施 6/6 ✅ · **Phase 1.5 实机接入进行中** · 82/82 ROS 单元测试通过 · 传感器 Host 81/81 · E2E 33/33 · 固件 Host 133/133（麦轮 63 + 差速 70）· 部署校验含 8 个入口模式、9 个服务器常驻部署和 9 个 Pi 主机预检用例 · UART/I²C Linux 后端与中关村服务器常驻/恢复已验证 · Pi 5 / Debian 13 / 8 GB / 64 GB 基线已确认 · 6 个 ROS package 全部可编译 · CI 七个 job（含全仓 lint 门禁）
+> **当前进度**：Phase 0 仿真框架 9/9 ✅ · Phase 1 基础设施 6/6 ✅ · **Phase 1.5 实机接入进行中** · 服务器常驻/恢复已验证 · Pi 5 / Debian 13 / 8GB / 64GB 基线已确认 · BOM/五模块边界已冻结（ADR-0018）· 地面车几何/编码器/IMU/电气/RC 基线已冻结（ADR-0019）· STM32 四路 HC-SR04、iBUS/RC 安全状态机和 GPIO 正交解码已实现 · MSPM0 SysConfig、两板第二 UART 接入和全部实物验收待良乡上机
 
 ## 📖 必读文件
 
@@ -44,6 +44,19 @@
 | [task-13](./task-13-ci-pipeline.md) | CI 交叉编译流水线（ARM + MSPM0 + Docker + Lint） | 🥉 验证先行 | 3h | ✅ |
 | [task-14](./task-14-sensor-drivers-mavlink.md) | 实机传感器驱动骨架 + MAVLink 2 签名 | 🥉 验证先行 | 4h | ✅ |
 | [task-15](./task-15-calibration-validation.md) | IMU/相机标定脚本 + Phase 1 集成验证 | 🥉 验证先行 | 3h | ✅ |
+
+### Phase 1.5：实机接入工作包（进行中）
+
+| 工作包 | 服务器侧/代码侧 | 现场关闭条件 | 状态 |
+|---|---|---|:---:|
+| H1 硬件冻结 | 完整 BOM、五个模块、资源所有权、64 GB Pi 基线 | 核对实物标签与数量 | 🟡 |
+| H2 差速模块 | 1560 count/rev 与几何已入库；无效 pinmux 已拒绝；软件正交解码和 RC 安全状态机就绪 | SysConfig/中断接入、离地/负载测试 | 🟡 |
+| H3 麦轮模块 | 几何/编码器、TIM8 四路超声波、iBUS/RC 安全状态机已入库 | 第二 UART 接入、接线、横移/负载测试 | 🟡 |
+| H4 共享车载载荷 | A2M12 256000；ICM42688 0x69/轴映射；OpenMV/云台边界冻结 | I²C/USB 身份、外参/云台电流、两底盘换装复测 | 🟡 |
+| H5 无人机本体/视觉 | TELEM2 MAVROS + D435i 实机 launch；双 CSI 失败关闭 | 无桨、数传、RC、推重比、系留实飞；双相机 profile | 🟡 |
+| H6 跨校区链路 | 中关村本地 ROS/systemd、单 TCP 隧道边界 | 获批隧道与断线/恢复实测 | 🟡 |
+
+完整现场表见 [Phase 1.5 实机硬件基线](../docs/experiments/phase-1.5-hardware-baseline.md)。
 
 ### 依赖拓扑 (Phase 0)
 
@@ -94,8 +107,9 @@ task-14 (传感器 + MAVLink) ── (独立) ── task-15
 > CI 抓出 `StartLimitIntervalSec` 写错段（systemd 会静默忽略），
 > 已补一条不依赖 systemd 的段归属自查。
 >
-> **2026-08-01 Phase 1.5 实机入口推进**：UART / I²C Linux 后端已落地并有
-> 81 条 Host 用例；真实 ROS 对照证明 mock 五节点持续存活、real 无设备时整套关闭。
+> **2026-08-02 Phase 1.5 实机入口推进**：UART / I²C Linux 后端与统一底盘串口桥
+> 已落地并有 78 条 Host 用例；真实 ROS 对照证明 mock 路径持续存活、real 缺
+> MCU 身份或四路超声波时失败关闭。
 > 实验室服务器新增不自连的 `lab-server-real.launch`，在当前
 > `192.168.3.30` 上真实监听 `0.0.0.0:9090` 并把 TCP heartbeat 解码为
 > `/server/car/state`。机器人隔离网 `192.168.1.100` 仍未配置，见 ADR-0016。
@@ -106,7 +120,7 @@ task-14 (传感器 + MAVLink) ── (独立) ── task-15
 > 自动恢复，11311/9090 只监听回环，ROS 日志迁到 `/data2`。
 >
 > ⚠ task-11 的默认构建产出**不是可烧录固件**（MSPM0 移植层默认空实现，
-> 原因见 ADR-0004 §决策-3）。算法层完整且有 70 个 Host 用例覆盖；
+> 原因见 ADR-0004 §决策-3）。算法层完整且有 71 个 Host 用例覆盖；
 > 上板需按其 README §7 接入 TI SDK 与 SysConfig。
 >
 > **2026-07-31 补充（task-13）**：CI 增至 6 个 job。但本任务真正新增的只有
@@ -157,8 +171,25 @@ task-14 (传感器 + MAVLink) ── (独立) ── task-15
 > ADR-0008 要求钉版本的**目的**是让人能区分"代码退化了"和"工具升级了"——
 > 这里改用报错文案达成同一目的，代价（判断从自动降级成人读一行）写在 ADR 里。
 >
-> 剩余欠账：超声波时序方案（编号定为 ADR-0013）、PX4/MAVROS 签名参数名、
-> `/car/openmv/image_raw` 的发布者 —— 后两笔只能等实机。
+> **2026-08-02 BOM 同步**：ADR-0013 已决定 HC-SR04 由各底盘 MCU 定时并通过
+> `0x14` 上报；ADR-0018 冻结五个物理模块。旧 Pi GPIO 驱动已删除，DRV8871、
+> A2M12、M9N、F450/A2212/BL32/1045 和可换无人机视觉载荷已进入代码/部署。
+> 剩余欠账是物理 pinmux、MC520P30 参数、组装几何、IA6B、PX4 参数、USB 身份、
+> 双 CSI profile、供电/电池和跨校区隧道，均只能用实物关闭。
+
+> **2026-08-03 英文答复同步**：ADR-0019 将 MC520P30（1560 count/rev、360RPM
+> 空载）、两底盘几何、ICM42688 0x69/安装轴、OpenMV 云台边界、HC-SR04 分压/轮询、
+> IA6B 安全仲裁和供电门禁写入权威基线。STM32 四路 TIM8 捕获已实现；MSPM0 旧表
+> 错把 TIMG7 当 QEI，现由真实构建 `#error` 阻止误烧，直到 SysConfig 与 GPIO 软件
+> 正交解码完成。无人机整套未到货，继续失败关闭，不从地面车参数外推。
+
+> **2026-08-03 服务器离场收口**：GitHub 公共 API 证实 `task-new` 的 CI run 为 0；
+> 根因是 `push.branches` 只允许 `main/feat/*/fix/*`。现改为任意分支 push 触发，
+> Phase 1 冒烟增加触发契约守卫，当前基线 65/65。中关村服务器服务/timer active，
+> 五个服务节点健康，11311/9090 仅回环；根分区 97%，大数据继续只写 `/data2`。
+> 旧 AI/CLAUDE 交接已归档，明天从
+> [Raspberry Pi AI 交接](../docs/experiments/AI_HANDOFF.md) 开始，审计证据见
+> [服务器收口报告](../docs/experiments/phase-1.5-server-readiness-2026-08-03.md)。
 
 ## 🚀 快速开始
 
@@ -192,4 +223,4 @@ make test-e2e
 
 ---
 
-*版本: v6.6 · 日期: 2026-08-01 · v6.6：UART/I²C 实机后端；服务器真实 TCP 入口；ROS 82/82*
+*版本: v6.9 · 日期: 2026-08-03 · v6.9：服务器离场收口、全分支 CI 与 Pi 交接同步*

@@ -593,6 +593,22 @@ static void test_telemetry_tolerates_null_arrays(void)
     TEST_ASSERT_EQUAL_HEX16(0x00FFu, frame_get_u16(&telemetry.data[32]));
 }
 
+/** HC-SR04 快照按 front,rear,left,right 的 u16 毫米值上报。 */
+static void test_ultrasonic_frame_layout(void)
+{
+    reset_protocol_fixture();
+    const uint16_t ranges[4] = { 123u, 456u, 4000u, ULTRASONIC_UNAVAILABLE_MM };
+    protocol_send_ultrasonic(ranges);
+
+    Frame sensors;
+    TEST_ASSERT_TRUE(take_tx_frame(0u, &sensors));
+    TEST_ASSERT_EQUAL_HEX8(CMD_ULTRASONIC, sensors.cmd);
+    TEST_ASSERT_EQUAL_UINT(PAYLOAD_LEN_ULTRASONIC, sensors.len);
+    for (int i = 0; i < 4; i++) {
+        TEST_ASSERT_EQUAL_HEX16(ranges[i], frame_get_u16(&sensors.data[i * 2]));
+    }
+}
+
 /** 未注册写函数时只收不发，不得崩溃 */
 static void test_protocol_without_writer_is_safe(void)
 {
@@ -603,6 +619,7 @@ static void test_protocol_without_writer_is_safe(void)
     TEST_ASSERT_EQUAL_UINT(1u, protocol_feed(raw, n));
     protocol_send_pong();
     protocol_send_telemetry(NULL, NULL, 0u);
+    protocol_send_ultrasonic(NULL);
 
     TEST_ASSERT_EQUAL_UINT(0u, protocol_feed(NULL, 10u));
     TEST_ASSERT_FALSE(protocol_dispatch(NULL));
@@ -634,5 +651,6 @@ void run_protocol_tests(void)
     RUN_TEST(test_corrupted_frame_produces_no_response);
     RUN_TEST(test_telemetry_frame_layout);
     RUN_TEST(test_telemetry_tolerates_null_arrays);
+    RUN_TEST(test_ultrasonic_frame_layout);
     RUN_TEST(test_protocol_without_writer_is_safe);
 }

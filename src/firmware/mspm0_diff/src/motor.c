@@ -19,16 +19,9 @@
 
 static float s_duty[NUM_WHEELS];
 
-/** ADC 通道映射，索引同轮序号 */
-static const uint8_t s_current_channel[NUM_WHEELS] = {
-    (uint8_t)CURRENT_ADC_CHANNEL_LEFT,
-    (uint8_t)CURRENT_ADC_CHANNEL_RIGHT
-};
-
 void motor_init(void)
 {
     port_motor_init(MOTOR_PWM_FREQ_HZ);
-    port_adc_init();
     for (int i = 0; i < NUM_WHEELS; i++) {
         s_duty[i] = 0.0f;
     }
@@ -53,7 +46,9 @@ void motor_set_duty(int wheel, float duty)
 
     s_duty[wheel] = duty;
 
-    /* 先方向后幅值：反过来会在过零瞬间让 H 桥两臂同时导通 */
+    /* 换向前先撤去有效驱动力：正向落到 00，反向落到 11 慢衰减；
+       随后切 IN2，再恢复目标占空比。 */
+    port_motor_set_pwm(wheel, 0.0f);
     if (duty > 0.0f) {
         port_motor_set_direction(wheel, PORT_MOTOR_FORWARD);
         port_motor_set_pwm(wheel, duty);
@@ -98,7 +93,6 @@ void motor_sample_currents(float out[NUM_WHEELS])
         return;
     }
     for (int i = 0; i < NUM_WHEELS; i++) {
-        const uint16_t raw = port_adc_read(s_current_channel[i]);
-        out[i] = (float)raw * CURRENT_ADC_SCALE_A_PER_LSB;
+        out[i] = NAN;
     }
 }

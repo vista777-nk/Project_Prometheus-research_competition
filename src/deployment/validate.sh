@@ -131,7 +131,7 @@ else
     # (STM32 / MSPM0 / 本文件), 任何一端改了字节序或 CRC 参数, 两边总有一处红。
     if "${PYTHON}" src/deployment/test/test-serial-loopback.py --self-test \
             >/tmp/agserial.log 2>&1; then
-        pass "串口协议自测 (黄金帧/CRC/拆帧/重同步 13 条)"
+        pass "串口协议自测 (黄金帧/CRC/拆帧/重同步 10 条)"
     else
         fail "串口协议自测"
         tail -25 /tmp/agserial.log | sed 's/^/      /'

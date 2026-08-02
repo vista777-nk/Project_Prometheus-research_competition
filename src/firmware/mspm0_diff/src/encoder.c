@@ -7,7 +7,7 @@
  * 1. **计数器回绕**。定时器计数器是 16 位无符号，从 0xFFFF 走到 0x0000 时
  *    朴素相减会得到 -65535 而不是 +1。做法是先按 uint16 相减 (自然取模)，
  *    再整体转成 int16 —— 只要单周期位移不超过 ±32767 就恒正确。
- *    本工程最快 330 RPM ⟹ 每 1ms 约 7.3 个计数，余量四千倍。
+ *    本工程最快 360 RPM ⟹ 每 1ms 约 9.36 个计数，16 位差值余量充足。
  *
  * 2. **测速分辨率**。1ms 窗口下一个计数就是 45 RPM 的台阶，PID 会被
  *    量化噪声牵着走。改用 10ms 窗口 (4.5 RPM/计数) + EMA，速度环仍跑 1kHz。
@@ -30,7 +30,7 @@
  *   window_seconds = WINDOW_TICKS / CONTROL_FREQ_HZ
  *   ⟹ RPM = counts × (60 × CONTROL_FREQ_HZ) / (COUNTS_PER_REV × WINDOW_TICKS)
  *
- * 本工程：60 × 1000 / (1320 × 10) = 4.5454... RPM/计数
+ * 本工程：60 × 1000 / (1560 × 10) = 3.8461... RPM/计数
  */
 #define RPM_PER_WINDOW_COUNT                                                   \
     ((60.0f * (float)CONTROL_FREQ_HZ) /                                        \

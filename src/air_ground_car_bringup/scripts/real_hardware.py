@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Linux 实机 UART / I2C 访问层。
 
-这里只实现操作系统访问原语；RPLIDAR 协议、OpenMV 分帧与 ICM42688 寄存器语义
-仍由各自驱动负责。HC-SR04 的微秒级 GPIO 时序尚待实机测量与 ADR-0013，不能在
-这里用 ``sleep`` 猜一个实现。
+这里只实现操作系统访问原语；底盘二进制帧、RPLIDAR 协议、OpenMV 分帧与
+ICM42688 寄存器语义仍由各自驱动负责。HC-SR04 的微秒级时序由底盘 MCU 负责。
 """
 
 from typing import Any, Optional

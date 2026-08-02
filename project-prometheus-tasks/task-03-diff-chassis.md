@@ -60,9 +60,9 @@ air_ground_car_bringup/
 | 车体长 × 宽 × 高 | 0.25 × 0.20 × 0.08 m |
 | 车体质量 | 2.5 kg |
 | 车体质心高度 | 0.073 m |
-| 驱动轮半径 | 0.033 m |
+| 驱动轮有效半径 | 0.031 m |
 | 驱动轮宽度 | 0.026 m |
-| 轮距 | 0.18 m |
+| 轮距 | 0.166 m |
 | 单轮质量 | 0.05 kg |
 | 前后球形支撑轮半径 | 0.012 m |
 
@@ -80,7 +80,7 @@ air_ground_car_bringup/
 
 - 连续关节：`left_wheel_joint`、`right_wheel_joint`；
 - 关节轴沿车体 y 方向，轮子沿车体 x 方向滚动；
-- 最大关节速度 35 rad/s，最大 effort 5 N·m；
+- 最大关节速度 40 rad/s（覆盖 360±20 RPM 空载公差），最大 effort 5 N·m；
 - 每个轮关节均配置 `SimpleTransmission`；
 - 硬件接口为 `hardware_interface/VelocityJointInterface`。
 
@@ -116,8 +116,8 @@ config/diff_chassis_control.yaml
 关键参数：
 
 ```yaml
-wheel_separation: 0.18
-wheel_radius: 0.033
+wheel_separation: 0.166
+wheel_radius: 0.031
 cmd_vel_timeout: 0.5
 publish_rate: 30
 open_loop: false

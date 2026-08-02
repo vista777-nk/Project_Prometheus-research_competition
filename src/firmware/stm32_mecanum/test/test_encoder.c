@@ -65,9 +65,9 @@ static void run_windows_on(int wheel, int n, int counts)
     }
 }
 
-/* 一个窗口 66 个计数 = 300 RPM：
-   300 RPM = 5 rev/s × 1320 counts/rev = 6600 counts/s × 0.01s = 66 */
-#define COUNTS_FOR_300RPM_PER_WINDOW    66
+/* 一个窗口 78 个计数 = 300 RPM：
+   300 RPM = 5 rev/s × 1560 counts/rev = 7800 counts/s × 0.01s = 78 */
+#define COUNTS_FOR_300RPM_PER_WINDOW    78
 
 /* ===================== 用例 ===================== */
 

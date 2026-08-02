@@ -1,4 +1,4 @@
-# Task-14 实机传感器参数 —— 四个驱动骨架共用一份, 每个节点只读自己那一段。
+# Phase 1.5 共享车载载荷参数 —— 三个传感器驱动和底盘串口桥共用一份。
 #
 # 与仿真侧 config/car_sensors.yaml 的关系:
 #   car_sensors.yaml   描述 Gazebo 里那套虚拟传感器 (给 URDF 和标定用)
@@ -10,11 +10,12 @@
 #          mock — 仅显式冒烟使用，entrypoint 会将整机标记为降级
 backend: real
 
-# --- 思岚 RPLIDAR A1 (UART 115200) ---
+# --- 思岚 RPLIDAR A2M12 (UART 256000，SLAMTEC 官方规格) ---
 rplidar:
+  model: A2M12
   # udev 稳定名；不要写会随枚举顺序漂移的 ttyUSB0。
   port: /dev/rplidar
-  baudrate: 115200
+  baudrate: 256000
   topic: /car/scan
   # frame_id 与 urdf/car_sensors.urdf.xacro 里的 link 名一致
   frame_id: lidar_link
@@ -32,10 +33,10 @@ rplidar:
   reconnect_interval: 2.0
   data_timeout: 2.0
 
-# --- TDK ICM42688-P 6 轴 IMU (I2C 0x68) ---
+# --- TDK ICM42688-P 6 轴 IMU (AD0 高电平，I2C 0x69) ---
 icm42688:
   bus: 1
-  address: 0x68
+  address: 0x69
   # 与仿真侧 libgazebo_ros_imu_sensor.so 的 topicName 对齐 (imu/data)
   topic: /car/imu/data
   frame_id: imu_link
@@ -44,41 +45,33 @@ icm42688:
   # 不要在代码里改常量。可选值: g = 2/4/8/16, dps = 125/250/500/1000/2000
   accel_range_g: 4
   gyro_range_dps: 500
+  # 实物安装：传感器 Y 朝车头、X 朝左、Z 朝下。发布前转换到 REP-103
+  # base_link 坐标：X 前、Y 左、Z 上。
+  axis_mapping: [y, x, -z]
   # 协方差用的噪声标准差。当前沿用 car_sensors.yaml 的仿真值,
   # 实机静置标定后由 task-15 替换。
   gyro_noise_stddev: 0.0005
   accel_noise_stddev: 0.001
   reconnect_interval: 2.0
 
-# --- HC-SR04 ×4 (GPIO, BCM 编号) ---
-hcsr04:
+# --- 可插拔底盘 MCU 桥（STM32 麦轮 / MSPM0 差速） ---
+# HC-SR04 属于底盘控制模块。MCU 负责微秒级触发/捕获，Pi 只解码统一的
+# CMD_ULTRASONIC 帧；这使同一套共享载荷无需改 GPIO 接线即可换底盘。
+chassis_bridge:
+  port: /dev/mcu
+  baudrate: 115200
+  command_topic: /car/cmd_vel
   topic_prefix: /car/ultrasonic
   frame_id_template: ultrasonic_{name}_link
   directions: [front, rear, left, right]
-  pins:
-    front:
-      trig: 17
-      echo: 27
-    rear:
-      trig: 22
-      echo: 23
-    left:
-      trig: 5
-      echo: 6
-    right:
-      trig: 13
-      echo: 19
-  # 单路刷新率 (Hz)。四路轮流触发, 主循环频率是它的 4 倍。
-  update_rate: 20.0
   min_range: 0.02
   max_range: 4.0
-  # HC-SR04 要求触发脉冲 >=10us。这个 10us 由 GPIOInterface 的实现负责,
-  # Python 层做不到 (非实时内核 sleep 精度是毫秒级) —— 见 ADR-0009。
-  trigger_pulse_us: 10.0
-  # 超时窗。30ms 往返 ≈ 5.1m, 略大于 4m 量程。
-  echo_timeout_us: 30000.0
-  # 20 摄氏度空气中的声速 (m/s)。约 0.6 m/s/摄氏度, 实机标定见 task-15。
-  speed_of_sound: 343.0
+  read_chunk: 256
+  poll_rate: 100.0
+  handshake_timeout: 2.0
+  ultrasonic_startup_timeout: 2.0
+  data_timeout: 1.0
+  reconnect_interval: 2.0
 
 # --- OpenMV 云台相机 (UART) ---
 openmv:

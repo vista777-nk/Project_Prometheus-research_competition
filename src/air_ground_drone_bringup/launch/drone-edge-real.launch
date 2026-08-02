@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="vision_mode" default="d435i"/>
+  <arg name="fcu_url" default="/dev/pixhawk:921600"/>
+  <arg name="gcs_url" default=""/>
+  <arg name="config_file"
+       default="$(find air_ground_drone_bringup)/config/drone_edge.yaml"/>
+  <arg name="sensor_config_file"
+       default="$(find air_ground_drone_bringup)/config/drone_sensors.yaml"/>
+
+  <!-- Pi companion 只接 Pixhawk TELEM2。TELEM1 的 915 MHz 电台由飞控直接管理。 -->
+  <include file="$(find mavros)/launch/px4.launch">
+    <arg name="fcu_url" value="$(arg fcu_url)"/>
+    <arg name="gcs_url" value="$(arg gcs_url)"/>
+  </include>
+
+  <include if="$(eval arg('vision_mode') == 'd435i')"
+           file="$(find air_ground_drone_bringup)/launch/drone-vision-d435i.launch"/>
+
+  <include file="$(find air_ground_drone_bringup)/launch/drone_sensors.launch">
+    <arg name="config_file" value="$(arg sensor_config_file)"/>
+    <arg name="camera_rgb_source" value="/camera/color/image_raw"/>
+    <arg name="camera_depth_source"
+         value="/camera/aligned_depth_to_color/image_raw"/>
+    <arg name="camera_points_source" value="/camera/depth/color/points"/>
+    <!-- 实机直接采用 Pixhawk EKF 的本地坐标，不使用 SITL 固定 HOME 经纬度。 -->
+    <arg name="enable_gps_converter" value="false"/>
+  </include>
+
+  <node pkg="topic_tools" type="relay" name="relay_drone_local_pose"
+        args="/mavros/local_position/pose /drone/gps/local_pose"
+        output="screen"/>
+
+  <include file="$(find air_ground_drone_bringup)/launch/drone_edge.launch">
+    <arg name="config_file" value="$(arg config_file)"/>
+  </include>
+</launch>

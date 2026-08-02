@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RPLIDAR A1 驱动骨架单元测试 —— 无 ROS、无 roscore、无硬件。"""
+"""RPLIDAR A2M12 驱动单元测试 —— 无 ROS、无 roscore、无硬件。"""
 
 import math
 import unittest

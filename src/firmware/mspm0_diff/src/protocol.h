@@ -16,9 +16,10 @@
  * | 0x02 | Pi→MSPM0  | EMERGENCY_STOP | 无                                            |
  * | 0x03 | Pi→MSPM0  | PING           | 无                                            |
  * | 0x10 | Pi→MSPM0  | EXTENSION      | 子命令(u8) + 变长载荷 —— 电赛外设预留          |
- * | 0x11 | MSPM0→Pi  | TELEMETRY      | rpm(f32×2) + 电流(f32×2) + 故障码(u16) = 18 B  |
+ * | 0x11 | MSPM0→Pi  | TELEMETRY      | rpm(f32×2) + 电流(f32×2, 当前 NaN) + 故障码(u16) = 18 B |
  * | 0x12 | MSPM0→Pi  | ACK            | 被确认的 CMD(u8) = 1 B                         |
  * | 0x13 | MSPM0→Pi  | PONG           | major,minor,patch,board_type,chassis_type = 5 B |
+ * | 0x14 | MSPM0→Pi  | ULTRASONIC     | front,rear,left,right (u16 mm ×4) = 8 B    |
  * | 0xFF | MSPM0→Pi  | ERROR          | 错误码(u8) + 变长详情                          |
  *
  * 与麦轮固件的差异**只有载荷长度和 board/chassis 编码**，帧结构、CRC、
@@ -48,6 +49,7 @@ extern "C" {
 #define CMD_TELEMETRY           0x11u
 #define CMD_ACK                 0x12u
 #define CMD_PONG                0x13u
+#define CMD_ULTRASONIC          0x14u
 #define CMD_ERROR               0xFFu
 
 /* --- 各命令的 DATA 段长度 (EXTENSION 变长，不在此列) --- */
@@ -57,6 +59,8 @@ extern "C" {
 #define PAYLOAD_LEN_TELEMETRY       18u
 #define PAYLOAD_LEN_ACK              1u
 #define PAYLOAD_LEN_PONG             5u
+#define PAYLOAD_LEN_ULTRASONIC       8u
+#define ULTRASONIC_UNAVAILABLE_MM    0xFFFFu
 /** EXTENSION 至少要有 1 字节子命令 */
 #define PAYLOAD_MIN_LEN_EXTENSION    1u
 
@@ -146,12 +150,15 @@ void protocol_send_pong(void);
 /**
  * 上报遥测。
  * @param rpm     双轮实测转速，索引同 kinematics.h (0=左, 1=右)
- * @param current 双轮电流 (A)
+ * @param current 双轮电流 (A)；DRV8871 无反馈脚且 BOM 无采样电路时固定为 NaN
  * @param fault   故障位图，见上方 FAULT_* 定义
  */
 void protocol_send_telemetry(const float rpm[NUM_WHEELS],
                              const float current[NUM_WHEELS],
                              uint16_t fault);
+
+/** 上报四路 HC-SR04 毫米值，顺序固定为 front,rear,left,right。 */
+void protocol_send_ultrasonic(const uint16_t ranges_mm[4]);
 
 void protocol_send_error(uint8_t code, const uint8_t *detail, uint8_t detail_len);
 

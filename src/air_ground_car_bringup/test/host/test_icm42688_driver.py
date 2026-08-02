@@ -13,6 +13,8 @@ from icm42688_driver import (
     WHO_AM_I_VALUE,
     ICM42688Driver,
     decode_imu_frame,
+    parse_axis_mapping,
+    remap_vector,
     to_int16,
 )
 from mock_hardware import MockI2C
@@ -64,6 +66,14 @@ class DecodeImuFrameTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             decode_imu_frame(b"\x00" * 11, 8192.0, 65.5)
 
+    def test_mount_axis_mapping_obeys_rep103(self):
+        mapping = parse_axis_mapping(["y", "x", "-z"])
+        self.assertEqual(remap_vector((1.0, 2.0, 3.0), mapping), (2.0, 1.0, -3.0))
+
+    def test_axis_mapping_rejects_duplicate_source_axis(self):
+        with self.assertRaises(ValueError):
+            parse_axis_mapping(["x", "x", "-z"])
+
 
 class ICM42688DriverTest(unittest.TestCase):
     """驱动整体：参数取自 real_sensors.yaml，寄存器取自 MockI2C。"""
@@ -82,7 +92,8 @@ class ICM42688DriverTest(unittest.TestCase):
         self.assertEqual(i2c.registers[REG_GYRO_CONFIG0], (2 << 5) | 0x08)
 
     def test_step_publishes_si_units(self):
-        i2c = seed_i2c((0, 0, 8192), (0, 0, 0))
+        # 板上 Z 轴朝下；静止时原始 Z=-1g，映射后 base_link Z=+1g。
+        i2c = seed_i2c((0, 0, -8192), (0, 0, 0))
         driver = ICM42688Driver(i2c)
         message = driver.step()
         self.assertIsNotNone(message)
@@ -136,6 +147,11 @@ class ICM42688DriverTest(unittest.TestCase):
 
     def test_rejects_unsupported_range(self):
         configure({"icm42688/accel_range_g": 3})
+        with self.assertRaises(ValueError):
+            ICM42688Driver(MockI2C())
+
+    def test_rejects_invalid_axis_mapping(self):
+        configure({"icm42688/axis_mapping": ["x", "y"]})
         with self.assertRaises(ValueError):
             ICM42688Driver(MockI2C())
 

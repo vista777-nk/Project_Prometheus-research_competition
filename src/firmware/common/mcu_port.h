@@ -24,7 +24,7 @@
  *   · 无法核对的器件细节被收拢到一个文件里，而不是散落四处
  *
  * 代价：多一层间接调用。1kHz 控制中断里每周期约多 10 次函数调用 ——
- * @168MHz 约 0.2µs、@80MHz 约 0.5µs，相对 1000µs 的周期可忽略。刻意付的。
+ * @168MHz 约 0.2µs、@32MHz 约 1.2µs，相对 1000µs 的周期可忽略。刻意付的。
  *
  * ─────────────────────────────────────────────────────────────────────────
  * 调用方向约定
@@ -51,7 +51,7 @@ extern "C" {
 
 /**
  * 初始化时钟树与 1ms 时基。必须在任何其他 port_* 调用之前执行。
- * STM32F407: HSE+PLL → 168MHz · MSPM0G3507: SYSOSC+SYSPLL → 80MHz
+ * STM32F407: HSE+PLL → 168MHz · MSPM0G3507: 服从 SysConfig（当前基线 32MHz）
  */
 void port_system_init(void);
 
@@ -91,12 +91,12 @@ void port_motor_init(uint32_t pwm_freq_hz);
  */
 void port_motor_set_pwm(int wheel, float duty_abs);
 
-/** H 桥方向真值表 (TB6612FNG: IN1/IN2) */
+/** DRV8871 输入真值表的抽象状态（每块驱动板只驱动一台电机）。 */
 typedef enum {
-    PORT_MOTOR_COAST = 0,   /**< IN1=0 IN2=0 滑行 (高阻) */
+    PORT_MOTOR_COAST = 0,   /**< IN1=0 IN2=0 休眠/高阻 */
     PORT_MOTOR_FORWARD,     /**< IN1=1 IN2=0 */
     PORT_MOTOR_REVERSE,     /**< IN1=0 IN2=1 */
-    PORT_MOTOR_BRAKE        /**< IN1=1 IN2=1 短接刹车 */
+    PORT_MOTOR_BRAKE        /**< IN1=1 IN2=1 慢衰减/刹车 */
 } PortMotorDirection;
 
 void port_motor_set_direction(int wheel, PortMotorDirection dir);
@@ -115,7 +115,18 @@ void port_encoder_init(void);
  */
 uint16_t port_encoder_read_count(int wheel);
 
-/* ===================== 五、串口 ===================== */
+/* ===================== 五、底盘超声波 ===================== */
+
+/**
+ * 读取 MCU 已完成的一组四路 HC-SR04 快照，顺序固定为前、后、左、右。
+ *
+ * 移植层必须用定时器输出比较/输入捕获实现微秒时序，并轮流触发四路以避免串扰；
+ * 不得在控制 ISR 内忙等。未完成电子引脚表或本周期没有完整快照时返回 false，
+ * 上层不会发送假读数。
+ */
+bool port_ultrasonic_snapshot_mm(uint16_t ranges_mm[4]);
+
+/* ===================== 六、串口 ===================== */
 
 /**
  * 配置 UART (8N1) 与收发中断。
@@ -148,7 +159,7 @@ void port_uart_idle_hook(void);
 /** 【上层实现】硬件接收溢出 */
 void port_uart_overrun_hook(void);
 
-/* ===================== 六、ADC (电流采样 + 扩展模拟量) ===================== */
+/* ===================== 七、ADC (扩展模拟量) ===================== */
 
 void port_adc_init(void);
 
@@ -158,7 +169,7 @@ void port_adc_init(void);
  */
 uint16_t port_adc_read(uint8_t channel);
 
-/* ===================== 七、GPIO (急停 / LED) ===================== */
+/* ===================== 八、GPIO (急停 / LED) ===================== */
 
 void port_gpio_init(void);
 

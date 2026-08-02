@@ -11,15 +11,15 @@
 #include "unity.h"
 
 /* 测试几何：与 chassis_params.yaml : diff_chassis 一致 */
-#define TEST_R          0.033f
-#define TEST_TRACK      0.18f
-#define TEST_MAX_RPM    330.0f
-#define TEST_HALF_TRACK (TEST_TRACK * 0.5f)     /* 0.09 */
+#define TEST_R          0.031f
+#define TEST_TRACK      0.166f
+#define TEST_MAX_RPM    360.0f
+#define TEST_HALF_TRACK (TEST_TRACK * 0.5f)     /* 0.083 */
 
 #define RADPS_TO_RPM    9.549296585513720f
 #define EPS             1e-3f
 
-/** 满转速对应的直线速度 (m/s)：330 RPM → 1.1404 m/s */
+/** 满转速对应的直线速度 (m/s)：360 RPM → 1.1687 m/s */
 #define MAX_LINEAR_MPS  (TEST_MAX_RPM / RADPS_TO_RPM * TEST_R)
 
 static void init_default_geometry(void)
@@ -45,7 +45,7 @@ static void test_straight_forward(void)
 
     TEST_ASSERT_EQUAL_INT(KIN_OK, diff_inverse_kinematics(&cmd, rpm));
 
-    const float want = expected_rpm(0.5f);   /* ≈ 144.69 RPM */
+    const float want = expected_rpm(0.5f);   /* ≈ 154.02 RPM */
     TEST_ASSERT_TRUE_MESSAGE(rpm[WHEEL_LEFT] > 0.0f, "forward: left wheel must spin forward");
     TEST_ASSERT_TRUE_MESSAGE(rpm[WHEEL_RIGHT] > 0.0f, "forward: right wheel must spin forward");
     TEST_ASSERT_FLOAT_WITHIN(EPS, want, rpm[WHEEL_LEFT]);
@@ -84,7 +84,7 @@ static void test_rotate_in_place_ccw(void)
 
     TEST_ASSERT_EQUAL_INT(KIN_OK, diff_inverse_kinematics(&cmd, rpm));
 
-    const float want = expected_rpm(TEST_HALF_TRACK * 1.0f);   /* ≈ 26.04 RPM */
+    const float want = expected_rpm(TEST_HALF_TRACK * 1.0f);   /* ≈ 25.57 RPM */
     TEST_ASSERT_TRUE_MESSAGE(rpm[WHEEL_LEFT] < 0.0f, "ccw: left wheel must reverse");
     TEST_ASSERT_TRUE_MESSAGE(rpm[WHEEL_RIGHT] > 0.0f, "ccw: right wheel must go forward");
     TEST_ASSERT_FLOAT_WITHIN(EPS, -want, rpm[WHEEL_LEFT]);
@@ -118,8 +118,8 @@ static void test_curve_forward(void)
 
     TEST_ASSERT_EQUAL_INT(KIN_OK, diff_inverse_kinematics(&cmd, rpm));
 
-    const float want_left  = expected_rpm(0.5f - TEST_HALF_TRACK * 0.5f);   /* 0.455 m/s */
-    const float want_right = expected_rpm(0.5f + TEST_HALF_TRACK * 0.5f);   /* 0.545 m/s */
+    const float want_left  = expected_rpm(0.5f - TEST_HALF_TRACK * 0.5f);
+    const float want_right = expected_rpm(0.5f + TEST_HALF_TRACK * 0.5f);
 
     TEST_ASSERT_TRUE_MESSAGE(rpm[WHEEL_RIGHT] > rpm[WHEEL_LEFT],
                              "ccw curve: right wheel must lead");
@@ -160,7 +160,7 @@ static void test_saturation(void)
  * 直线饱和 (test_saturation) 两种策略结果完全相同，验不出区别；
  * 必须用一个 v 和 ω 都非零、且只有一侧轮超限的指令才能把它们区分开。
  *
- * v=1.0, ω=3.0 → 右轮需要 367.5 RPM (超 330)，左轮只要 211.2 RPM。
+ * v=1.0, ω=3.0 → 右轮超过 360 RPM，左轮仍在范围内。
  * 逐轮钳位只会砍右轮 → 曲率被掰弯；等比缩放两轮同砍 → 弧线不变，只是慢了。
  */
 static void test_saturation_preserves_curvature(void)
@@ -269,7 +269,7 @@ static void test_rejects_invalid_geometry(void)
     const DiffGeometry zero_radius = { 0.0f, TEST_TRACK, TEST_MAX_RPM };
     TEST_ASSERT_EQUAL_INT(KIN_INVALID, diff_kinematics_init(&zero_radius));
 
-    const DiffGeometry negative_track = { TEST_R, -0.18f, TEST_MAX_RPM };
+    const DiffGeometry negative_track = { TEST_R, -0.166f, TEST_MAX_RPM };
     TEST_ASSERT_EQUAL_INT(KIN_INVALID, diff_kinematics_init(&negative_track));
 
     const DiffGeometry nan_max = { TEST_R, TEST_TRACK, NAN };

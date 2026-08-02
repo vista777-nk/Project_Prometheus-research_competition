@@ -14,6 +14,16 @@
 > ⚠ **默认构建产出不是可烧录固件** —— MSPM0 移植层默认为空实现，原因与代价见
 > 文末 [§实施记录](#实施记录2026-07-29) 及 ADR-0004 §决策-3。这一点在
 > README、构建横幅、产出文件名、`make flash` 四处都有拦截。
+>
+> **2026-08-02 实机 BOM 覆盖**：差速模块现为 65 mm 轮、MC520P30 ×2、
+> DRV8871 ×2、HC-SR04 ×4、IA6B。固件 v0.2 已切换 DRV8871 并增加超声波
+> `0x14`；71 个 Host 用例通过。SysConfig pinmux、超声波引脚、IA6B、PPR/
+> 减速比仍需实物确认，默认 `ci-link` 仍不可烧录。
+>
+> **2026-08-03 参数/接口覆盖**：PPR/减速比已冻结为 13/30，四倍频为
+> 1560 counts/rev，几何与候选引脚按 ADR-0019 更新。旧 PB4/PB1 PWM、PA14 与
+> TIMG7 QEI 表无效；共用 GPIO 正交解码器已完成 Host 测试，真实剖面在 SysConfig
+> 中断接入完成前仍于编译期拒绝。
 
 ---
 
@@ -45,8 +55,8 @@
   │  rosnode: car_preprocessor.py
   │  发布 /car/observation, /car/state
   │
-  │  UART (/dev/ttyAMA1 或 USB-UART, 115200 8N1)
-  │  协议: 二进制帧 + CRC16 (与 STM32 帧格式高度相似)
+  │  UART (/dev/mcu；Pi 5 排针源设备为 /dev/ttyAMA0，台架可用 USB-UART)
+  │  协议: v0.2 统一二进制帧 + CRC16（与 STM32 使用同一上位机桥）
   ▼
 MSPM0G3507 (Layer 1 Hardware)  ← 本任务
   │  接收: v (m/s), ω (rad/s)
@@ -55,7 +65,7 @@ MSPM0G3507 (Layer 1 Hardware)  ← 本任务
   │  编码器读取 (AB 相, Timer 捕获)
   │  上报: 左右轮实际 RPM + 电流 + 故障码
   ▼
-2× 520 编码器电机 (差速底盘, TI 电赛亚克力车架)
+2× MC520P30 12 V 编码器电机 + 2×DRV8871（R5 标准板差速底盘）
 ```
 
 **电赛合规要点**：
@@ -356,7 +366,7 @@ void main(void) {
 | `src/firmware/mspm0_diff/linker/` | MSPM0G3507 链接脚本（含待核对内存布局的警示） |
 | `src/firmware/common/faults.c/.h` | **新增共享模块**：故障位图（线上契约）+ 故障状态机 |
 | `src/firmware/mspm0_diff/src/` | 18 个文件：算法层 + 移植层接口 + 两份移植层实现 |
-| `src/firmware/mspm0_diff/test/` | 6 个文件，70 个用例 |
+| `src/firmware/mspm0_diff/test/` | 6 个文件，71 个用例（确认 BOM 后新增超声波帧） |
 | `docs/decisions/ADR-0004.md` | TI 电赛合规主控选型 + 移植层分离决策 |
 | `.github/workflows/ci.yml` | 新增 `build-mspm0-firmware` job |
 
@@ -388,7 +398,7 @@ EMA 滤波这些真正容易出错的逻辑只能上板验证**。
 
 把寄存器访问收拢到 `common/mcu_port.h` 之后，`encoder.c` 变成纯逻辑，
 用一个假编码器就能测掉 11 个用例 —— 全部是麦轮固件测不了的。
-代价是每控制周期多约 10 次函数调用（@80MHz 约 0.5µs，占 0.05%）。
+代价是每控制周期多约 10 次函数调用（当前 32MHz 基线约 1.2µs，占 0.12%）。
 
 > 若日后重构 `stm32_mecanum`，应当照此办理。
 

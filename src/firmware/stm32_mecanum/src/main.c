@@ -264,6 +264,7 @@ int main(void)
     port_control_timer_init(CONTROL_FREQ_HZ);
 
     uint32_t last_telemetry_ms = port_millis();
+    uint32_t last_ultrasonic_ms = last_telemetry_ms;
     uint8_t rx_chunk[64];
 
     while (1) {
@@ -285,7 +286,17 @@ int main(void)
             publish_telemetry();
         }
 
-        /* 4. 状态灯 */
+        /* 4. 底盘模块的 HC-SR04 快照。移植层没有完整快照就不发帧，
+           让 Pi 的实机启动检查明确失败，而不是发布全零假数据。 */
+        if ((now_ms - last_ultrasonic_ms) >= ULTRASONIC_PERIOD_MS) {
+            uint16_t ranges_mm[4];
+            last_ultrasonic_ms = now_ms;
+            if (port_ultrasonic_snapshot_mm(ranges_mm)) {
+                protocol_send_ultrasonic(ranges_mm);
+            }
+        }
+
+        /* 5. 状态灯 */
         update_status_led(now_ms);
     }
 }

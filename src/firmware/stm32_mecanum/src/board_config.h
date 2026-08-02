@@ -9,6 +9,9 @@
  *   src/air_ground_car_bringup/config/chassis_params.yaml : mecanum_chassis
  *   src/air_ground_car_bringup/urdf/mecanum_chassis.urdf.xacro
  * 二者不一致会导致"仿真能跑、实车跑偏"，改动时务必同步。
+ *
+ * ⚠ 引脚映射 (§六) 是兼顾 STM32F407VET6 外设复用冲突的**建议排布**，
+ *   尚未经电子组原理图/接线表冻结；确认前不得直接按本表焊接或装桨上电。
  */
 #ifndef STM32_MECANUM_BOARD_CONFIG_H
 #define STM32_MECANUM_BOARD_CONFIG_H
@@ -16,34 +19,34 @@
 /* ===================== 一、底盘几何 ===================== */
 
 /** 轮半径 (m) —— chassis_params.yaml: mecanum_chassis.wheel_radius */
-#define CHASSIS_WHEEL_RADIUS_M      0.033f
+#define CHASSIS_WHEEL_RADIUS_M      0.0395f
 /** 前后轴距 (m) —— chassis_params.yaml: mecanum_chassis.wheel_base */
-#define CHASSIS_WHEEL_BASE_M        0.20f
+#define CHASSIS_WHEEL_BASE_M        0.124f
 /** 左右轮距 (m) —— chassis_params.yaml: mecanum_chassis.track_width */
-#define CHASSIS_TRACK_WIDTH_M       0.18f
+#define CHASSIS_TRACK_WIDTH_M       0.166f
 /** 轮距半长 Lx (前后方向) */
 #define CHASSIS_LX_M                (CHASSIS_WHEEL_BASE_M * 0.5f)
 /** 轮距半宽 Ly (左右方向) */
 #define CHASSIS_LY_M                (CHASSIS_TRACK_WIDTH_M * 0.5f)
 
-/** 电机空载最高转速 (RPM)，520 减速电机 @12V 实测值，整定后修改 */
-#define MOTOR_MAX_RPM               330.0f
+/** MC520P30 @12V 空载最高转速 (RPM)，供应方给定 360±20 RPM。 */
+#define MOTOR_MAX_RPM               360.0f
 
 /* ===================== 二、编码器 ===================== */
 
-/** 编码器每转脉冲数 (电机轴侧) —— chassis_params.yaml: motor_encoder_ppr */
-#define ENCODER_PPR                 11.0f
-/** 减速比 (电机轴 : 输出轴)，520 电机常见 1:30 */
+/** 编码器每转脉冲数（电机轴侧）。 */
+#define ENCODER_PPR                 13.0f
+/** 减速比 (电机轴 : 输出轴)。 */
 #define ENCODER_GEAR_RATIO          30.0f
 /** 定时器编码器模式的倍频系数 (AB 双相双边沿 = 4×) */
 #define ENCODER_QUADRATURE          4.0f
-/** 输出轴每转计数 = PPR × 倍频 × 减速比 = 1320 */
+/** 输出轴每转计数 = PPR × 倍频 × 减速比 = 1560 */
 #define ENCODER_COUNTS_PER_REV      (ENCODER_PPR * ENCODER_QUADRATURE * ENCODER_GEAR_RATIO)
 
 /* 转速测量窗口。
- * 单纯按 1ms 采样算转速，分辨率只有 60000/(1320×1) ≈ 45 RPM/计数 —— 这个台阶
- * 比整个调速范围的 1/8 还大，PID 会被量化噪声牵着走。改成 10ms 窗口后
- * 分辨率降到约 4.5 RPM，代价是速度反馈延迟 10ms (相对 80ms 的电机时间常数可接受)。
+ * 单纯按 1ms 采样算转速，分辨率只有 60000/(1560×1) ≈ 38.5 RPM/计数 —— 这个台阶
+ * 比整个调速范围的 1/9 还大，PID 会被量化噪声牵着走。改成 10ms 窗口后
+ * 分辨率降到约 3.85 RPM，代价是速度反馈延迟 10ms (相对 80ms 的电机时间常数可接受)。
  * 速度环仍然跑满 1kHz，只是每 10 次才拿到一个新的测量值。
  * Phase 2 若要更高精度，应改用 M/T 法 (同时测计数与相邻边沿间隔)。 */
 #define ENCODER_SPEED_WINDOW_TICKS  10u
@@ -58,6 +61,8 @@
 #define CONTROL_DT_S                (1.0f / (float)CONTROL_FREQ_HZ)
 /** 遥测上报周期 (ms) = 20Hz */
 #define TELEMETRY_PERIOD_MS         50u
+/** 四路超声波完整快照上报周期 (ms)；实际触发由移植层轮询调度。 */
+#define ULTRASONIC_PERIOD_MS        50u
 /** 指令看门狗：超过该时间未收到 SET_VELOCITY 即刹停 (ms)
  *  与仿真侧 mecanum_controller.py 的 ~command_timeout=0.5s 对齐 */
 #define CMD_TIMEOUT_MS              500u
@@ -65,8 +70,8 @@
 /* ===================== 四、PID 整定参数 ===================== */
 
 /* 速度环 PID：输入 RPM 误差，输出 PWM 占空比 [-1, 1]。
-   kp 的量纲是 (占空比 / RPM)：满量程 330 RPM 对应满占空比 1.0，
-   因此静态前馈级别的增益约为 1/330 ≈ 0.003。 */
+   kp 的量纲是 (占空比 / RPM)：360 RPM 空载值仅给出静态前馈量级，
+   真实带载增益必须台架整定。 */
 #define PID_KP_DEFAULT              0.0035f
 #define PID_KI_DEFAULT              0.030f
 #define PID_KD_DEFAULT              0.00004f
@@ -79,8 +84,11 @@
 
 /* ===================== 五、故障阈值 ===================== */
 
-/** 单电机过流阈值 (A)，超过即全部停机 */
-#define FAULT_CURRENT_LIMIT_A       2.5f
+/** DRV8871 用 ILIM 电阻在驱动板内部限流，但没有模拟电流反馈输出。
+ *  当前 BOM 也没有外部分流/放大电路，因此 TELEMETRY 电流字段发送 NaN，
+ *  软件过流位不启用。这里的正数只满足通用故障配置的参数约束；真正限流值
+ *  必须按驱动板 R_ILIM 实测后记录，不能从本常量推断。 */
+#define FAULT_CURRENT_LIMIT_A       3.6f
 /** 堵转判据：目标 RPM 高于该值但实测 RPM 低于 STALL_RPM_FLOOR 持续 STALL_TIME_MS */
 #define FAULT_STALL_TARGET_RPM      30.0f
 #define FAULT_STALL_RPM_FLOOR       3.0f
@@ -94,7 +102,7 @@
  *      [2] 左后    [3] 右后
  */
 
-/** 电机 PWM：TIM1_CH1..CH4，AF1 */
+/** DRV8871 IN1：TIM1_CH1..CH4，AF1，承载 PWM */
 #define MOTOR_PWM_PORT              GPIOE
 #define MOTOR_PWM_PIN_FL            9u    /* PE9  — TIM1_CH1 */
 #define MOTOR_PWM_PIN_FR            11u   /* PE11 — TIM1_CH2 */
@@ -103,16 +111,13 @@
 /** PWM 载频 (Hz)，20kHz 避开可听频段 */
 #define MOTOR_PWM_FREQ_HZ           20000u
 
-/** 方向控制：TB6612 双路 IN，每轮 2 根，全部在 GPIOD */
+/** DRV8871 IN2：每轮 1 根方向 GPIO，全部在 GPIOD。
+ *  旧 TB6612 方案的 PD1/3/5/7 已释放，不得继续接到电机驱动。 */
 #define MOTOR_DIR_PORT              GPIOD
-#define MOTOR_DIR_PIN_FL_A          0u    /* PD0 */
-#define MOTOR_DIR_PIN_FL_B          1u    /* PD1 */
-#define MOTOR_DIR_PIN_FR_A          2u    /* PD2 */
-#define MOTOR_DIR_PIN_FR_B          3u    /* PD3 */
-#define MOTOR_DIR_PIN_RL_A          4u    /* PD4 */
-#define MOTOR_DIR_PIN_RL_B          5u    /* PD5 */
-#define MOTOR_DIR_PIN_RR_A          6u    /* PD6 */
-#define MOTOR_DIR_PIN_RR_B          7u    /* PD7 */
+#define MOTOR_DIR_PIN_FL            0u    /* PD0 → FL DRV8871 IN2 */
+#define MOTOR_DIR_PIN_FR            2u    /* PD2 → FR DRV8871 IN2 */
+#define MOTOR_DIR_PIN_RL            4u    /* PD4 → RL DRV8871 IN2 */
+#define MOTOR_DIR_PIN_RR            6u    /* PD6 → RR DRV8871 IN2 */
 
 /* 编码器定时器：TIM2/3/4/5 编码器模式 (对应轮 0/1/2/3)
  *   TIM2 : PA15 / PB3  (AF1)
@@ -125,16 +130,28 @@
 #define ENCODER_DIR_SIGN_RL         (+1)
 #define ENCODER_DIR_SIGN_RR         (-1)
 
-/** 电流采样：ADC1 IN10..IN13 = PC0..PC3 */
-#define CURRENT_ADC_CHANNEL_FL      10u
-#define CURRENT_ADC_CHANNEL_FR      11u
-#define CURRENT_ADC_CHANNEL_RL      12u
-#define CURRENT_ADC_CHANNEL_RR      13u
-/** 电流采样标定：分流电阻 + 运放增益折算，单位 A/LSB (12bit @3.3V) */
-#define CURRENT_ADC_SCALE_A_PER_LSB 0.00806f
-
 /** 上位机串口：USART1 TX=PA9 RX=PA10 (AF7)，对接树莓派 /dev/ttyAMA0 */
 #define UART_BAUDRATE               115200u
+
+/** IA6B iBUS：iBUS-SERVO → USART2_RX=PA3，115200 8N1；USART2_TX 不接。 */
+#define RC_IBUS_PORT                GPIOA
+#define RC_IBUS_RX_PIN              3u
+#define RC_IBUS_BAUDRATE            115200u
+
+/** HC-SR04：Trigger 轮流输出，Echo 经每路 2.2k/3.3k 分压后进 TIM8 捕获。 */
+#define ULTRASONIC_TRIG_PORT        GPIOD
+#define ULTRASONIC_TRIG_PIN_FRONT   8u
+#define ULTRASONIC_TRIG_PIN_REAR    9u
+#define ULTRASONIC_TRIG_PIN_LEFT    10u
+#define ULTRASONIC_TRIG_PIN_RIGHT   11u
+#define ULTRASONIC_ECHO_PORT        GPIOC
+#define ULTRASONIC_ECHO_PIN_FRONT   6u    /* TIM8_CH1, AF3 */
+#define ULTRASONIC_ECHO_PIN_REAR    7u    /* TIM8_CH2, AF3 */
+#define ULTRASONIC_ECHO_PIN_LEFT    8u    /* TIM8_CH3, AF3 */
+#define ULTRASONIC_ECHO_PIN_RIGHT   9u    /* TIM8_CH4, AF3 */
+#define ULTRASONIC_TRIGGER_GAP_MS   50u
+#define ULTRASONIC_ECHO_TIMEOUT_MS  30u
+#define ULTRASONIC_UNAVAILABLE_MM   0xFFFFu
 
 /** 硬件急停输入：PB0，接物理急停开关。
  *  按**常闭 (NC)** 接法：回路完好且未按下时把引脚拉到低电平；

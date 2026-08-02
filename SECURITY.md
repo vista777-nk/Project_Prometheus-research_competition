@@ -34,7 +34,8 @@
 ### 1. 最小网络暴露
 - 仿真阶段所有通信绑定 `127.0.0.1`
 - 实机阶段使用内网隔离，实验室服务器不直接暴露于公网
-- 3DR 数传使用点对点模式，不广播
+- 915 MHz/500 mW 数传只作为 Pixhawk TELEM1 ↔ 地面站点对点 MAVLink 链路；
+  型号/固件未确认前不运行 SiK 参数写入脚本
 
 ### 2. 通信链路防护
 - **MAVLink**: 实机阶段启用 MAVLink 2 消息签名 (`MSG_SIGNATURE`)
@@ -71,7 +72,7 @@
 
 请通过以下方式联系：
 
-> **议题**: 在 [GitHub 仓库](https://github.com/vista777-nk/research_compitition) 创建私有安全通告（Security Advisories）
+> **议题**: 在 [GitHub 仓库](https://github.com/vista777-nk/Project_Prometheus-research_competition) 创建私有安全通告（Security Advisories）
 > **响应时间**: 通常在 7 天内确认，30 天内给出修复方案
 
 **注意**：请勿在公开 Issue 中披露安全漏洞细节。

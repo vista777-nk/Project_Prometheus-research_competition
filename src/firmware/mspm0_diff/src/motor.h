@@ -9,7 +9,7 @@
 
 #include "kinematics.h"
 
-/** 配置 PWM、方向 GPIO 与电流采样 ADC */
+/** 配置 DRV8871 的 PWM/方向 GPIO */
 void motor_init(void);
 
 /**
@@ -32,8 +32,7 @@ void motor_brake_all(void);
 float motor_get_duty(int wheel);
 
 /**
- * 采样双路电机电流 (A)。ADC 单次转换轮询，
- * 只在遥测周期 (20Hz) 于主循环里调用，不在控制中断中调用。
+ * 填充双路电机电流。当前 DRV8871 板没有反馈输出，全部返回 NaN。
  */
 void motor_sample_currents(float out[NUM_WHEELS]);
 

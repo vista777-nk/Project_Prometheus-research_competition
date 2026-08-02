@@ -1097,6 +1097,104 @@
           冒烟 61/61。之后恢复服务与 timer，最终健康 JSON 为 ok=true，11311/9090
           仍只监听回环。
 
+###### 2026/8/2（确认 BOM 后的全项目同步）
+
+    1.负责人确认了两台 Pi、两套底盘控制模块、共享车载智能载荷和无人机本体/视觉载荷的
+          完整 BOM。它推翻了旧计划里 A1、TB6612/BTS7960、F450/S500、KonKer、M8N、
+          3DR 经两台 Pi 等假设。最关键的系统事实是：车载 Pi+ICM42688+A2M12+云台/OpenMV
+          只有一套，在两底盘间人工换装，不能把软件 SwapChassis 理解成两台完整车同时在线。
+
+    2.固件按真实模块边界调整。每个 MC520P30 独占一片 DRV8871，PWM/IN2 控制替代旧双方向
+          H 桥；DRV8871 只有内部 ILIM，没有电流反馈脚，所以遥测电流字段保留但发送 NaN，
+          软件过流位暂不可用。差速/麦轮轮半径改为 32.5/40 mm。两板协议升到 v0.2，新增
+          0x14 四路超声波快照；135 条 MCU Host 用例和 10 条串口自测通过。
+
+    3.ADR-0013 最终选择“HC-SR04 由各底盘 MCU 定时”，删除 Pi 直接 GPIO 驱动。新增的
+          chassis_bridge 使用同一生产帧解析器下发速度、核对 PONG 板型/底盘/最低版本，并在
+          收不到首帧超声波时失败关闭。最终 TRIG/ECHO 引脚、电平转换和防串扰间隔仍等电子组，
+          所以两份移植层现在明确返回不可用，而不是伪造实机完成。
+
+    4.无人机部署改成 Pi↔Pixhawk TELEM2、915 MHz 空中端↔TELEM1、地面端↔地面站；电台不再
+          是两台 Pi 容器的公共必需设备。新增 MAVROS+D435i 真实 launch 和 DRONE_VISION 选择器；
+          双 Pi Camera 的具体型号/CSI/libcamera profile 未确认时失败关闭。Pi 5 样机只有
+          ttyAMA10，但官方资料表明它是 3 针调试口；40 针 GPIO14/15 要 uart0-pi5 overlay，
+          生产预检因此要求 ttyAMA0 并拒绝把 ttyAMA10 当作就绪证据。
+
+    5.ADR-0018 冻结五个模块与资源所有权；ROADMAP、PLATFORM、ICD、任务索引、能力矩阵、
+          部署手册和交接文档同步更新。仍不能关闭 Phase 1.5：MC520P30 参数、组装几何、
+          两 MCU pinmux、IA6B、USB 身份、双 CSI、供电/电池/推重比、PX4 参数和跨校区隧道
+          都必须用良乡实物与中关村链路证据关闭。
+
+###### 2026/8/3（英文硬件答复审查与地面车参数冻结）
+
+    1.电子/机械组英文答复补齐 MC520P30、底盘几何、ICM42688 安装轴、HC-SR04 分压、
+          OpenMV/云台、IA6B 和电池。MC520P30 冻结为 30:1、13 PPR、AB 四倍频，即
+          1560 counts/输出轴转，12V 空载 360±20 RPM；差速有效半径/轮距为 31/166 mm，
+          麦轮有效半径/轴距/轮距为 39.5/124/166 mm。此前 32.5/40 mm 只是 BOM 阶段
+          占位，已从仿真、ROS 参数、URDF、固件与任务计划同步替换。
+
+    2.答复不能原样当接线权威：其中把 MSPM0 的 PB4/PB1 写成 TIMA0_C0/C1，并把
+          TIMG7 当第二路 QEI；官方数据手册表明这些复用不成立且只有 TIMG8 支持 QEI。
+          ADR-0019 记录纠正后的 LaunchPad 候选表。真实 driverlib 剖面继续用编译期
+          #error 阻止误烧，直到 SysConfig GPIO 双边沿中断接好；纯 C Gray 码解码器已完成。
+
+    3.STM32 侧实现 PD8..PD11 顺序 Trigger 与 PC6..PC9/TIM8_CH1..4 Echo 捕获，单路
+          50 ms 间隔、10 µs 脉冲、30 ms 超时、失败值 0xFFFF。两 MCU 共用 iBUS 解析器、
+          CH5 低→高 + 连续 3 s 中位解锁、100 ms 失联、MANUAL/AUTO 与杆量接管状态机；
+          特别增加“中间丢帧不能冒充连续 3 s”的负向用例。第二 UART 接入控制环仍待上板。
+
+    4.ICM42688 生产配置改为 0x69，并按实物 Y 前/X 左/Z 下转换为 REP-103 的
+          (sensor_y, sensor_x, -sensor_z)。Host 传感器套件 81/81；固件 Host 为
+          STM32 80/80 + MSPM0 71/71，共 151/151。Phase 1 冒烟 64/64、部署校验
+          55/55，均为零失败零跳过；flake8 7.1.1、yamllint 1.38.0、ARM 目标语法和
+          Clang 静态分析无发现。服务器服务/timer 均 active，健康 JSON ok=true，
+          11311/9090 仍只监听 127.0.0.1。
+
+    5.仍需良乡实物关闭：MSPM0 SysConfig/中断、两板 IA6B 第二 UART、三套接收机端点与
+          failsafe、供电模块满载/纹波/瞬态、云台独立 BEC、编码器方向/漏计数、USB 身份与
+          外参。无人机本体未到货，PX4/ESC/GPS/数传和飞行参数继续失败关闭；跨校区隧道
+          地址也不能从校园网临时 IP 推断。
+
+###### 2026/8/3（服务器离场收口 · CI 分支触发修复 · Pi 交接）
+
+    1.负责人发现切到 `task-new` 后 GitHub Actions 从未自动运行。不是 GitHub 偶发故障：
+          本地 workflow 的 `push.branches` 只允许 main、feat/*、fix/*，而 GitHub 公共 API
+          对 task-new 返回的 CI run 数正好是 0；最近的 CI push run 仍停在 feat/task-XX。
+
+          只补一个 task-new 会在下次改名时复发，而且旧白名单本来就漏了规范允许的
+          docs/* 和 exp/*。因此改成任意分支 push 都触发，PR 仍只针对 main；冒烟脚本
+          新增契约守卫，要求 push 下不得再出现 branches/branches-ignore。用合成的
+          `push.branches: [main]` 做负向测试，守卫能正确拦住。
+
+    2.仓库本身也残留一次改名债：origin 仍指向 GitHub 会重定向的旧拼写 URL，README、
+          SECURITY、部署手册和边缘 systemd 也有旧链接。origin 已改为当前正式仓库，
+          `git ls-remote` 确认 task-new 指向 1317718；live 文档/配置同步新 URL。
+          任务书正文中的旧路径按“任务书是历史方案”规则保留，不回写过去。
+
+    3.负责人已把旧 AI_HANDOFF/CLAUDE 移到 obsolete-documentation。本次保留该归档，
+          不恢复 live CLAUDE；重新写一份只面向良乡两台 Pi 的 AI_HANDOFF。它按风险排序
+          64GB 卡/恢复、I2C/UART、部署不自启、udev 稳定名、车机逐件台架、无人机无桨，
+          并用 H1~H13/N1~N2 列出缺失硬件与网络事实。另建日期明确的服务器收口报告，
+          避免下一位把“服务器本地健康”误读成“跨校区完成”。
+
+    4.服务器离场审计：service 与 health timer 均 enabled+active，五个项目服务节点齐全，
+          健康 JSON ok=true；11311/9090 只监听 127.0.0.1。系统时间同步为 yes，503GiB
+          内存中约 480GiB 可用。真正需要带走的运维风险仍是根分区 97%（约剩 80GiB）；
+          /data2 还有约 1.1TiB，因此 bag、镜像、模型和日志继续只写 /data2。
+
+    5.最终复测没有把 SKIP 写成绿灯：使用临时隔离依赖让 MAVLink 签名真实执行，Phase 1
+          冒烟 65/65、部署 55/55，均零失败零跳过；STM32 80/80、MSPM0 71/71、传感器
+          Host 81/81；6 个 Catkin 包构建成功，ROS 82/82。ShellCheck 0.10.0、yamllint
+          1.38.0、flake8 7.1.1 零发现，345 个 live Markdown 本地链接零缺失。
+          测试后再次检查服务/timer 和回环监听，服务器基线未被构建测试扰动。
+
+    6.全分支触发修复生效后，task-new 的 CI run 30762939491 自动启动；其中 Cppcheck
+          2.13.0 把 `TIM8->CNT - start` 两次易失寄存器读取误判成同一表达式相减，导致
+          Lint Scripts & Configs 红灯。没有缩窄规则或加入抑制，而是把 1 MHz TIM8 计数器
+          读取封装成显式硬件访问函数；10 µs Trigger 脉冲和 16 位回绕语义不变。STM32
+          Host 80/80，ARM 目标语法检查和 Clang 静态分析均通过；Ubuntu 24.04 / Cppcheck
+          2.13.0 按 CI 原命令扫描 25 个固件 C 文件，零发现。
+
 ---
 
 ## 历史名称脚注

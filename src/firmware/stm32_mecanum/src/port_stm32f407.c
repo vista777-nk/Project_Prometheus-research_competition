@@ -11,9 +11,10 @@
  * 外设分配：
  *   TIM1        四路 PWM (CH1..CH4 → PE9/PE11/PE13/PE14, AF1), 20kHz
  *   TIM2/3/4/5  四路正交编码器 (4 倍频)
+ *   TIM8        PC6..PC9 四路 HC-SR04 Echo 输入捕获（一次只触发一路）
  *   TIM6        1kHz 控制中断
  *   USART1      PA9/PA10 (AF7), 115200 8N1, RXNE/IDLE/TXE 中断
- *   ADC1        IN10..IN13 (PC0..PC3) 电流采样，轮询
+ *   DRV8871     每轮 TIM1 PWM→IN1、GPIOD→IN2（单 PWM + 方向控制）
  *   SysTick     1ms 时基
  *
  * @warning 时序常量按 8MHz HSE 晶振推导。若核心板换了晶振，必须同步改
@@ -157,11 +158,12 @@ void TIM6_DAC_IRQHandler(void)
 /** TIM1 计数上限：168MHz / 20kHz - 1 */
 #define PWM_ARR     ((TIMCLK_APB2_HZ / MOTOR_PWM_FREQ_HZ) - 1uL)
 
-/** 每轮的 PWM 比较寄存器与两根方向脚 */
+/** 每轮的 DRV8871 IN1 PWM 比较寄存器与 IN2 方向脚 */
 typedef struct {
     __IO uint32_t *ccr;
-    uint32_t pin_a;
-    uint32_t pin_b;
+    uint32_t dir_pin;
+    float duty_abs;
+    PortMotorDirection direction;
 } MotorChannel;
 
 static MotorChannel s_motors[NUM_WHEELS];
@@ -200,36 +202,66 @@ void port_motor_init(uint32_t pwm_freq_hz)
     gpio_config(MOTOR_PWM_PORT, MOTOR_PWM_PIN_RL, GPIO_MODE_AF, 1u, GPIO_PULL_NONE);
     gpio_config(MOTOR_PWM_PORT, MOTOR_PWM_PIN_RR, GPIO_MODE_AF, 1u, GPIO_PULL_NONE);
 
-    /* 方向脚 PD0..PD7 推挽输出 */
-    static const uint32_t dir_pins[NUM_WHEELS * 2] = {
-        MOTOR_DIR_PIN_FL_A, MOTOR_DIR_PIN_FL_B,
-        MOTOR_DIR_PIN_FR_A, MOTOR_DIR_PIN_FR_B,
-        MOTOR_DIR_PIN_RL_A, MOTOR_DIR_PIN_RL_B,
-        MOTOR_DIR_PIN_RR_A, MOTOR_DIR_PIN_RR_B
+    /* DRV8871 IN2：PD0/2/4/6 推挽输出 */
+    static const uint32_t dir_pins[NUM_WHEELS] = {
+        MOTOR_DIR_PIN_FL, MOTOR_DIR_PIN_FR,
+        MOTOR_DIR_PIN_RL, MOTOR_DIR_PIN_RR
     };
-    for (int i = 0; i < NUM_WHEELS * 2; i++) {
+    for (int i = 0; i < NUM_WHEELS; i++) {
         gpio_config(MOTOR_DIR_PORT, dir_pins[i], GPIO_MODE_OUTPUT, 0u, GPIO_PULL_NONE);
     }
 
     pwm_timer_config();
 
     s_motors[WHEEL_FRONT_LEFT].ccr    = &TIM1->CCR1;
-    s_motors[WHEEL_FRONT_LEFT].pin_a  = MOTOR_DIR_PIN_FL_A;
-    s_motors[WHEEL_FRONT_LEFT].pin_b  = MOTOR_DIR_PIN_FL_B;
+    s_motors[WHEEL_FRONT_LEFT].dir_pin = MOTOR_DIR_PIN_FL;
     s_motors[WHEEL_FRONT_RIGHT].ccr   = &TIM1->CCR2;
-    s_motors[WHEEL_FRONT_RIGHT].pin_a = MOTOR_DIR_PIN_FR_A;
-    s_motors[WHEEL_FRONT_RIGHT].pin_b = MOTOR_DIR_PIN_FR_B;
+    s_motors[WHEEL_FRONT_RIGHT].dir_pin = MOTOR_DIR_PIN_FR;
     s_motors[WHEEL_REAR_LEFT].ccr     = &TIM1->CCR3;
-    s_motors[WHEEL_REAR_LEFT].pin_a   = MOTOR_DIR_PIN_RL_A;
-    s_motors[WHEEL_REAR_LEFT].pin_b   = MOTOR_DIR_PIN_RL_B;
+    s_motors[WHEEL_REAR_LEFT].dir_pin = MOTOR_DIR_PIN_RL;
     s_motors[WHEEL_REAR_RIGHT].ccr    = &TIM1->CCR4;
-    s_motors[WHEEL_REAR_RIGHT].pin_a  = MOTOR_DIR_PIN_RR_A;
-    s_motors[WHEEL_REAR_RIGHT].pin_b  = MOTOR_DIR_PIN_RR_B;
+    s_motors[WHEEL_REAR_RIGHT].dir_pin = MOTOR_DIR_PIN_RR;
 
     for (int i = 0; i < NUM_WHEELS; i++) {
-        port_motor_set_pwm(i, 0.0f);
+        s_motors[i].duty_abs = 0.0f;
+        s_motors[i].direction = PORT_MOTOR_COAST;
         port_motor_set_direction(i, PORT_MOTOR_COAST);
     }
+}
+
+/**
+ * 用单路 PWM + 单路方向 GPIO 驱动 DRV8871：
+ *   forward: IN1=PWM,     IN2=0
+ *   reverse: IN1=1-PWM,   IN2=1（PWM 低电平期间反转，高电平期间慢衰减）
+ *   coast:   IN1=0,       IN2=0
+ *   brake:   IN1=1,       IN2=1
+ */
+static void motor_apply(int wheel)
+{
+    MotorChannel *motor = &s_motors[wheel];
+    float in1_duty = 0.0f;
+    bool in2 = false;
+    switch (motor->direction) {
+    case PORT_MOTOR_FORWARD:
+        in1_duty = motor->duty_abs;
+        break;
+    case PORT_MOTOR_REVERSE:
+        in1_duty = 1.0f - motor->duty_abs;
+        in2 = true;
+        break;
+    case PORT_MOTOR_BRAKE:
+        in1_duty = 1.0f;
+        in2 = true;
+        break;
+    case PORT_MOTOR_COAST:
+    default:
+        break;
+    }
+
+    *motor->ccr = (uint32_t)(in1_duty * (float)PWM_ARR);
+    MOTOR_DIR_PORT->BSRR = in2
+        ? (1uL << motor->dir_pin)
+        : (1uL << (motor->dir_pin + 16u));
 }
 
 void port_motor_set_pwm(int wheel, float duty_abs)
@@ -237,7 +269,8 @@ void port_motor_set_pwm(int wheel, float duty_abs)
     if (wheel < 0 || wheel >= NUM_WHEELS || s_motors[wheel].ccr == 0) {
         return;
     }
-    *s_motors[wheel].ccr = (uint32_t)(duty_abs * (float)PWM_ARR);
+    s_motors[wheel].duty_abs = duty_abs;
+    motor_apply(wheel);
 }
 
 void port_motor_set_direction(int wheel, PortMotorDirection dir)
@@ -246,23 +279,8 @@ void port_motor_set_direction(int wheel, PortMotorDirection dir)
         return;
     }
 
-    /* TB6612 真值表：IN1/IN2 = 00 滑行 · 10 正转 · 01 反转 · 11 刹车 */
-    bool level_a = false;
-    bool level_b = false;
-    switch (dir) {
-    case PORT_MOTOR_FORWARD: level_a = true;  level_b = false; break;
-    case PORT_MOTOR_REVERSE: level_a = false; level_b = true;  break;
-    case PORT_MOTOR_BRAKE:   level_a = true;  level_b = true;  break;
-    case PORT_MOTOR_COAST:
-    default:                 level_a = false; level_b = false; break;
-    }
-
-    /* BSRR 低半字置位、高半字复位，一次写入完成两个动作 */
-    const MotorChannel *motor = &s_motors[wheel];
-    uint32_t bsrr = 0uL;
-    bsrr |= level_a ? (1uL << motor->pin_a) : (1uL << (motor->pin_a + 16u));
-    bsrr |= level_b ? (1uL << motor->pin_b) : (1uL << (motor->pin_b + 16u));
-    MOTOR_DIR_PORT->BSRR = bsrr;
+    s_motors[wheel].direction = dir;
+    motor_apply(wheel);
 }
 
 /* ===================== 四、编码器 (TIM2/3/4/5) ===================== */
@@ -327,7 +345,164 @@ uint16_t port_encoder_read_count(int wheel)
     return (uint16_t)s_encoder_tim[wheel]->CNT;
 }
 
-/* ===================== 五、串口 (USART1) ===================== */
+/* ===================== 五、HC-SR04 (TIM8 输入捕获) ===================== */
+
+static const uint32_t s_ultrasonic_trig_pins[4] = {
+    ULTRASONIC_TRIG_PIN_FRONT, ULTRASONIC_TRIG_PIN_REAR,
+    ULTRASONIC_TRIG_PIN_LEFT, ULTRASONIC_TRIG_PIN_RIGHT
+};
+static __IO uint32_t *const s_ultrasonic_ccr[4] = {
+    &TIM8->CCR1, &TIM8->CCR2, &TIM8->CCR3, &TIM8->CCR4
+};
+static const uint32_t s_ultrasonic_flags[4] = {
+    TIM_SR_CC1IF, TIM_SR_CC2IF, TIM_SR_CC3IF, TIM_SR_CC4IF
+};
+static const uint32_t s_ultrasonic_polarity[4] = {
+    TIM_CCER_CC1P, TIM_CCER_CC2P, TIM_CCER_CC3P, TIM_CCER_CC4P
+};
+
+static volatile int8_t s_ultrasonic_active = -1;
+static volatile bool s_ultrasonic_waiting_fall;
+static volatile uint16_t s_ultrasonic_rise_tick;
+static volatile uint16_t s_ultrasonic_ranges_mm[4];
+static volatile uint8_t s_ultrasonic_completed_mask;
+static volatile uint32_t s_ultrasonic_started_ms;
+static bool s_ultrasonic_initialized;
+static uint8_t s_ultrasonic_next;
+
+static uint16_t ultrasonic_timer_tick_us(void)
+{
+    return (uint16_t)TIM8->CNT;
+}
+
+static void ultrasonic_set_rising_edge(uint8_t sensor)
+{
+    TIM8->CCER &= ~s_ultrasonic_polarity[sensor];
+}
+
+static void ultrasonic_set_falling_edge(uint8_t sensor)
+{
+    TIM8->CCER |= s_ultrasonic_polarity[sensor];
+}
+
+static void ultrasonic_init(void)
+{
+    static const uint32_t echo_pins[4] = {
+        ULTRASONIC_ECHO_PIN_FRONT, ULTRASONIC_ECHO_PIN_REAR,
+        ULTRASONIC_ECHO_PIN_LEFT, ULTRASONIC_ECHO_PIN_RIGHT
+    };
+
+    for (int sensor = 0; sensor < 4; sensor++) {
+        gpio_config(ULTRASONIC_TRIG_PORT, s_ultrasonic_trig_pins[sensor],
+                    GPIO_MODE_OUTPUT, 0u, GPIO_PULL_DOWN);
+        ULTRASONIC_TRIG_PORT->BSRR =
+            1uL << (s_ultrasonic_trig_pins[sensor] + 16u);
+        gpio_config(ULTRASONIC_ECHO_PORT, echo_pins[sensor],
+                    GPIO_MODE_AF, 3u, GPIO_PULL_DOWN);
+        s_ultrasonic_ranges_mm[sensor] = ULTRASONIC_UNAVAILABLE_MM;
+    }
+
+    RCC->APB2ENR |= RCC_APB2ENR_TIM8EN;
+    TIM8->CR1 = 0uL;
+    TIM8->PSC = (TIMCLK_APB2_HZ / 1000000uL) - 1uL;
+    TIM8->ARR = 0xFFFFuL;
+    TIM8->CCMR1 = TIM_CCMR1_CC1S_TI1 | TIM_CCMR1_CC2S_TI2;
+    TIM8->CCMR2 = TIM_CCMR2_CC3S_TI3 | TIM_CCMR2_CC4S_TI4;
+    TIM8->CCER = TIM_CCER_CC1E | TIM_CCER_CC2E | TIM_CCER_CC3E | TIM_CCER_CC4E;
+    TIM8->DIER = TIM_DIER_CC1IE | TIM_DIER_CC2IE | TIM_DIER_CC3IE | TIM_DIER_CC4IE;
+    TIM8->EGR = TIM_EGR_UG;
+    TIM8->SR = 0uL;
+    TIM8->CR1 = TIM_CR1_CEN;
+    nvic_enable_irq(IRQn_TIM8_CC);
+    s_ultrasonic_initialized = true;
+}
+
+/** TIM8 捕获中断：先记上升沿，再切到下降沿并换算脉宽。 */
+void TIM8_CC_IRQHandler(void)
+{
+    const uint32_t pending = TIM8->SR &
+        (TIM_SR_CC1IF | TIM_SR_CC2IF | TIM_SR_CC3IF | TIM_SR_CC4IF);
+    TIM8->SR = ~pending;
+
+    const int sensor = s_ultrasonic_active;
+    if (sensor < 0 || sensor >= 4 ||
+        (pending & s_ultrasonic_flags[sensor]) == 0u) {
+        return;
+    }
+
+    const uint16_t captured = (uint16_t)*s_ultrasonic_ccr[sensor];
+    if (!s_ultrasonic_waiting_fall) {
+        s_ultrasonic_rise_tick = captured;
+        s_ultrasonic_waiting_fall = true;
+        ultrasonic_set_falling_edge((uint8_t)sensor);
+        return;
+    }
+
+    const uint16_t pulse_us = (uint16_t)(captured - s_ultrasonic_rise_tick);
+    /* HC-SR04 经验公式 distance_cm = pulse_us / 58。范围外按 unavailable。 */
+    uint16_t distance_mm = ULTRASONIC_UNAVAILABLE_MM;
+    if (pulse_us >= 116u && pulse_us <= 23200u) {
+        distance_mm = (uint16_t)(((uint32_t)pulse_us * 10uL + 29uL) / 58uL);
+    }
+    s_ultrasonic_ranges_mm[sensor] = distance_mm;
+    s_ultrasonic_completed_mask |= (uint8_t)(1uL << sensor);
+    ultrasonic_set_rising_edge((uint8_t)sensor);
+    s_ultrasonic_waiting_fall = false;
+    s_ultrasonic_active = -1;
+}
+
+static void ultrasonic_trigger(uint8_t sensor, uint32_t now_ms)
+{
+    s_ultrasonic_active = (int8_t)sensor;
+    s_ultrasonic_waiting_fall = false;
+    s_ultrasonic_started_ms = now_ms;
+    ultrasonic_set_rising_edge(sensor);
+    TIM8->SR = ~s_ultrasonic_flags[sensor];
+
+    ULTRASONIC_TRIG_PORT->BSRR = 1uL << s_ultrasonic_trig_pins[sensor];
+    const uint16_t start = ultrasonic_timer_tick_us();
+    while ((uint16_t)(ultrasonic_timer_tick_us() - start) < 10u) {
+        /* 10us 脉冲只在主循环生成；1kHz 控制 ISR 仍可抢占。 */
+    }
+    ULTRASONIC_TRIG_PORT->BSRR =
+        1uL << (s_ultrasonic_trig_pins[sensor] + 16u);
+}
+
+bool port_ultrasonic_snapshot_mm(uint16_t ranges_mm[4])
+{
+    if (!s_ultrasonic_initialized) {
+        ultrasonic_init();
+    }
+
+    const uint32_t now_ms = port_millis();
+    port_irq_disable();
+    if (s_ultrasonic_active >= 0 &&
+        (now_ms - s_ultrasonic_started_ms) >= ULTRASONIC_ECHO_TIMEOUT_MS) {
+        const uint8_t sensor = (uint8_t)s_ultrasonic_active;
+        s_ultrasonic_ranges_mm[sensor] = ULTRASONIC_UNAVAILABLE_MM;
+        s_ultrasonic_completed_mask |= (uint8_t)(1uL << sensor);
+        ultrasonic_set_rising_edge(sensor);
+        s_ultrasonic_waiting_fall = false;
+        s_ultrasonic_active = -1;
+    }
+
+    bool snapshot_ready = (s_ultrasonic_completed_mask == 0x0Fu);
+    if (snapshot_ready) {
+        for (int sensor = 0; sensor < 4; sensor++) {
+            ranges_mm[sensor] = s_ultrasonic_ranges_mm[sensor];
+        }
+        s_ultrasonic_completed_mask = 0u;
+    }
+    port_irq_enable();
+
+    if (s_ultrasonic_active < 0) {
+        ultrasonic_trigger(s_ultrasonic_next, now_ms);
+        s_ultrasonic_next = (uint8_t)((s_ultrasonic_next + 1u) & 3u);
+    }
+    return snapshot_ready;
+}
+
+/* ===================== 六、串口 (USART1) ===================== */
 
 void port_uart_init(uint32_t baudrate)
 {
@@ -390,44 +565,20 @@ void USART1_IRQHandler(void)
     }
 }
 
-/* ===================== 六、ADC1 (电流采样) ===================== */
+/* ===================== 七、ADC（当前 BOM 未使用） ===================== */
 
 void port_adc_init(void)
 {
-    RCC->APB2ENR |= RCC_APB2ENR_ADC1EN;
-
-    /* 电流采样脚 PC0..PC3 模拟输入 */
-    for (uint32_t pin = 0u; pin < 4u; pin++) {
-        gpio_config(GPIOC, pin, GPIO_MODE_ANALOG, 0u, GPIO_PULL_NONE);
-    }
-
-    /* ADC 时钟 = PCLK2 / 4 = 21MHz，低于 36MHz 上限 */
-    ADC_CCR = (1uL << 16);
-
-    /* 通道 10~13 采样时间 84 周期：分流电阻 + 运放的输出阻抗不算低，
-       采样保持电容需要足够时间充满，采太快读数会偏小。 */
-    ADC1->SMPR1 = (4uL << 0) | (4uL << 3) | (4uL << 6) | (4uL << 9);
-    ADC1->SQR1 = 0uL;                       /* L = 0，即每次只转换 1 个通道 */
-    ADC1->CR1 = 0uL;
-    ADC1->CR2 = ADC_CR2_ADON;
+    /* DRV8871 的内部检测只服务 ILIM，没有模拟反馈输出。 */
 }
 
 uint16_t port_adc_read(uint8_t channel)
 {
-    ADC1->SQR3 = channel;
-    ADC1->SR = 0uL;
-    ADC1->CR2 |= ADC_CR2_SWSTART;
-
-    /* 有限次轮询而不是死等：ADC 没配好时不该把整个遥测路径卡死 */
-    for (uint32_t guard = 0u; guard < 10000u; guard++) {
-        if ((ADC1->SR & ADC_SR_EOC) != 0u) {
-            return (uint16_t)(ADC1->DR & 0xFFFFuL);
-        }
-    }
+    (void)channel;
     return 0u;
 }
 
-/* ===================== 七、GPIO (急停 / LED) ===================== */
+/* ===================== 八、GPIO (急停 / LED) ===================== */
 
 void port_gpio_init(void)
 {

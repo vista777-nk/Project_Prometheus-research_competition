@@ -28,7 +28,7 @@
 
 [Unit]
 Description=Air-Ground Car Edge Node (ROS Noetic, containerized)
-Documentation=https://github.com/vista777-nk/research_compitition
+Documentation=https://github.com/vista777-nk/Project_Prometheus-research_competition
 Documentation=file:///opt/air-ground/README.md
 After=network-online.target docker.service chrony.service
 Wants=network-online.target chrony.service
@@ -58,6 +58,7 @@ Environment="COMPOSE_PROJECT_NAME=air-ground"
 # 启动前自检: 镜像在不在。缺了直接说清楚怎么办, 而不是让 compose 抛一句
 # "manifest unknown" 然后进入 10 秒一次的重启循环。
 ExecStartPre=/opt/air-ground/scripts/require-image.sh
+ExecStartPre=/opt/air-ground/scripts/wait-for-device.sh --timeout 30 ${CAR_MCU_DEVICE}
 
 ExecStart=/usr/bin/docker compose \
     -f /opt/air-ground/docker/docker-compose.edge.yml \

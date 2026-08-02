@@ -9,13 +9,13 @@ services:
   edge-node:
     environment:
       AIR_GROUND_ROLE: drone
+      DRONE_VISION: ${DRONE_VISION:-d435i}
 
     devices:
-      # Pixhawk 6C 飞控。用 udev 符号链接而不是 /dev/ttyACM0 —— 若 Pi 上还插了
-      # 别的 CDC-ACM 设备 (常见于同时接了 USB 转串口调试器), 枚举顺序会让
-      # 飞控跑到 ttyACM1 上去, 而 MAVROS 仍在死等 ttyACM0。
-      # 规则见 network/99-air-ground-devices.rules。
-      - /dev/pixhawk:/dev/pixhawk
+      # 生产连接：Pi 5 GPIO14/15 (/dev/ttyAMA0) ↔ Pixhawk TELEM2；TELEM1 留给
+      # 915 MHz 数传。台架可把 DRONE_FCU_DEVICE 改为 udev 的 /dev/pixhawk
+      # (Pixhawk USB)，容器内 MAVROS 契约仍是 /dev/pixhawk。
+      - ${DRONE_FCU_DEVICE:-/dev/ttyAMA0}:/dev/pixhawk
 
     volumes:
       # RealSense D435i。
