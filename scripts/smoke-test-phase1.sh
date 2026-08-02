@@ -81,6 +81,27 @@ ci_has() {
     fi
 }
 
+# 2026-08-03 曾因分支从 feat/task-XX 改成 task-new，而 push.branches 白名单没有
+# 同步更新，导致工作流零运行。CI 是所有工作分支的门禁，不能依赖命名约定碰巧匹配。
+ci_push_covers_all_branches() {
+    local workflow=".github/workflows/ci.yml"
+    if ! grep -q '^  push:' "${workflow}" 2>/dev/null; then
+        fail "任意分支 push 触发 CI —— ci.yml 没有 push 事件"
+        return
+    fi
+
+    if awk '
+        /^  push:/ { in_push = 1; next }
+        /^  [[:alnum:]_]+:/ { in_push = 0 }
+        in_push && /^    branches(-ignore)?:/ { restricted = 1 }
+        END { exit restricted ? 0 : 1 }
+    ' "${workflow}"; then
+        fail "任意分支 push 触发 CI —— push 事件仍有 branches 过滤器"
+    else
+        pass "任意分支 push 均触发 CI"
+    fi
+}
+
 # 跑一个自身带自测的脚本。退出码 2 视为 SKIP (依赖缺失), 与 validate.sh 一致。
 run_selftest() {
     local description="$1"
@@ -264,6 +285,7 @@ ci_has "边缘镜像构建 job (build-edge-image)" "build-edge-image:"
 ci_has "部署静态校验 job"               "validate-deployment:"
 ci_has "全仓 lint job"                  "lint-scripts:"
 ci_has "Phase 1 冒烟 job"               "smoke-test-phase1:"
+ci_push_covers_all_branches
 
 # =============================================================================
 section "汇总"

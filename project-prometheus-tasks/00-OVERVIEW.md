@@ -183,6 +183,14 @@ task-14 (传感器 + MAVLink) ── (独立) ── task-15
 > 错把 TIMG7 当 QEI，现由真实构建 `#error` 阻止误烧，直到 SysConfig 与 GPIO 软件
 > 正交解码完成。无人机整套未到货，继续失败关闭，不从地面车参数外推。
 
+> **2026-08-03 服务器离场收口**：GitHub 公共 API 证实 `task-new` 的 CI run 为 0；
+> 根因是 `push.branches` 只允许 `main/feat/*/fix/*`。现改为任意分支 push 触发，
+> Phase 1 冒烟增加触发契约守卫，当前基线 65/65。中关村服务器服务/timer active，
+> 五个服务节点健康，11311/9090 仅回环；根分区 97%，大数据继续只写 `/data2`。
+> 旧 AI/CLAUDE 交接已归档，明天从
+> [Raspberry Pi AI 交接](../docs/experiments/AI_HANDOFF.md) 开始，审计证据见
+> [服务器收口报告](../docs/experiments/phase-1.5-server-readiness-2026-08-03.md)。
+
 ## 🚀 快速开始
 
 ```bash
@@ -215,4 +223,4 @@ make test-e2e
 
 ---
 
-*版本: v6.8 · 日期: 2026-08-03 · v6.8：冻结地面车参数、电气安全与 RC 基线*
+*版本: v6.9 · 日期: 2026-08-03 · v6.9：服务器离场收口、全分支 CI 与 Pi 交接同步*

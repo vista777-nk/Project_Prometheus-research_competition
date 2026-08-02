@@ -425,6 +425,22 @@ validate.sh                         通过 26 · 失败 0 · 跳过 1
 并要求 `devel/setup.bash` 必须成功加载。ROS 测试现为真实阻塞门禁。原文中
 「不要动已有 build-and-test」是 task-13 当时的范围约束，不再代表当前结论。
 
+### Phase 1.5 分支改名事故（2026-08-03）
+
+工作分支从 `feat/task-XX` 改为 `task-new` 后，GitHub Actions 没有产生任何 CI run。
+仓库和 GitHub 公共 API 的证据一致：工作流仍是 active，但 `push.branches` 只允许
+`main`、`feat/*` 和 `fix/*`；`task-new` 上已有多个新提交，CI run 数仍为 0。
+
+修复不是把 `task-new` 再补进白名单，而是移除 `push` 的分支过滤，让所有工作分支
+都受同一质量门禁。原因有两点：
+
+1. `CONVENTIONS.md` 还允许 `docs/*` 和 `exp/*`，旧白名单本来就与分支规范不一致；
+2. 单独追加当前分支名会把故障推迟到下一次改名，不会消除“CI 静默消失”的结构原因。
+
+`scripts/smoke-test-phase1.sh` 同时增加触发契约检查：CI workflow 必须声明 `push`，
+且该事件下不得再出现 `branches`/`branches-ignore`。因此今后仅修改分支名不能让 CI
+无声失效。`pull_request` 仍只针对 `main`，保持 GitHub Flow 的合并门禁边界。
+
 > ⚠ **yamllint 在 Windows 上会假报 9 条 `wrong new line character`**：
 > `.gitattributes` 给 `*.yaml` 只声明了 `text` 没声明 `eol=lf`，工作区是 CRLF
 > 而 git blob 是 LF。要按 Linux 侧内容核对，不能直接扫工作区。

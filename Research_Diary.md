@@ -1155,6 +1155,39 @@
           外参。无人机本体未到货，PX4/ESC/GPS/数传和飞行参数继续失败关闭；跨校区隧道
           地址也不能从校园网临时 IP 推断。
 
+###### 2026/8/3（服务器离场收口 · CI 分支触发修复 · Pi 交接）
+
+    1.负责人发现切到 `task-new` 后 GitHub Actions 从未自动运行。不是 GitHub 偶发故障：
+          本地 workflow 的 `push.branches` 只允许 main、feat/*、fix/*，而 GitHub 公共 API
+          对 task-new 返回的 CI run 数正好是 0；最近的 CI push run 仍停在 feat/task-XX。
+
+          只补一个 task-new 会在下次改名时复发，而且旧白名单本来就漏了规范允许的
+          docs/* 和 exp/*。因此改成任意分支 push 都触发，PR 仍只针对 main；冒烟脚本
+          新增契约守卫，要求 push 下不得再出现 branches/branches-ignore。用合成的
+          `push.branches: [main]` 做负向测试，守卫能正确拦住。
+
+    2.仓库本身也残留一次改名债：origin 仍指向 GitHub 会重定向的旧拼写 URL，README、
+          SECURITY、部署手册和边缘 systemd 也有旧链接。origin 已改为当前正式仓库，
+          `git ls-remote` 确认 task-new 指向 1317718；live 文档/配置同步新 URL。
+          任务书正文中的旧路径按“任务书是历史方案”规则保留，不回写过去。
+
+    3.负责人已把旧 AI_HANDOFF/CLAUDE 移到 obsolete-documentation。本次保留该归档，
+          不恢复 live CLAUDE；重新写一份只面向良乡两台 Pi 的 AI_HANDOFF。它按风险排序
+          64GB 卡/恢复、I2C/UART、部署不自启、udev 稳定名、车机逐件台架、无人机无桨，
+          并用 H1~H13/N1~N2 列出缺失硬件与网络事实。另建日期明确的服务器收口报告，
+          避免下一位把“服务器本地健康”误读成“跨校区完成”。
+
+    4.服务器离场审计：service 与 health timer 均 enabled+active，五个项目服务节点齐全，
+          健康 JSON ok=true；11311/9090 只监听 127.0.0.1。系统时间同步为 yes，503GiB
+          内存中约 480GiB 可用。真正需要带走的运维风险仍是根分区 97%（约剩 80GiB）；
+          /data2 还有约 1.1TiB，因此 bag、镜像、模型和日志继续只写 /data2。
+
+    5.最终复测没有把 SKIP 写成绿灯：使用临时隔离依赖让 MAVLink 签名真实执行，Phase 1
+          冒烟 65/65、部署 55/55，均零失败零跳过；STM32 80/80、MSPM0 71/71、传感器
+          Host 81/81；6 个 Catkin 包构建成功，ROS 82/82。ShellCheck 0.10.0、yamllint
+          1.38.0、flake8 7.1.1 零发现，345 个 live Markdown 本地链接零缺失。
+          测试后再次检查服务/timer 和回环监听，服务器基线未被构建测试扰动。
+
 ---
 
 ## 历史名称脚注

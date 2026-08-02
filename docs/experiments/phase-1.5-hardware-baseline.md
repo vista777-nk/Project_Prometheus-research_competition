@@ -3,6 +3,9 @@
 > 本文件是 BOM、模块边界和上机缺口的滚动权威表。长期边界已经由
 > [ADR-0018](../decisions/ADR-0018.md) 冻结；地面车参数、电气与 RC 安全基线由
 > [ADR-0019](../decisions/ADR-0019.md) 冻结。未到货或未实测参数不能用常见值代填。
+> Raspberry Pi 实操顺序、停止条件与证据格式见
+> [AI_HANDOFF.md](./AI_HANDOFF.md)；服务器离场状态见
+> [2026-08-03 收口报告](./phase-1.5-server-readiness-2026-08-03.md)。
 
 ## 1. Raspberry Pi 边缘计算基线
 

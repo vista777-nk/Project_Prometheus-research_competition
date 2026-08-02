@@ -11,7 +11,7 @@
 [![E2E](https://img.shields.io/badge/E2E-33/33-brightgreen)](./project-prometheus-tasks/task-09-validation.md)
 [![Firmware Host](https://img.shields.io/badge/firmware_host-151/151-brightgreen)](./src/firmware/README.md)
 [![Deploy Validate](https://img.shields.io/badge/deploy_validate-55/55-brightgreen)](./src/deployment/README.md)
-[![Smoke Phase1](https://img.shields.io/badge/smoke_phase1-64/64-brightgreen)](./project-prometheus-tasks/task-15-calibration-validation.md)
+[![Smoke Phase1](https://img.shields.io/badge/smoke_phase1-65/65-brightgreen)](./project-prometheus-tasks/task-15-calibration-validation.md)
 [![ROS](https://img.shields.io/badge/ROS-Noetic-brightgreen)](https://wiki.ros.org/noetic)
 [![PX4](https://img.shields.io/badge/PX4-v1.14-blueviolet)](https://px4.io/)
 [![CI](https://github.com/vista777-nk/Project_Prometheus-research_competition/actions/workflows/ci.yml/badge.svg)](https://github.com/vista777-nk/Project_Prometheus-research_competition/actions/workflows/ci.yml)
@@ -35,7 +35,7 @@
 |------|:---:|------|
 | **Phase 0: 仿真框架** | ✅ 完成 (9/9) | 无人机 SITL · 差速底盘 · 麦轮底盘 · 传感器 · 通信桥 · 边缘服务器 · 集成总装 · 验证 |
 | **Phase 1: 固件+部署先行** | ✅ 完成 (6/6) | STM32 麦轮固件 ✅ · MSPM0 差速固件 ✅ · 树莓派部署 (无人机+车机) ✅ · CI 流水线 ✅ · 传感器驱动骨架 + MAVLink 签名 ✅ · 标定工具链 + 集成验证 ✅ |
-| **Phase 1.5: 实机接入** | 🟡 进行中 | 地面车参数/接口基线 ✅ · STM32 HC-SR04 ✅ · 中关村服务器常驻/恢复 ✅ · MSPM0 SysConfig/组装/受控隧道/标定待完成 |
+| **Phase 1.5: 实机接入** | 🟡 进行中 | 地面车参数/接口基线 ✅ · STM32 HC-SR04 ✅ · 中关村服务器收口 ✅ · 全分支 CI ✅ · Pi 实机/MSPM0 SysConfig/组装/受控隧道/标定待完成 |
 | Phase 2: EQA 论文 | 🔴 2026.09~12 | VLM + SLAM + 空地联合探索 |
 | Phase 3: 竞赛季 | 🔴 2027.01~08 | 全国电赛 + CRAIC2027 |
 | Phase 4: 毕设 | 🔴 2027~2028 | World Model · 3DGS · Dreamer |
@@ -51,7 +51,8 @@
 
 | 你想…… | 去看 |
 |---------|------|
-| **接手这个项目 / 明天上实机** | **[docs/experiments/AI_HANDOFF.md](./docs/experiments/AI_HANDOFF.md)** — 现状、已验证与未验证清单、上机顺序 |
+| **在 Raspberry Pi 接手 Phase 1.5** | **[docs/experiments/AI_HANDOFF.md](./docs/experiments/AI_HANDOFF.md)** — Pi 上机顺序、安全边界、未完成工作和硬件未知项 |
+| 查看服务器离场前状态 | [Phase 1.5 服务器收口报告](./docs/experiments/phase-1.5-server-readiness-2026-08-03.md) |
 | 理解这个项目的"为什么" | [RESEARCH_PHILOSOPHY.md](./project-prometheus-tasks/RESEARCH_PHILOSOPHY.md) |
 | 理解系统架构 | [PLATFORM.md](./project-prometheus-tasks/PLATFORM.md) |
 | 查看模块间接口 | [ICD.md](./project-prometheus-tasks/ICD.md) |
@@ -185,8 +186,8 @@ project-prometheus/
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/vista777-nk/research_compitition.git
-cd research_compitition
+git clone https://github.com/vista777-nk/Project_Prometheus-research_competition.git project-prometheus
+cd project-prometheus
 
 # 2. 在 Ubuntu 20.04 上搭建环境
 # 详见 project-prometheus-tasks/task-01-env-setup.md

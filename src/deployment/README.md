@@ -7,6 +7,10 @@
 > **尚未在真实树莓派上执行过**，
 > 服务器常驻服务已实机安装；已知限制见 §9；
 > `EDGE_MODE` 的失败关闭语义见 §5.4 与 ADR-0015
+>
+> 明天在 Pi 上接手时先读
+> [Raspberry Pi AI 交接](../../docs/experiments/AI_HANDOFF.md)；服务器离场状态见
+> [2026-08-03 收口报告](../../docs/experiments/phase-1.5-server-readiness-2026-08-03.md)。
 
 ---
 
@@ -238,7 +242,7 @@ sudo scripts/update-image.sh --dry-run           # 只说要做什么
 也可以在树莓派上就地构建（首次约 30–60 分钟）：
 
 ```bash
-cd ~/research_compitition
+cd ~/project-prometheus
 docker build -f src/deployment/docker/Dockerfile.edge -t air-ground-edge:v1 .
 ```
 

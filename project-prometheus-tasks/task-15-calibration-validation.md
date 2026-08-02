@@ -655,6 +655,7 @@ echo "========================================="
 - [x] `test-serial-loopback.sh` 可发送 PING 并判断是否收到 PONG (含 board_type/chassis_type 校验) —— 13 项自测全过
 - [x] `test-observation-pipeline.py` 3 个测试用例通过 ⚠ 实际 10 个用例，且测的是真 `CarPreprocessor` 而非模拟件（ADR-0011）
 - [x] `smoke-test-phase1.sh` 可检查所有 Phase 1 文件存在性 + CI job 存在性 —— 61 项全绿
+- [x] 2026-08-03 Phase 1.5 跟进：增加“任意分支 push 必须触发 CI”契约守卫，当前基线 65 项全绿
 - [x] Phase 1 冒烟测试在 GitHub Actions 中可运行 —— 含删除交付物的负向测试
 - [x] **三问检查** (每完成一个 Task)：Platform 是否更稳定？ / Research 是否更自由？ / 未来替换硬件是否更简单？ —— 见文末「三问检查」记录
 

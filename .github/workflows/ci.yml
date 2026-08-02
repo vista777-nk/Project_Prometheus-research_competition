@@ -1,8 +1,9 @@
 name: CI — Build & Test
 
 on:
+  # 所有分支 push 都必须触发。2026-08-03 分支从 feat/task-XX 改为 task-new 后，
+  # 旧的 branches 白名单让 CI 静默消失；不要再用分支命名约定代替质量门禁。
   push:
-    branches: [main, feat/*, fix/*]
   pull_request:
     branches: [main]
   workflow_dispatch:

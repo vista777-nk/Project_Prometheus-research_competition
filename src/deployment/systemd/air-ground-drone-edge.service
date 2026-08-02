@@ -28,7 +28,7 @@
 
 [Unit]
 Description=Air-Ground Drone Edge Node (ROS Noetic, containerized)
-Documentation=https://github.com/vista777-nk/research_compitition
+Documentation=https://github.com/vista777-nk/Project_Prometheus-research_competition
 Documentation=file:///opt/air-ground/README.md
 After=network-online.target docker.service chrony.service
 Wants=network-online.target chrony.service

@@ -1,469 +1,296 @@
-# AI_HANDOFF.md — 交接给下一个 AI 执行体
+# Raspberry Pi AI 交接：Phase 1.5 实机接入
 
-> **读者是 AI，不是人。** 这份文档的目标是让一个没有任何本项目上下文的模型，
-> 在 15 分钟内达到可以安全动手的状态，并且**知道自己不知道什么**。
+> **目标读者：明天在良乡实验室、直接操作两台 Raspberry Pi 5 的 AI。**
 >
-> 写于 2026-08-01，2026-08-03 按英文硬件答复更新；Phase 1.5 接手后已在
-> Ubuntu 20.04 实验室服务器完成 ROS 真环境基线与部署失败关闭，实机硬件联调
-> 继续按本文顺序推进。
-> 上一份同类文档是 [phase1-pre-departure-brief.md](../../obsolete-documentation/phase1-pre-departure-brief.md)（Phase 0→1 交接，已归档）。
->
-> **2026-08-03 当前覆盖**：完整 BOM、五个物理模块和最新验收缺口见
-> [phase-1.5-hardware-baseline.md](./phase-1.5-hardware-baseline.md)；ADR-0018
-> 冻结模块边界，ADR-0019 冻结地面车参数、电气和 RC 安全基线。ADR-0013 已采纳
-> “HC-SR04 由底盘 MCU 定时”，不再预留；Pi GPIO 驱动已删除。
-> 旧文中的 A1/115200、3DR 经两台 Pi、M8N、TB6612/BTS7960、`ttyAMA1`
-> 都是历史方案，禁止按其接线。
+> 这是一份新的实机交接，不是已归档旧交接的续写。服务器侧在 2026-08-03 已完成
+> 最终审计，详见 [服务器收口报告](./phase-1.5-server-readiness-2026-08-03.md)。
+> 硬件事实以 [滚动硬件基线](./phase-1.5-hardware-baseline.md)、
+> [ADR-0018](../decisions/ADR-0018.md) 和 [ADR-0019](../decisions/ADR-0019.md) 为准；
+> 本文只把下一步执行顺序、停止条件和缺失信息集中到一处。
 
----
-
-## 0. 先做这三件事
+## 0. 接手后先确认四件事
 
 ```bash
-# 1. 确认你在哪、代码是什么状态
-git log --oneline -5 && git status -sb
+pwd
+git status --short --branch
+git log --oneline -5
+git remote -v
+```
 
-# 2. 确认交付物齐、语法对、自测能跑（不需要 ROS，任意 OS）
+1. 工作目录应是新仓库 `project-prometheus`，远端应是
+   `vista777-nk/Project_Prometheus-research_competition`；不要再使用旧的
+   `research_compitition` 路径或依赖 GitHub 重定向。
+2. 使用项目负责人指定的当前工作分支；不要直接推送 `main`。
+3. 先确认 GitHub Actions 为当前提交产生了运行记录。工作流现应对**任意分支 push**
+   触发；如果没有运行，先修 CI，不能把“没有红灯”当“全绿”。
+4. 阅读 `CONVENTIONS.md`。提交信息必须是 Conventional Commits + 简体中文；
+   ADR 不可修改，只能由新 ADR 替代或补充。
+
+推荐随后运行：
+
+```bash
 make smoke-phase1
-
-# 3. 确认 CI 是什么结论（公开仓库，不需要 token）
-curl -sSL "https://api.github.com/repos/vista777-nk/research_compitition/actions/runs?per_page=5"
+bash src/deployment/validate.sh
 ```
 
-第 2 步应当输出 `通过 64 · 失败 0 · 跳过 0`。**`跳过` 不是通过**——
-它表示这台机器缺依赖，那几项在这里没被检查过。
+预期为零失败、零跳过。`SKIP` 表示当前环境没有真正检查该项，不等于通过。
 
----
+## 1. 绝对安全边界
 
-## 1. 项目一句话与当前状态
+- 地面车第一次上电必须架空车轮，电源限流，急停可触达；未确认编码器方向、RC
+  failsafe 和串口看门狗前，不得落地运行。
+- 无人机所有软件、飞控、数传和电机方向检查先**拆桨**；未经负责人批准，不进入
+  系留或实飞阶段。
+- Pi 不直接产生电机 PWM，不直接测 HC-SR04 Echo，也不接收地面车 RC。
+  这些硬实时和安全功能属于底盘 MCU；无人机飞行与 RC 属于 Pixhawk。
+- `EDGE_MODE=real` 才是实验数据。`mock` 必须显示 DEGRADED，`sim` 只用于仿真；
+  real 缺设备时失败关闭是正确行为，禁止自动回退。
+- 未确认的 pinmux、PX4 参数、USB 身份和网络地址不得写进生产配置。
+- 服务器的 ROS Master 与 TCP 9090 只监听 `127.0.0.1`。不得为图省事把 ROS 1
+  或未认证的 9090 暴露到校园网。
 
-空地联合具身智能研究平台：一架 PX4 无人机 + 一台可换底盘（麦轮/差速）的地面车 +
-一台实验室服务器，目标是 Phase 2 的 EQA（具身问答）论文。
+## 2. 当前已经完成到哪里
 
-| 项 | 值 |
-|---|---|
-| 分支 | `feat/task-XX`（**不是** main；main 落后很多，合并是人的决定） |
-| HEAD | 不在文档里钉死；以本机 `git log --oneline -1` 为准 |
-| Phase | Phase 0 仿真 ✅ 9/9 · Phase 1 基础设施 ✅ 6/6 · **Phase 1.5 实机接入进行中** · Phase 2 未开始 |
-| 最近 CI | 2026-08-03 接手人报告当前远端 CI 全绿；本次硬件参数同步提交后必须重新确认 |
-| ADR | 0001–0019 已用；0013=HC-SR04 MCU 时序，0018=BOM/模块边界，0019=地面车参数/电气/RC |
+| 范围 | 已完成且有证据 | 不能据此宣称的事项 |
+|---|---|---|
+| 服务器 | 用户 systemd 服务和健康 timer 已启用；5 个服务节点健康；11311/9090 仅回环；故障恢复做过真实注入 | 良乡到中关村链路可达、跨校区时钟一致 |
+| Pi 部署 | Debian 13/ARM64/8 GB/64 GB 基线预检、Docker/Compose/systemd/udev/健康检查、离线镜像更新与回滚流程已实现 | 已在真实 Pi 安装或开机自启成功 |
+| 车机 Linux 驱动 | pyserial、Linux SMBus、A2M12、ICM42688、OpenMV、底盘桥和失败关闭有 81 个 Host 用例 | 线材、电平、真实 USB 身份、传感器外参已验证 |
+| STM32 麦轮 | 运动学、PID、协议、编码器、DRV8871、TIM8 四路 HC-SR04 已实现；Host 80/80 | 候选接线已焊接并通过示波器/负载验收；RC 第二 UART 已进控制环 |
+| MSPM0 差速 | 运动学、协议、PID、RC 安全和软件正交解码有 Host 71/71 | CI 的 `ci-link` 产物可烧录；SysConfig/pinmux/ISR 已完成 |
+| 无人机 | MAVROS + D435i 真实入口、设备失败关闭和模块边界已写入部署 | Pixhawk/ESC/GPS/数传参数已冻结，或无人机已经可飞 |
+| CI/静态门禁 | 7 个 job、Phase 1 冒烟、部署校验与 lint 均有本地入口 | 当前 Pi 上的硬件结论已被 CI 覆盖 |
 
-⚠ **提交会自动推送**（VSCode 的 post-commit sync）。`git commit` 之后
-`origin/feat/task-XX` 立刻就前进了。**把每一次 commit 当成已公开**。
+## 3. 两台 Pi 的角色与固定基线
 
----
+两台均以 Raspberry Pi 5 Model B 8 GB、AArch64、Debian 13 Trixie、**标称 64 GB
+microSD**、UID 1000 用户 `airground` 为验收基线。ROS Noetic 不裸装在 Trixie；
+继续运行于 Focal ARM64 容器。
 
-## 2. 必读顺序
+| Pi | 角色 | 必需连接 | 不属于它的连接 |
+|---|---|---|---|
+| 车机 Pi | 一套共享车载智能载荷，在差速/麦轮控制模块间断电换装 | `/dev/mcu`、ICM42688 `/dev/i2c-1`、A2M12 `/dev/rplidar`、OpenMV `/dev/openmv` | HC-SR04 GPIO、DRV8871 PWM、IA6B |
+| 无人机 Pi | 机载边缘计算与可换视觉载荷 | Pixhawk TELEM2 `/dev/pixhawk`；D435i USB3，或未来确认的双 CSI | 915 MHz 空中电台（接 Pixhawk TELEM1）、IA6B（接 Pixhawk） |
 
-| 顺序 | 文件 | 为什么 |
-|:---:|------|-------|
-| 1 | `project-prometheus-tasks/RESEARCH_PHILOSOPHY.md` | 五条宪法。ADR 制度、分层铁律出自这里 |
-| 2 | `CONVENTIONS.md` | 命名/分支/commit/注释语言。**注释与文档写中文，标识符写英文** |
-| 3 | `project-prometheus-tasks/ICD.md` §2 | Observation / RobotState / WorldState 的字段语义 |
-| 4 | `docs/decisions/ADR-0008.md` | 门禁分层标准，本仓库最常被引用的一条 |
-| 5 | `docs/decisions/ADR-0011.md` `ADR-0012.md` | 最近两次决策，含大量"为什么不那样做" |
-| 6 | `Research_Diary.md` 末尾三条 | 踩过的坑，按时间倒序读最有效 |
-| 7 | `src/deployment/calibration/README.md` §5 | **上机核实清单**——明天要逐条做的事 |
+当前确认的车载参数：
 
-`project-prometheus-tasks/task-NN-*.md` 是**任务书**，不是现状。见 §3 第 1 条。
+- ICM42688：I²C 地址 `0x69`、WHO_AM_I `0x47`、100 Hz、±4g/±500dps；
+  实物 Y 前/X 左/Z 下，发布前映射 `(sensor_y, sensor_x, -sensor_z)`。
+- RPLIDAR A2M12：256000 bps；前部安装，约前 225° 可用，遮挡角仍需实测。
+- OpenMV：H7 Plus OPENMV4P/H743、固件 4.5.9、USB CDC；云台由 OpenMV 直接控制。
+- MCU 串口：Pi 40 针 GPIO14/15 对应 `/dev/ttyAMA0`；`/dev/ttyAMA10` 是 3 针
+  Debug UART，不能当生产接口。
 
----
+## 4. 第一天：64 GB 卡与宿主机验收
 
-## 3. 不可违反的规则
+### 4.1 烧录和恢复能力
 
-这些不是风格偏好，每一条背后都有一次真实事故。
+1. 使用 64 位 Debian 13 Trixie，创建 UID 1000 的 `airground` 用户并预置 SSH 公钥。
+2. 为两台 Pi 记录镜像来源、烧录时间和卡的实际容量；不要把卡序列号、MAC、校园网
+   临时 IP 提交进仓库。
+3. 完成一次关机、拔卡、重启验证；随后制作可恢复的镜像或克隆卡，并至少做一次
+   恢复演练。仅“有备份文件”不算恢复能力。
 
-### 1. 开工前核对现状，不要照抄任务书
-任务文档写于开工之前，**会过期**。已经连续三次抓到冲突：
-task-13 抓到 4 个 job 早已存在；task-14 抓到 3 处话题/类型不一致；
-task-15 抓到 5 个话题名在仓库里根本不存在。
-
-做法：动手前把任务书提到的**每一个**话题名、文件路径、job 名、函数名
-在仓库里 grep 一遍。发现的偏差写进该任务文档末尾的「§与原方案的偏差」，
-**不修改正文**（正文是当初的想法，偏差段是实际发生的事）。
-
-### 2. 替身可以替环境，不能替被测对象
-（ADR-0011 §方案 G）ROS、硬件、时钟可以用替身。**被测对象本身不行。**
-
-task-15 原文写了个 `preprocess_to_observation()` 号称"模拟 car_preprocessor
-的核心逻辑"，三个用例必过——因为测的是那二十行模拟件。真的预处理器里有
-新鲜度窗口、降采样、`-1.0` 无效标记等五件事它一件都没有。
-
-现在的做法：`src/air_ground_car_bringup/test/host/ros_stub.py` 提供带
-`__slots__` 的消息替身（写错字段名当场 `AttributeError`），跑**真的**节点类。
-
-### 3. 没实测过的检查不能设成阻塞门禁
-（ADR-0008 §决策-1）也不能反过来——**实测干净了就不该继续留在告警态**
-（ADR-0012）。「每次 CI 都打印、没人读、不会让任何事失败」的步骤是没有含义的灯。
-
-### 4. 查不了的项要报 SKIP 并说明原因，不能静默略过
-全仓统一约定：**退出码 2 = SKIP（依赖缺失），不算失败；1 = 真失败。**
-`validate.sh` / `smoke-test-phase1.sh` 都按这个解释子进程。
-
-### 5. 写完守卫必须做一次负向测试
-只测"该过的过了"不够，要测"该拦的真的拦住了"。已有先例：
-CI 里有一步专门删掉一个交付物、断言冒烟测试**必须失败**；
-`validate-deployment` 里有一步断言不给 `ROS_IP` 时 compose **必须解析失败**。
-
-### 6. ADR 不可变
-已采纳的 ADR 永不修改，只由新 ADR 替代或补充。日记必须写日期。
-
-### 7. 参数名/接口没核实过，就不要写进"生效配置"
-（ADR-0010 §决策-3）配置文件的存在本身会被读成"功能已启用"。
-没核实的要么留空并自曝，要么标成核实清单。
-
----
-
-## 4. 仓库地图
-
-```
-src/
-├── air_ground_interfaces/     Layer 3 抽象接口（msg/srv）——改这里等于改契约
-├── air_ground_{drone,car}_bringup/   Layer 1/2 仿真 + 实机驱动骨架
-│   └── car_bringup/test/host/ros_stub.py   ★ ROS 替身，无 ROS 环境测试的基础设施
-├── air_ground_com_bridge/     Layer 2 通信桥
-├── air_ground_lab_server/     Layer 2~3 world_model.py 在这里
-├── firmware/                  非 ROS。common/ 是两块板共用的帧/CRC/PID
-│   ├── stm32_mecanum/         STM32F407 麦轮，可烧录
-│   └── mspm0_diff/            MSPM0G3507 差速，⚠ CI 产物 ci-link 剖面**不可烧录**
-└── deployment/                非 ROS。validate.sh 是这个目录的唯一校验入口
-    ├── calibration/           task-15 标定工具链
-    └── test/                  task-15 集成验证
-scripts/smoke-test-phase1.sh   Phase 1 总入口（`make smoke-phase1`）
-docs/decisions/ADR-*.md        决策记录，不可变
-```
-
-**分层铁律**：Layer 4（研究代码）永不 import `mavros` / `gazebo_msgs` /
-`sensor_msgs` 等硬件相关包。它只认 `air_ground_interfaces`。
-
----
-
-## 5. 验证入口一览
-
-| 命令 | 期望 | 需要 |
-|------|------|------|
-| `make smoke-phase1` | `通过 64 · 失败 0 · 跳过 0` | python3；全绿需 numpy+opencv+pymavlink |
-| `bash src/deployment/validate.sh` | `全部通过` | 同上 |
-| `python3 src/deployment/calibration/test/test_calib_pipeline.py` | `Ran 16 tests OK` + 实测值对比表 | numpy, opencv, pyyaml |
-| `python3 src/deployment/test/test-serial-loopback.py --self-test` | `通过 10 · 失败 0` | 仅标准库 |
-| `python3 src/deployment/test/test-observation-pipeline.py` | `Ran 10 tests OK` | numpy, opencv, pyyaml |
-| `python3 -m pytest src/air_ground_car_bringup/test/host -q` | `81 passed` | pytest, pyyaml |
-| `python3 src/deployment/test/test_server_deployment.py` | `Ran 9 tests OK` | 仅标准库 |
-| `python3 src/deployment/test/test_pi_preflight.py` | `Ran 10 tests OK` | 仅标准库 |
-| `cd src/firmware/stm32_mecanum && make test` | 80 用例全过 | gcc + make |
-| `cd src/firmware/mspm0_diff && make test` | 71 用例全过 | gcc + make |
-| `make test-unit` | `82 tests` | **仅 Ubuntu 20.04 + ROS Noetic** |
-| `make test-all` / `make test-e2e` | 全套回归 / `33/33` | Ubuntu 20.04 + ROS Noetic + Xvfb |
-| `python3 src/deployment/server/check_lab_server.py` | 5 个服务节点 + 本地 TCP 均健康 | 中关村服务器；常驻服务见 ADR-0017 |
-
-CI 有 7 个 job。四个阻塞 lint 工具：shellcheck 0.10.0（钉版本）、
-yamllint 1.38.0（钉）、flake8 7.1.1（钉）、cppcheck（**不钉**，理由见 ADR-0012）。
-
----
-
-## 6. 已验证 / 未验证清单
-
-**这一节是本文档存在的主要理由。** 不要把未验证项当成已完成。
-
-### 已验证（有实测数据）
-
-| 事项 | 证据 |
-|------|------|
-| 标定流水线数值正确性 | 合成真值：fx +0.18% / cx −0.06px / RMS 0.137px / 陀螺噪声密度 +1.0% |
-| 串口帧协议三端一致 | 黄金帧逐字节，与 `mspm0_diff/test/test_protocol.c::test_pong_golden_frame` 同源 |
-| Observation 数据流 | 真 `CarPreprocessor` + 真 `WorldModelStore`，10 条 |
-| ROS 真环境基线 | Ubuntu 20.04.6 / Noetic：6 包构建成功；Phase 1 基线 80/80，新增服务器测试后当前 82/82（ADR-0014） |
-| 部署配置静态正确性 | 系统 Python 跑 `validate.sh`；45 个健康检查 + 10 个入口模式 + 9 个服务器常驻部署 + 10 个 Pi 主机预检用例 |
-| 实机模式失败关闭 | real→real；mock→DEGRADED；sim→仿真；缺 real launch 不回退（ADR-0015） |
-| UART / I²C 真实访问层 | pyserial / Linux SMBus 生产类；Host 全套 81/81；错误芯片 ID、错误 MCU/底盘身份、半截握手、运行中拔线均有负向用例 |
-| 真实 ROS 传感器入口 | mock 五节点持续运行 8s；real 在无设备服务器上整套关闭；同时抓出并修复 Catkin relay 同名自导入 |
-| 实验室服务器入口 | `192.168.3.30` 真机：5 个服务端节点、`0.0.0.0:9090`，TCP heartbeat 解码到 `/server/car/state`（ADR-0016） |
-| 服务器常驻与恢复 | `Linger=yes` 用户 systemd 已启用；required 节点故障注入后 `NRestarts=1`、五节点和 `127.0.0.1:9090` 自动恢复（ADR-0017） |
-| cppcheck 对固件 C 代码零发现 | CI run #24/#25 步骤退出码均为 0 |
-| numpy/OpenCV 版本差异不影响标定结论 | CI #25 用 numpy<2 + OpenCV 4.x 跑通全部 16 条 |
-
-### 未验证（**明天的工作**）
-
-| # | 事项 | 怎么验 | 没验的后果 |
-|:--:|------|-------|-----------|
-| U2 | `camera_info_manager` 是否接受 `air_ground_calibration` 额外键 | 加载一次标定 YAML 看有无 warning | 被拒则要改用 `--strict-camera-info` |
-| U3 | PX4 是否支持 MAVLink 签名、参数名 | `nsh> param show MAV_*` | ADR-0010 遗留，签名以为开着其实没开 |
-| U4 | MAVROS 签名参数入口 | `rosparam list \| grep -i sign` | 同上 |
-| U5 | `/car/openmv/image_raw` 有没有发布者 | `rostopic hz /car/openmv/image_raw` | `openmv_bridge.py` 只发 `detections`，车机相机标定可能采不到图 |
-| U6 | 棋盘格实际方格边长 | 卡尺量 10 格取平均 | 尺寸差 1%，外参平移差 1%（内参 K 不受影响） |
-| U7 | 标定绝对精度 | 用标定好的相机测已知长度 | RMS 小只说明自洽，不说明正确 |
-| U8 | IMU 静置面水平度 | 水平仪，或换 3 个朝向各采一段比零偏 | 倾斜 0.5° → 0.086 m/s² 假零偏，与真零偏同量级 |
-| U9 | 串口回路对**真硬件** | 见 §7-B | 目前只有 10 条无硬件自测 |
-| U10 | MSPM0 固件可烧录性 | 需接入 TI SDK + SysConfig，见其 README §7 | CI 产物是 `ci-link` 剖面，**烧进去电机不转** |
-| U11 | 两套 OpenCV 的逐项数值差 | 读下一次 CI 里 `test_calib_pipeline` 打印的对比表 | 系统性偏移可以躲在 3~10 倍容差里 |
-| U12 | UART / I²C 对**真实传感器** | 分别接 RPLIDAR、OpenMV、ICM42688，使用 §7-C 的单节点入口 | 当前证明了 OS 访问与失败语义，尚未证明具体线材/固件/电气连接 |
-| U13 | 跨校区隧道与时钟 | 确认 VPN/SSH 隧道后只测 TCP，不把 ROS 暴露跨 WAN；记录三机相对同一参考源的偏差 | 服务器本地健康不能证明良乡端可达或时间戳一致 |
-| U14 | 地面车完整接线/供电 | 按 ADR-0019 与硬件基线逐路示波器、电子负载和架空轮测试 | 候选 pinmux 正确不等于板级接线、分压、瞬态和方向已验证 |
-| U15 | IA6B 三套实测 | 记录 iBUS 通道/端点/failsafe，验证 100ms 失联与低→高解锁 | 解析器/安全状态机已测，但第二 UART 尚未接入控制环 |
-| U16 | 无人机本体 | 到货后无桨→动力台→系留分级验收 | 当前不能冻结 PX4/ESC/GPS/数传参数或宣称可飞 |
-
-### U1 已关闭（2026-08-01）
-
-仓库重命名后先保留并移走含旧绝对路径的 Catkin 生成缓存，再在当前目录全量构建。
-6 个项目包构建成功，`catkin test --no-status` 原始退出码 0，80 个测试全部通过，
-其中真 ROS 消息忠实度对照 24 条。CI 已移除 `|| echo` 并改为阻塞；见 ADR-0014。
-
----
-
-## 7. 明天的上机顺序
-
-按依赖排序。**每一步都有中止条件；触发就停下来记录，不要绕过去。**
-
-### A. Ubuntu 20.04 服务器（零硬件风险，先做）
+在每台 Pi 的仓库根执行：
 
 ```bash
-# A1 —— 已完成；换服务器或重命名后用于复核
-make build
-catkin test --no-status
-```
-当前基线：6 包构建成功、82/82、退出码 0。CI 已按 ADR-0014 阻塞。
-
-```bash
-# A2 —— 已安装的服务器常驻入口（不要用会启动本地边缘客户端的 launch-server）
-systemctl --user status air-ground-lab-server.service
-systemctl --user list-timers air-ground-lab-server-healthcheck.timer
-python3 src/deployment/server/check_lab_server.py --json
-ss -ltn 'sport = :11311 or sport = :9090'
+python3 src/deployment/healthcheck/check_pi_host.py --stage base --json
+lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINTS
+df -h /
 ```
 
-期望只有 `tcp_server/world_model/slam_node/eqa_engine/coordinator` 五个项目节点，
-不得出现 `edge_server_bridge` 或 `drone_car_bridge`；11311 与 9090 都只监听
-`127.0.0.1`。当前已完成真实 heartbeat 解码和 required 节点故障恢复；跨校区只准
-走后续批准的受控隧道，见 ADR-0017。
+中止条件：根文件系统小于 54 GiB、不是 aarch64/Pi 5/Debian 13、内存明显低于
+8 GB 型号预期，先解决镜像或卡问题，不继续安装。
 
-```bash
-# A3 仿真基线仍然可用
-make test-all && make test-e2e
-```
-中止条件：仿真基线跑不起来 → 先修基线，不要带着坏基线上硬件。
+### 4.2 打开确认过的接口
 
-### B. 下位机（最便宜的硬件，先于整机）
+先备份 `/boot/firmware/config.txt`，再通过 `raspi-config` 或等价配置完成：
 
-```bash
-# B1 STM32F407 麦轮
-cd src/firmware/stm32_mecanum && make && make size     # 烧 build/*.bin
-# 接 UART，然后：
-CHASSIS=mecanum bash src/deployment/test/test-serial-loopback.sh /dev/ttyAMA0
-```
-期望：`✓ 收到 PONG: 固件 v0.2.0 · 板卡 STM32F407 · 底盘 mecanum`，随后收到
-固定顺序为 `front/rear/left/right` 的四路超声波快照。当前固件候选接线为
-`PD8..11` Trigger、`PC6..9/TIM8_CH1..4` Echo；每路 Echo 必须先经 2.2k/3.3k 分压。
-这一条同时验证 ADR-0003 的三份实现（STM32 / MSPM0 / Pi 端 Python）一致——解 U9。
-
-中止条件：
-- 收不到任何帧 → TX/RX 接反或没共地（脚本会这么提示）
-- 有 `crc错` 计数 → 波特率不匹配或线太长
-- 底盘类型不符 → **烧错固件或 `CHASSIS` 设错**，运动学会用错模型，必须停
-
-```bash
-# B2 MSPM0G3507 差速 —— 预期有摩擦
-```
-⚠ CI 产出的是 `ci-link` 剖面，**移植层为空实现，不可烧录**（ADR-0004 §决策-3）。
-旧 PB4/PB1 PWM、PA14、TIMG7 QEI 表已被 ADR-0019 作废；新候选表需要 GPIO 软件
-正交解码和 SysConfig 无冲突生成，真实剖面会用 `#error` 阻止提前构建。见
-`src/firmware/mspm0_diff/README.md` §7。解 U10。
-
-### C. 车机树莓派
-
-`EDGE_MODE` 已由 ADR-0015 固化为三种互斥语义：
-
-- `real`：只传 `backend:=real`，后端未实现/硬件不可用时明确失败，绝不回退；
-- `mock`：显式假硬件冒烟，健康检查必须返回 DEGRADED（退出码 4）；
-- `sim`：仿真适配器。
-
-实机联调只能用 `real`。UART / I²C Linux 访问层已经实现，但尚未接真实传感器；
-HC-SR04 已改由 MCU 经 `/dev/mcu` 上报。STM32 候选 pinmux 已进入固件但未上板，
-MSPM0 真实剖面仍拒绝构建；MCU 没有正确身份/数据帧时 Pi 入口失败关闭，这是正确
-中止条件。
-逐件台架验收时用 `car_edge_real.launch` 的 `enable_*` 参数关闭其余传感器，
-不要把该临时子集当成满配部署。
-
-```bash
-# 例：只验 RPLIDAR；其余节点不启动
-roslaunch air_ground_car_bringup car_edge_real.launch \
-  enable_icm42688:=false enable_chassis_bridge:=false enable_openmv:=false \
-  enable_preprocessor:=false
+```text
+dtparam=i2c_arm=on
+dtoverlay=uart0-pi5
 ```
 
+关闭串口登录终端、保留硬件 UART，重启后核对：
+
 ```bash
-sudo bash src/deployment/install.sh --role car --dry-run   # 先看要做什么
+ls -l /dev/i2c-1 /dev/ttyAMA0
+python3 src/deployment/healthcheck/check_pi_host.py --stage deploy --role car
+# 无人机 Pi 使用 --role drone
+```
+
+当前 BOM 不需要 SPI，不要为了“以后可能用”提前打开。车机缺 `/dev/i2c-1` 或任一角色
+缺 `/dev/ttyAMA0` 时，deploy 预检应失败。
+
+## 5. 第二步：部署软件，但先不启用服务
+
+```bash
+bash src/deployment/install.sh --role car --dry-run
 sudo bash src/deployment/install.sh --role car
-# 编辑 /opt/air-ground/.env：ROLE / ROS_IP / HOST_GID_DIALOUT / HOST_GID_I2C
+# 另一台改为 --role drone
 ```
-`ROS_IP` 写错的症状有迷惑性：`rosnode list` 看得到节点，`rostopic echo` 永远没数据。
 
-顺序（`src/deployment/README.md` §4）：
-静态 IP → `require-image.sh` → `systemctl enable --now air-ground-car-edge.service`
-→ `enable --now air-ground-healthcheck.timer`（**是 .timer 不是 .service**）
-→ **最后**才做 SSH 加固（§4.8，顺序反了会把自己锁在门外）。
+安装器不会自动启用服务，也不会覆盖已有 `/opt/air-ground/.env`。逐项核对：
 
 ```bash
-# C3 解 U5 —— 逐个确认传感器话题真的在发
-for t in /car/scan /car/imu/data /car/openmv/image_raw /car/openmv/detections; do
-  echo "--- $t"; timeout 5 rostopic hz "$t"; done
+getent group dialout i2c
+sudo -e /opt/air-ground/.env
+/opt/air-ground/scripts/require-image.sh
 ```
-`/car/openmv/image_raw` 很可能**没有发布者**。若确认没有，这是一个真实的接口缺口：
-`car_edge.yaml` 的 `topics.image` 指着它，而 `openmv_bridge.py` 只发 `detections`。
-处理方式是决策而非修补——写 ADR。
+
+必须按本机实况填写：`ROLE`、车机的 `CHASSIS`、`EDGE_MODE=real`、
+`HOST_GID_DIALOUT`、`HOST_GID_I2C`、角色设备路径，以及获批准网络方案给出的
+`ROS_MASTER_URI`/`ROS_IP`。样例里的 `192.168.1.x` 是隔离网计划，不是已授权的
+跨校区地址。
+
+离线镜像包必须同时带 SHA-256；用 `update-image.sh` 校验架构、空间和哈希，并保留
+上一个镜像用于回滚。不要在良乡依赖现场联网重新构建镜像。
+
+只有 `.env`、设备节点和镜像都核对后才启用：
 
 ```bash
-# C4 在真 ROS 下重跑数据流验证
-python3 src/deployment/test/test-observation-pipeline.py   # 仍走替身
-rostopic echo -n1 /car/observation                         # 真节点的实际输出
+sudo systemctl enable --now air-ground-car-edge.service
+sudo systemctl enable --now air-ground-healthcheck.timer
+# 无人机使用 air-ground-drone-edge.service
 ```
-比对两者的 `modalities` 顺序与 `ultrasonic_ranges` 顺序（ICD §2.1 规定
-`[front, rear, left, right]`）。
 
-### D. 标定（依赖 C 完成）
+SSH 加固最后做；必须先从第二个终端确认密钥登录成功，避免把自己锁在实验室之外。
+
+## 6. 第三步：设备发现与稳定名
+
+每接入一个 USB/串口设备，只接一个并采集：
 
 ```bash
-# D1 相机内参
-ROBOT=car ./src/deployment/calibration/record-calib-bag.sh camera
+lsusb -t
+udevadm info --query=property --name=/dev/ttyUSB0
+dmesg --ctime | tail -80
 ```
-脚本会在开录前检查话题在线，不在线拒绝开录。举板方法在脚本输出里，照做。
-先用卡尺量方格边长（解 U6），把实测值传给 `--square-size`。
+
+记录 VID、PID、产品字符串和可用序列号，再修改
+`src/deployment/network/99-air-ground-devices.rules`。如果同型号设备没有唯一序列号，
+使用物理端口路径并记录换口影响；不能用当前恰好出现的 `ttyUSB0` 作为生产名。
+
+期望稳定名：
+
+- 车机：`/dev/mcu`、`/dev/rplidar`、`/dev/openmv`；
+- 无人机：`/dev/pixhawk`；D435i 必须通过 `check-usb3.sh` 确认运行在 USB3。
+
+稳定名建立后重新运行 `install.sh`（幂等）、重新加载 udev，并做拔插/重启各一次。
+
+## 7. 第四步：车机逐件台架验收
+
+顺序必须是 MCU → 单个传感器 → 预处理 → 全链路。使用
+`car_edge_real.launch` 的 `enable_*` 参数隔离当前被测设备，不能用一次满配启动掩盖
+具体故障。
+
+### 7.1 底盘 MCU
+
+STM32 可以生成真实固件；MSPM0 默认只生成不可烧录的 `ci-link` 产物。MSPM0 必须先
+按 `src/firmware/mspm0_diff/README.md` 完成 TI SDK + SysConfig、GPIO 双边沿 ISR 和
+真实剖面链接，移除编译期门禁后再烧录。
+
+车轮架空、驱动动力断开时先验证协议：
 
 ```bash
-python3 convert-bag-to-kalibr.py --bag <bag> --extract-images out/images --image-topic /car/openmv/image_raw
-python3 calibrate-camera.py --input out/images --pattern 9x6 --square-size <实测> \
-    --camera-name car_openmv --serial <序列号> --output camera_intrinsics.yaml
-python3 validate-calibration.py camera_intrinsics.yaml
-python3 generate-calib-report.py camera_intrinsics.yaml -o calibration_db/<日期>_car/REPORT.md
+CHASSIS=mecanum bash src/deployment/test/test-serial-loopback.sh /dev/mcu
+# 差速改为 CHASSIS=diff
 ```
 
-D2（解 U2）：把 YAML 喂给 `camera_info_manager` 或起相机节点，看 `air_ground_calibration`
-额外段是否被接受。被拒就用 `--strict-camera-info` 重新生成。
+必须收到匹配的板卡/底盘/最低协议版本 PONG，并持续收到顺序固定为
+`front/rear/left/right` 的四路超声波快照。错板、错底盘、CRC 错误或数据中断都要停。
 
-D3 IMU（**要 2 小时，晚上挂着跑**）：
+然后完成编码器 A/B 方向、每圈 1560 counts、最高速漏计数、单电机方向、急停、
+500 ms 速度指令看门狗，以及三套 IA6B 的通道/端点/failsafe 记录。共用 RC 状态机虽
+已有 Host 测试，两块 MCU 的第二 UART 仍未接入控制环；接入并实测前不得宣称 RC 可用。
+
+### 7.2 共享载荷
+
+1. ICM42688：`i2cdetect -y 1` 看到 `0x69`；核对 WHO_AM_I、三个静置朝向的轴符号、
+   温漂和噪声。
+2. A2M12：确认 256000 bps、转向、零角、有效 225° 与云台遮挡角；测量相对底盘外参。
+3. OpenMV/云台：确认 USB CDC、生产检测脚本、舵机独立 BEC、堵转电流、机械软限位和
+   精确安装坐标。
+4. 每个节点单独在 real 模式稳定运行后，再启用预处理器并核对
+   `/car/observation` 的 modalities 与超声波顺序。
+
+未关闭的接口问题：`openmv_bridge.py` 当前确认发布 detections，但
+`/car/openmv/image_raw` 是否有真实发布者仍待上机。若没有，不要临时伪造话题；记录
+实际 OpenMV 输出能力并提出 ADR 方案。
+
+## 8. 第五步：无人机无桨验收
+
+无人机硬件参数尚未冻结。到货后按
+`src/deployment/network/drone-hardware.md` 执行，至少完成：
+
+1. Pixhawk 6C/PM07/M9N 确认型号、固件和参数备份；IA6B 直接接 Pixhawk；
+2. TELEM1 接 915 MHz 空中电台，地面端接地面站；TELEM2 接 Pi `/dev/pixhawk`；
+3. 无桨核对 4 个 A2212/BL32 的编号、方向、ESC 协议/校准、failsafe 与电流；
+4. D435i 模式验证 RGB、深度和点云频率、USB3、功耗和外参；
+5. 查询真实 PX4/MAVROS 参数后再决定 MAVLink 2 签名。模板刻意留空，未知参数名
+   不得写入生效配置；
+6. 记录 4S 5200mAh 电池实测、整机重量、重心和推重比，再由负责人批准动力台、
+   系留和保护区实飞。
+
+双 Raspberry Pi Camera 模式还没有相机型号、CSI 端口或 libcamera profile；入口失败
+关闭是预期行为。不要从 D435i 配置推断双 CSI 参数。
+
+## 9. 尚缺或不确定的信息
+
+| ID | 缺失事实 | 关闭方式/责任输入 |
+|---|---|---|
+| H1 | 两台 64 GB 卡实际容量、镜像与恢复结果 | Pi 操作者跑 base 预检并做恢复演练 |
+| H2 | 5 V/5 A 降压模块型号、压降、纹波、过冲和 20 分钟温升 | 电子组电子负载 + 示波器，分别测 0/2/4/5 A |
+| H3 | 云台独立 BEC 型号/容量、舵机堵转电流 | 电子组限流测试 |
+| H4 | 两底盘满载质量、重心、有效半径、编码器方向/漏计数 | 机械组 + 架空/落地/载荷里程标定 |
+| H5 | MSPM0 SysConfig、GPIO 双边沿中断和最终无冲突 pinmux | 固件/电子组生成工程并做真板编译与示波器验收 |
+| H6 | STM32 候选接线、电平和 TIM8 捕获真板证据 | 电子组逐通道示波器验收 |
+| H7 | 三套 IA6B 通道、端点、failsafe 和独立绑定 | 遥控/固件操作者逐套记录，测试 100 ms 失联 |
+| H8 | ICM42688 真实总线/轴符号；A2M12/OpenMV/Pixhawk VID/PID/序列号 | Pi 操作者逐件枚举和拔插/重启测试 |
+| H9 | A2M12、ICM42688、OpenMV/云台相对底盘外参和遮挡 | 机械测量 + 实机数据标定 |
+| H10 | OpenMV 生产脚本与原始图像输出边界 | 视觉组给出脚本并实测话题 |
+| H11 | D435i CB 实际连接形态，或双 CSI 型号/端口/profile | 电子/视觉组按实物确认 |
+| H12 | Pixhawk 固件、TELEM1/2、M9N、数传、ESC、RC 和签名参数 | 无人机到货后无桨验收；不得外推 |
+| H13 | F450 实际重量/重心/推重比和低压阈值 | 装机称重与动力台数据 |
+| N1 | 良乡实验网地址、中关村入口、受控隧道和授权方式 | 网络负责人书面确认 |
+| N2 | 隧道断线/重连、积压、三机时钟偏差 | 两校区联调，记录故障注入和恢复时间 |
+
+这些是 Phase 1.5 的真实验收阻塞项，不用 mock、常见参数或“能启动”关闭。
+
+## 10. 跨校区与服务器协作
+
+中关村服务器在交接时健康，但根分区已用 97%；大文件、ROS 日志、bag 和镜像只写
+`/data2`。服务器有充足内存；系统时间同步正常。远程不稳定时：
+
+- Pi 本地缓存传感器/标定数据，使用临时文件 + 原子改名，避免半文件；
+- 每批数据附 SHA-256、设备角色、UTC/CST 时间、commit SHA 和配置摘要；
+- 应用层对唯一 TCP 会话做指数退避和重连，断线时车辆/无人机本地安全不依赖服务器；
+- 不跨 WAN 运行 ROS 图。经批准的 VPN/SSH 隧道只转发所需 TCP 入口；
+- 首次联通后做一次主动断隧道/恢复测试，并测三机相对同一参考源的时间偏差。
+
+## 11. 每次实验要留下的证据
+
+建议在 `docs/experiments/` 建日期明确的实验记录，在
+`src/deployment/calibration/calibration_db/` 按其 README 归档标定结果。每条记录至少含：
+
+- 日期、操作者、Pi 角色、Git commit、镜像 tag/digest、`.env` 非敏感摘要；
+- 板卡/传感器型号与稳定设备名，不提交 MAC、序列号、密钥、校园网地址；
+- 完整命令、原始退出码、PASS/FAIL/SKIP 数；
+- 电压、电流、温度、频率、丢包/CRC、时间偏差和测量仪器；
+- 明确写“已验证什么”和“没有验证什么”；失败尝试不得从记录中删除。
+
+## 12. 收尾与提交
+
 ```bash
-ROBOT=car ./src/deployment/calibration/record-calib-bag.sh imu     # 默认 7200s
-```
-为什么是 2 小时：Allan 曲线白噪声段与随机游走段的交点在 τ=√3·N/K ≈ 173 s，
-要在 +1/2 段取到有统计意义的点，总时长得是它的几十倍。15 分钟只够解噪声密度和零偏，
-`calibrate-imu.py` 会把 `quality.random_walk_reliable` 置 false 并退出码 1——**这是设计如此**。
-
-解出来后把 `derived_for_driver` 段（**离散标准差**，不是密度）抄进
-`src/air_ground_car_bringup/config/real_sensors.yaml` 的 `icm42688` 段，
-commit message 里写清楚取自哪个归档目录。
-
-D4 相机-IMU 外参：必须在 D1+D3 都通过之后。Phase 1 只交付接口，解算要装 Kalibr。
-
-### E. 无人机 / PX4（风险最高，放最后）
-
-```bash
-# E1/E2 解 U3/U4
-# QGC 或 nsh: param show MAV_*
-rosparam list | grep -i sign
+git diff --check
+make smoke-phase1
+bash src/deployment/validate.sh
+git status --short --branch
 ```
 
-E3 签名 A/B 对照（ADR-0010 §决策-2 **强制**）：
-**关签名通一次 → 开签名再通一次**。没有对照就上飞，等于把一个新引入的
-"消息全丢"故障模式带到空中。签名失败的表现是链路正常、心跳正常、消息全被丢弃。
+涉及对应模块时再运行两个固件 Host 测试、传感器 Host 测试和真实 ROS 测试。提交前
+确认新文件已加入索引，因为 `git ls-files` 型门禁看不到未跟踪文件。按
+`CONVENTIONS.md` 使用简体中文 Conventional Commit，并在提交正文写明实测数字、
+硬件状态和仍未验证项。提交后确认当前分支的 GitHub CI **实际出现且全绿**。
 
-⚠ 915 MHz 电台只接 Pixhawk TELEM1 与地面站，不经过 Pi、不传图像。
-Pi 经 TELEM2 跑 MAVROS；VLM 图像走受控 IP/TCP。
-
----
-
-## 8. 未结欠账
-
-| # | 内容 | 结的条件 | 位置 |
-|:--:|------|---------|------|
-| D1 | ✅ 已关闭：ROS 80/80，CI 改为阻塞 | ADR-0014 | `.github/workflows/ci.yml` |
-| D2 | ✅ 已关闭架构选择：HC-SR04 归底盘 MCU；引脚/电平仍待上机 | ADR-0013 | `chassis_bridge.py` + 两份固件 |
-| D3 | PX4/MAVROS 签名参数名 | §7-E1/E2 | ADR-0010 §影响 |
-| D4 | `camera_info_manager` 额外键 | §7-D2 | ADR-0011 §决策-1 |
-| D5 | `/car/openmv/image_raw` 发布者 | §7-C3 | 标定 README §5 第 5 条 |
-| D6 | 两套 OpenCV 逐项数值差 | 读下次 CI 日志的对比表 | ADR-0011 §影响 |
-| D7 | 本地从未跑过 cppcheck | 有条件就补一次本地全量 | ADR-0012 §影响 |
-| D8 | ✅ 已关闭：real/mock/sim 显式分离，real 失败关闭，mock 报 DEGRADED | ADR-0015；当前 10 条入口模式用例 | `entrypoint.sh`；部署 README §5.4 |
-| D9 | 跨校区受控隧道 + 两端时间偏差实测 | 需网络方案、两台 Pi 实机与现场时钟证据 | ADR-0017；`network_server.yaml` |
-| D10 | MC520P30 PPR/减速比/RPM、组装几何、两 MCU pinmux | 机械/电子组接线表 + 实测 | ADR-0018；硬件基线 §7 |
-| D11 | IA6B 协议/通道/failsafe，电池与 F450 推重比 | 无桨/台架/保护区验收 | ADR-0018 |
-| D12 | 双 Pi Camera 型号/CSI/libcamera profile | `DRONE_VISION=pi_dual` 真机发布并通过健康检查 | `entrypoint.sh` |
-| D13 | 二维云台舵机/供电/协议与控制器归属 | 电子接线表 + 限位台架；确认前只有仿真控制器 | ADR-0018；硬件基线 §7 |
-
----
-
-## 9. 环境陷阱
-
-### 上一台开发机（Windows，可能已不适用）
-- Git Bash；`python3` **不在 PATH**，用 `python`（/c/Python314，3.14.6）
-- 全局只有 PyYAML / yamllint / flake8。numpy+opencv 在临时 venv `/tmp/t15venv`
-  （`/tmp` = `C:\Users\Vista\AppData\Local\Temp`，**会被清**，需要就重建）
-- **`numpy<2.0.0` 装不上**（无 cp314 轮子）→ 本地实测用的是 numpy 2.5.1 + OpenCV 5.0.0，
-  与 CI 钉的 numpy 1.x + OpenCV 4.x 不是同一套
-- 控制台是 GBK：跑任何输出中文的脚本前 `export PYTHONIOENCODING=utf-8:replace`
-- shellcheck 0.10.0 二进制曾放在 `/tmp/sc/shellcheck.exe`
-
-### 当前实验室服务器（2026-08-01 实测）
-
-- Ubuntu 20.04.6、ROS Noetic、Docker 28.1.1；3 × RTX A6000（每张 49140 MiB）
-- 当前有线地址 `192.168.3.30/24`；服务器与硬件分属中关村/良乡，旧同网
-  `192.168.1.100` 规划不再作为跨校区默认
-- `systemd-timesyncd` 当前显示 `System clock synchronized: yes`；`chronyc` 未安装，
-  仍不能声称与两台 Pi 的相对时间偏差已经验证
-- `air-ground-lab-server.service` 与五分钟健康 timer 已启用，用户 `Linger=yes`；
-  ROS/TCP 只监听回环，日志位于 `/data2/air-ground-server/ros-log`
-- 根分区使用率 97%（约 87 GiB 可用），`/data2` 约 1.1 TiB 可用；不要把项目日志迁回根分区
-- 未接机器人 USB/串口设备；只有 `/dev/i2c-0`、`/dev/i2c-1` 等主机设备
-- `python3` 默认指向 Anaconda 且没有 pytest；ROS/Catkin 用 `/usr/bin/python3`，
-  Host 测试本次借用了已有 `knn_wsr` 环境，不要因此修改系统 Python
-
-### 跨平台陷阱（长期有效）
-| 陷阱 | 症状 | 对策 |
-|------|------|------|
-| `git ls-files` 不含未跟踪文件 | 新写的文件**没被 lint 检查**却显示 0 条 | 跑门禁前先 `git add -A` |
-| Windows 工作区 `*.yaml` 是 CRLF | 本地 yamllint 报一堆 `new-lines`，CI 却干净 | 校验 `git show :<file>` 的内容 |
-| MSYS grep 静默剥掉 `\r` | CRLF 检查在 Windows 上永远通过 | 用"剥 CR 前后字节数是否变化"判断（`validate.sh` §4 已如此） |
-| 连字符文件名不能 import | `calibrate-camera.py` 等 | `importlib.util.spec_from_file_location` 按路径加载 |
-| `mock_hardware.py` 在 `scripts/` 不在 `test/` | 它是运行时后端（`backend: mock`），不是测试件 | — |
-| GitHub job **日志**要 admin | 403 | 但 `/actions/runs/{id}/jobs` 的 `steps[].conclusion` **免鉴权可读**，`continue-on-error` 不改写步骤自身结论——ADR-0012 就是靠这个拿到证据的 |
-
----
-
-## 10. 交付纪律
-
-- **Commit**：Conventional Commits + 中文描述，scope 用任务号。
-  正文列关键改动与**实测数字**，末尾 `Ref:` 指任务文档与 ADR。
-- **偏差**：写进对应 `task-NN-*.md` 末尾的「§与原方案的偏差」，正文不动。
-- **决策**：写 ADR。必须包含「被否决的方案」及其**量化代价**——
-  本仓库的 ADR 之所以有用，是因为它们记了不选那条路的理由。
-- **日记**：`Research_Diary.md` 追加，**必须写日期**，写在
-  「## 历史名称脚注」之前。记事故与认识，不记流水账。
-- **文档**：中文；标识符英文（CONVENTIONS §4.2）。
-
----
-
-## 11. Phase 2 入口
-
-`project-prometheus-tasks/ROADMAP.md`：
-- **Step 1（2026.08）** 实机组装 + 仿真对齐 ← 明天开始的就是这个
-- **Step 2（2026.09~12）** EQA 系统 → 论文
-- ROADMAP 末尾有「待重估的技术决策（Phase 2 动手前必查）」，动 Layer 4 之前先读
-
-Step 1 的验收在 ROADMAP §本阶段目标，其中一条要求
-**把仿真参数校准到与实机一致（传感器噪声、延迟、带宽）**——
-这正是 task-15 标定工具链的下游用途：`imu_intrinsics.yaml` 解出的噪声密度
-既填实机驱动，也该回填仿真的 `car_sensors.yaml`，让两边的噪声模型对齐。
-
----
-
-## 12. 一句话总结
-
-这个仓库的核心资产不是代码，是**一套让"看起来对"和"真的对"能被区分开的机制**。
-到目前为止已经识别出五种"假证据"：假绿灯（不会失败的检查）、假报告（全是勾但没查）、
-假状态（降级了却显示健康）、假配置（文件存在被当成功能启用）、假测试（测的是自己的模拟件）。
-
-它们的共同结构是：**一个本该提供证据的东西，变成了它自己的证据。**
-
-明天带着真硬件时，这条比任何时候都重要——因为实机会给你大量"看起来在工作"的现象。
-
----
-
-*交接人：Claude Opus 5 · 2026-08-01 · HEAD `dc2b38e`*
+Phase 1.5 只有在上表硬件阻塞项、受控隧道/时钟、两车控制模块、共享载荷和无人机
+分级验收均有真实证据后才能关闭。

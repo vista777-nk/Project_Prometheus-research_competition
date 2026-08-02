@@ -1,5 +1,8 @@
 # CLAUDE.md
 
+> ⚠️ **已于 2026-08-03 归档，不再自动加载。** 当前执行入口是
+> [`../docs/experiments/AI_HANDOFF.md`](../docs/experiments/AI_HANDOFF.md)。
+
 > 本文件会被自动读入上下文，因此**刻意保持简短**。
 > 详细交接见 **[AI_HANDOFF.md](./AI_HANDOFF.md)** —— 动手之前先读它。
 
