@@ -1,0 +1,4 @@
+官方视频教程地址：
+串口通信发送数据：https://singtown.com/learn/50235/
+串口通信接收数据：https://singtown.com/learn/50240/
+程序使用我们源码例程文件夹中对应的程序即可。
