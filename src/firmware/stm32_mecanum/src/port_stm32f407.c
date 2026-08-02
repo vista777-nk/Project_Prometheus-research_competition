@@ -370,6 +370,11 @@ static volatile uint32_t s_ultrasonic_started_ms;
 static bool s_ultrasonic_initialized;
 static uint8_t s_ultrasonic_next;
 
+static uint16_t ultrasonic_timer_tick_us(void)
+{
+    return (uint16_t)TIM8->CNT;
+}
+
 static void ultrasonic_set_rising_edge(uint8_t sensor)
 {
     TIM8->CCER &= ~s_ultrasonic_polarity[sensor];
@@ -455,8 +460,8 @@ static void ultrasonic_trigger(uint8_t sensor, uint32_t now_ms)
     TIM8->SR = ~s_ultrasonic_flags[sensor];
 
     ULTRASONIC_TRIG_PORT->BSRR = 1uL << s_ultrasonic_trig_pins[sensor];
-    const uint16_t start = (uint16_t)TIM8->CNT;
-    while ((uint16_t)((uint16_t)TIM8->CNT - start) < 10u) {
+    const uint16_t start = ultrasonic_timer_tick_us();
+    while ((uint16_t)(ultrasonic_timer_tick_us() - start) < 10u) {
         /* 10us 脉冲只在主循环生成；1kHz 控制 ISR 仍可抢占。 */
     }
     ULTRASONIC_TRIG_PORT->BSRR =

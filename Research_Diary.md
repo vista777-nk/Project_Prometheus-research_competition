@@ -1188,6 +1188,13 @@
           1.38.0、flake8 7.1.1 零发现，345 个 live Markdown 本地链接零缺失。
           测试后再次检查服务/timer 和回环监听，服务器基线未被构建测试扰动。
 
+    6.全分支触发修复生效后，task-new 的 CI run 30762939491 自动启动；其中 Cppcheck
+          2.13.0 把 `TIM8->CNT - start` 两次易失寄存器读取误判成同一表达式相减，导致
+          Lint Scripts & Configs 红灯。没有缩窄规则或加入抑制，而是把 1 MHz TIM8 计数器
+          读取封装成显式硬件访问函数；10 µs Trigger 脉冲和 16 位回绕语义不变。STM32
+          Host 80/80，ARM 目标语法检查和 Clang 静态分析均通过；Ubuntu 24.04 / Cppcheck
+          2.13.0 按 CI 原命令扫描 25 个固件 C 文件，零发现。
+
 ---
 
 ## 历史名称脚注
