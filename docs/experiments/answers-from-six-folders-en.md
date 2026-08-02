@@ -93,10 +93,11 @@ extension-board factory programs, `说明.txt`.
 | Serial protocol | ASCII `#255P1400T1000!` (P=pan pulse, T=tilt pulse) |
 | Onboard buttons | **P7** (btn1), **P9** (btn2) |
 
-### 3.2 2-axis gimbal servos (9 g micro servos, driven directly by OpenMV)
+### 3.2 2-axis gimbal servos (PWM15S ×2, driven directly by OpenMV)
 
 | Parameter | Value | Source code |
 |---|---|---|
+| Servo model | **PWM15S** ×2 | Confirmed by electronics team |
 | Servo 1 (pan / bottom) | `Servo(1)` | `pan_servo = Servo(1)` |
 | Servo 2 (tilt / top) | `Servo(2)` | `tilt_servo = Servo(2)` |
 | PWM pulse range | **500–2500 µs** | `pan_servo.calibration(500,2500,1500)` |
