@@ -2,8 +2,8 @@
 
 > **Task-11** · Phase 1 基础设施 · 与 [`stm32_mecanum`](../stm32_mecanum/) 共享 [`common/`](../common/)
 >
-> 状态：算法层完成并测试覆盖（Host 71/71）· DriverLib/HC-SR04 引脚与 IA6B
-> 协议、通道及失控仲裁待电子组定稿；当前不得宣称可遥控或超声波已上板
+> 状态：算法层、iBUS/RC 安全状态机和 GPIO 正交解码器已测试覆盖；参数/候选接线
+> 已按实物答复更新。SysConfig 中断接入与 HC-SR04 捕获仍须生成/上板，当前不可烧录
 
 ---
 
@@ -23,7 +23,7 @@ v0.2 已定义四路超声波帧，真实移植层会在捕获定时器完成前
 
 ### 电赛合规声明
 
-- 主控芯片：**TI MSPM0G3507**（Cortex-M0+ @80MHz，128KB Flash / 32KB SRAM）
+- 主控芯片：**TI MSPM0G3507**（Cortex-M0+，项目当前 32MHz，器件上限 80MHz；128KB Flash / 32KB SRAM）
 - **运动闭环全部在本芯片内完成**：编码器采样、逆运动学、PID、PWM 输出
 - 树莓派5 只做感知与通信中继，**不参与任何电机控制回路**
 - 选型理由与合规边界见 [ADR-0004](../../../docs/decisions/ADR-0004.md)
@@ -67,8 +67,8 @@ v0.2 已定义四路超声波帧，真实移植层会在捕获定时器完成前
 
 ## 3. 引脚定义
 
-> ⚠ 下表是按 LP-MSPM0G3507 LaunchPad 的**建议**排布，尚未经 SysConfig 生成核对。
-> 上板前必须走 §7 的流程。固件代码只依赖 `board_config.h` 里的符号名，改接线不动算法。
+> ⚠ 下表已纠正电子组答复中不成立的复用关系，并限制在 LaunchPad 40-pin 引出脚内，
+> 但仍须 SysConfig 无冲突生成后才可接线。旧的 PB4/PB1 PWM 与 TIMG7 QEI 表不得使用。
 
 轮序号约定（俯视图，车头朝上）：`[0] 左轮 LEFT` · `[1] 右轮 RIGHT`
 
@@ -76,10 +76,10 @@ v0.2 已定义四路超声波帧，真实移植层会在捕获定时器完成前
 
 | 功能 | 引脚 | 外设 | 说明 |
 |------|------|------|------|
-| 左轮 PWM | PB4 | TIMA0_C0 | 20kHz，避开可听频段 |
-| 右轮 PWM | PB1 | TIMA0_C1 | 同上 |
+| 左轮 PWM | PB8 | TIMA0_C0 | 20kHz，避开可听频段 |
+| 右轮 PWM | PB9 | TIMA0_C1 | 同上 |
 | 左轮 IN2 | PB6 | GPIO | DRV8871 左驱动 |
-| 右轮 IN2 | PB8 | GPIO | DRV8871 右驱动 |
+| 右轮 IN2 | PB7 | GPIO | DRV8871 右驱动 |
 
 DRV8871 输入真值表（IN1 由 PWM 通道输出）：
 
@@ -92,15 +92,18 @@ DRV8871 输入真值表（IN1 由 PWM 通道输出）：
 
 ### 3.2 编码器
 
-| 轮 | 定时器 | A 相 | B 相 | 方向符号 |
-|----|--------|------|------|:---:|
-| 左 | TIMG8（QEI） | PA12 | PA13 | `+1` |
-| 右 | TIMG7（QEI） | PA14 | PA15 | `−1` |
+MSPM0G3507 只有 TIMG8 支持 QEI，无法给两轮各分一套硬件 QEI。两轮统一采用
+GPIO 双边沿 + Gray 码查表软件解码，避免左右轮实现不对称。
+
+| 轮 | 解码 | A 相 | B 相 | 方向符号 |
+|----|------|------|------|:---:|
+| 左 | GPIO 双边沿 | PA12 | PA13 | `+1` |
+| 右 | GPIO 双边沿 | PA15 | PA16 | `−1` |
 
 方向符号在 `board_config.h` 里。**若某轮方向反了，改符号，不要改接线** ——
 接线是物理事实，符号是软件约定，改软件不会在下次拆装时丢失。
 
-输出轴每转计数 = PPR 11 × 4 倍频 × 减速比 30 = **1320**
+输出轴每转计数 = PPR 13 × 4 倍频 × 减速比 30 = **1560**
 
 ### 3.3 串口与其他
 
@@ -108,9 +111,11 @@ DRV8871 输入真值表（IN1 由 PWM 通道输出）：
 |------|------|------|
 | UART TX | PA10 | Pi 容器内统一映射为 `/dev/mcu` |
 | UART RX | PA11 | 115200 8N1 |
-| HC-SR04 ×4 | 待电子组定稿 | MCU 轮询触发，固定顺序 front/rear/left/right |
+| IA6B iBUS | PA9 | UART1_RX，115200 8N1；接收机 iBUS-SERVO 单向接入 |
+| HC-SR04 Trig | PB0/PB1/PB4/PB13 | front/rear/left/right，每 50ms 只触发一路 |
+| HC-SR04 Echo | PA17/PA22/PA24/PA25 | 每路先经 2.2k/3.3k 分压，TIMG12 统一计时 |
 | 硬件急停 | PA18 | **常闭 (NC) 接法**，见下 |
-| 状态灯 | PA0 | LaunchPad 板载 LED |
+| 状态灯 | PB2 | 机器人扩展板 D1 |
 
 **急停接法（安全关键）**：按常闭接。回路完好且未按下时引脚被外部拉低；
 按下**或线缆断开**都会因内部上拉变高 → 触发急停。**断线即停，失效安全。**
@@ -263,14 +268,14 @@ M0+ **既没有 FPU，也没有硬件整数除法指令**，浮点全是 `__aeab
 | `motor_set_duty` × 2 + ISR 开销 | — | ~400 |
 | **合计** | | **~2000–3000 周期** |
 
-@80MHz ≈ **25–38µs**，占 1ms 控制周期的 **3–4%**。余量充足。
+@32MHz ≈ **63–94µs**，占 1ms 控制周期的 **6–10%**。仍须实测 GPIO ISR 加入后的占用。
 
 代码里为此做了两件事：`kinematics.c` 预先算好 `1/R` 与 `track/2`，热路径只做乘法；
 `encoder.c` 的换算系数是编译期常量。
 
 > **已知的一处未优化**：`common/pid.c` 的微分项写作 `(error - prev) / dt`，
 > 每周期两次浮点除法（~300 周期）。改成传入 `1/dt` 可以省掉，
-> 但那要动与麦轮固件共享的代码。3–4% 的占用不值得现在动它，
+> 但那要动与麦轮固件共享的代码。当前估算尚不足以证明需要优化，
 > 记在这里作为 Phase 2 的候选优化。
 
 ---
@@ -294,22 +299,22 @@ M0+ **既没有 FPU，也没有硬件整数除法指令**，浮点全是 `__aeab
 
 ### 7.1 生成 SysConfig 配置
 
-> ⚠ **`port_driverlib.c` 从未被任何编译器读过。** 它在仓库里、15 个原语都写全了，
-> 但 CI 只构建 `ci-link` 剖面，本地也没有 SDK。它不是骨架，但也**不是经过验证的代码** ——
-> 第一次 `make PROFILE=driverlib` 大概率会因为实例名对不上而报一串编译错误。
-> 这是预期的，按下面第 5 步处理即可。
+> ⚠ `port_driverlib.c` 真实剖面目前用编译期 `#error` 阻止误烧：电子组旧表把
+> TIMG7 当成第二路 QEI，经官方数据手册核对后已判定不可行。共用软件正交解码器
+> 已有 Host 测试；只有完成下面的 GPIO 中断接入与 SysConfig 生成后才能移除该门禁。
 
 1. 安装 [TI MSPM0 SDK](https://www.ti.com/tool/MSPM0-SDK) 与 CCS（或独立 SysConfig）
-2. 按 §3 的引脚表配置：TIMA0（PWM 双通道）/ TIMG8 + TIMG7（QEI）/ UART0 /
-   ADC0 / GPIO / 一个 1kHz 周期定时器
+2. 按 §3 配置：TIMA0 双路 PWM / UART0（Pi）/ UART1_RX（iBUS）/
+   TIMG0（1kHz 控制）/ TIMG12（1MHz 超声波时基）/ GPIO 双边沿编码器与超声波
 3. **UART 必须使能接收超时（RX timeout）中断** —— 这是拆帧空闲重同步的物理层基础，
    漏掉它会让一个杂散字节吞掉最多 257 字节的正常数据
 4. 生成 `ti_msp_dl_config.h` / `.c`
 5. 核对生成的实例名与 `src/port_driverlib.c` 使用的宏名一致
    （**不一致就改 `port_driverlib.c`，不要改生成物**）。
    本工程用的宏名：`MOTOR_PWM_INST` / `MOTOR_PWM_C0_IDX` / `MOTOR_PWM_C1_IDX` /
-   `ENCODER_L_INST` / `ENCODER_R_INST` / `CONTROL_TIMER_INST` / `UART_COMM_INST` /
-   `ADC_CURRENT_INST` / `GPIO_MOTOR_PORT` / `GPIO_ESTOP_PORT` / `GPIO_LED_PORT`
+   `CONTROL_TIMER_INST` / `UART_COMM_INST` / `UART_RC_INST` /
+   `GPIO_MOTOR_PORT` / `GPIO_ENCODER_PORT` / `GPIO_ULTRASONIC_PORT` /
+   `GPIO_ESTOP_PORT` / `GPIO_LED_PORT`
 6. DriverLib 的 API 签名可能随 SDK 版本变化（尤其 `DL_ADC12_configConversionMem`
    的参数个数）。以本机 SDK 的头文件为准，不要以本文件为准。
 
@@ -349,6 +354,9 @@ SRAM   ORIGIN 0x20200000  LENGTH  32K   →  末端 0x20208000，_estack 即在�
 - [ ] 不发任何指令，确认 500ms 后 `TELEMETRY` 的故障码出现 `CMD_TIMEOUT (0x0004)`
 - [ ] 手动转动左轮，`TELEMETRY` 中左轮 RPM 符号为**正**（否则翻 `ENCODER_DIR_SIGN_LEFT`）
 - [ ] 右轮同上
+- [ ] 两轮最高速同时运行时测 GPIO 解码 ISR 占用和漏计数，累计一圈仍接近 1560
+- [ ] 四路 HC-SR04 逐路遮挡，确认完整快照约 5Hz；断开 Echo 时对应值为 `0xFFFF`
+- [ ] IA6B 断电/发射机关机均使输出归零并禁止重新自动解锁
 - [ ] 发 `SET_VELOCITY(v=0.1, ω=0)`，两轮同向转动，RPM 接近且为正
 - [ ] 发 `SET_VELOCITY(v=0, ω=0.5)`，**右轮正转、左轮反转**（逆时针为正）
 - [ ] 堵住一个轮 800ms，确认故障码出现 `STALL (0x0002)`；松手后**故障位自动清除**
@@ -418,7 +426,7 @@ mspm0_diff/
 EMA 系数、方向符号）全部是麦轮固件测不了的。换 MCU 时也只需重写
 `common/mcu_port.h` 那十几个函数，板级逻辑一行不动。
 
-代价是每个控制周期多约 10 次函数调用，@80MHz 约 0.5µs —— 相对 1000µs 的周期可以忽略。
+代价是每个控制周期多约 10 次函数调用，@32MHz 约 1.2µs —— 相对 1000µs 的周期可以忽略。
 这个代价是刻意付的。
 
 ---

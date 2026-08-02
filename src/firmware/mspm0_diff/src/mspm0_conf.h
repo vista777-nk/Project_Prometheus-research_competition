@@ -57,9 +57,17 @@
 
 /* --- 全固件共用的系统时钟常量 --- */
 
-/** MSPM0G3507 最高主频 (Hz)。SYSPLL 由内部 SYSOSC 倍频而来，无需外部晶振。 */
-#define SYSCLK_HZ           80000000uL
-/** 外设总线时钟。MSPM0 的 TIMG/TIMA/UART 默认挂在 BUSCLK 上。 */
+/* 真实构建必须服从 SysConfig 生成的 CPUCLK_FREQ，禁止再把器件 80MHz 上限
+   当作当前工程时钟。电子组现有 LP-MSPM0G3507 示例实际为 32MHz。 */
+#if defined(USE_TI_DRIVERLIB)
+#  ifndef CPUCLK_FREQ
+#    error "SysConfig output must define CPUCLK_FREQ"
+#  endif
+#  define SYSCLK_HZ         ((uint32_t)CPUCLK_FREQ)
+#else
+#  define SYSCLK_HZ         32000000uL
+#endif
+/** 外设总线时钟；最终以 SysConfig 生成的具体外设频率宏为准。 */
 #define BUSCLK_HZ           SYSCLK_HZ
 
 #endif /* MSPM0_DIFF_MSPM0_CONF_H */

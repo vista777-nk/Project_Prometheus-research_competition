@@ -1,5 +1,9 @@
 # Answers from the Electronics Team — Six Hardware Folders
 
+> **Review note (2026-08-03):** This file is retained as source evidence. Proposed
+> MSPM0 pin assignments in it are not a wiring authority; the reviewed replacement and
+> explicit remaining gates are in [ADR-0019](../decisions/ADR-0019.md).
+
 Below is what we found from reading the actual chip datasheets, SDK driver code, SysConfig
 generated pin-outs, and factory firmware inside the six hardware documentation folders.
 

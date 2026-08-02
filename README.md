@@ -9,7 +9,7 @@
 [![Phase1](https://img.shields.io/badge/phase1_tasks-6/6-brightgreen)](./project-prometheus-tasks/00-OVERVIEW.md)
 [![ROS Tests](https://img.shields.io/badge/ROS_tests-82/82-brightgreen)](./docs/decisions/ADR-0014.md)
 [![E2E](https://img.shields.io/badge/E2E-33/33-brightgreen)](./project-prometheus-tasks/task-09-validation.md)
-[![Firmware Host](https://img.shields.io/badge/firmware_host-135/135-brightgreen)](./src/firmware/README.md)
+[![Firmware Host](https://img.shields.io/badge/firmware_host-151/151-brightgreen)](./src/firmware/README.md)
 [![Deploy Validate](https://img.shields.io/badge/deploy_validate-55/55-brightgreen)](./src/deployment/README.md)
 [![Smoke Phase1](https://img.shields.io/badge/smoke_phase1-64/64-brightgreen)](./project-prometheus-tasks/task-15-calibration-validation.md)
 [![ROS](https://img.shields.io/badge/ROS-Noetic-brightgreen)](https://wiki.ros.org/noetic)
@@ -35,7 +35,7 @@
 |------|:---:|------|
 | **Phase 0: 仿真框架** | ✅ 完成 (9/9) | 无人机 SITL · 差速底盘 · 麦轮底盘 · 传感器 · 通信桥 · 边缘服务器 · 集成总装 · 验证 |
 | **Phase 1: 固件+部署先行** | ✅ 完成 (6/6) | STM32 麦轮固件 ✅ · MSPM0 差速固件 ✅ · 树莓派部署 (无人机+车机) ✅ · CI 流水线 ✅ · 传感器驱动骨架 + MAVLink 签名 ✅ · 标定工具链 + 集成验证 ✅ |
-| **Phase 1.5: 实机接入** | 🟡 进行中 | ROS 82/82 ✅ · UART/I²C Linux 后端 ✅ · 中关村服务器常驻/恢复 ✅ · GPIO/组装/受控隧道/标定待完成 |
+| **Phase 1.5: 实机接入** | 🟡 进行中 | 地面车参数/接口基线 ✅ · STM32 HC-SR04 ✅ · 中关村服务器常驻/恢复 ✅ · MSPM0 SysConfig/组装/受控隧道/标定待完成 |
 | Phase 2: EQA 论文 | 🔴 2026.09~12 | VLM + SLAM + 空地联合探索 |
 | Phase 3: 竞赛季 | 🔴 2027.01~08 | 全国电赛 + CRAIC2027 |
 | Phase 4: 毕设 | 🔴 2027~2028 | World Model · 3DGS · Dreamer |
@@ -99,7 +99,7 @@
 |---------|:---:|------|:---:|
 | `air_ground_interfaces` | Layer 3 | 10 个自定义消息 + 2 个服务 + 1 个 Action | — |
 | `air_ground_drone_bringup` | Layer 1 | PX4 SITL 无人机 + 深度相机/GPS/IMU | ✅ |
-| `air_ground_car_bringup` | Layer 1 | 差速/麦轮双底盘 + 车载传感器 + 云台仿真控制/实机边界 | ROS 40/40 + Host 78/78 |
+| `air_ground_car_bringup` | Layer 1 | 差速/麦轮双底盘 + 车载传感器 + 云台仿真控制/实机边界 | ROS 40/40 + Host 81/81 |
 | `air_ground_com_bridge` | Layer 2 | MAVLink UDP 桥 + TCP JSON 桥 | 17/17 |
 | `air_ground_lab_server` | Layer 2~3 | TCP 接收 + World Model + 研究占位节点 | ✅ |
 | `air_ground_bringup` | Orchestration | 单 Gazebo 世界的顶层集成 Launch | ✅ |

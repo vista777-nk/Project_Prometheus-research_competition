@@ -11,8 +11,8 @@
  * 本文件里所有 `MOTOR_PWM_INST` / `ENCODER_L_INST` 之类的符号，都应当来自
  * **SysConfig 生成的 ti_msp_dl_config.h**，而不是手写。流程：
  *
- *   1. 用 CCS / SysConfig 打开 ccs/mspm0_diff.syscfg，按 board_config.h §六
- *      的引脚表配置 TIMA0(PWM) / TIMG8/TIMG7(QEI) / UART0 / ADC0 / GPIO
+ *   1. 用 CCS / SysConfig 按 board_config.h §六的引脚表配置
+ *      TIMA0(PWM) / GPIO 软件正交解码 / UART0 / UART1 / TIMG12 / GPIO
  *   2. 生成 ti_msp_dl_config.h + ti_msp_dl_config.c
  *   3. 核对生成的实例名与本文件使用的宏名一致 (不一致就改本文件，别改生成物)
  *   4. 逐项走 README §7 的上电检查清单
@@ -45,7 +45,7 @@ static PortMotorDirection s_motor_direction[NUM_WHEELS];
 
 void port_system_init(void)
 {
-    /* SYSCFG_DL_init() 由 SysConfig 生成：配好时钟树 (80MHz)、
+    /* SYSCFG_DL_init() 由 SysConfig 生成：配好时钟树（当前基线 32MHz）、
        全部外设实例与引脚复用。 */
     SYSCFG_DL_init();
 
@@ -162,18 +162,14 @@ void port_motor_set_direction(int wheel, PortMotorDirection dir)
 
 void port_encoder_init(void)
 {
-    DL_TimerG_startCounter(ENCODER_L_INST);
-    DL_TimerG_startCounter(ENCODER_R_INST);
+    /* MSPM0G3507 只有 TIMG8 一路支持 QEI，不能把 TIMG7 当成第二路 QEI。
+       common/quadrature.c 已实现并测试；接好 SysConfig GPIO 双边沿 ISR 后再启用。 */
+#error "Generate and review MSPM0 GPIO quadrature SysConfig before hardware build"
 }
 
 uint16_t port_encoder_read_count(int wheel)
 {
-    if (wheel == 0) {
-        return (uint16_t)DL_TimerG_getTimerCount(ENCODER_L_INST);
-    }
-    if (wheel == 1) {
-        return (uint16_t)DL_TimerG_getTimerCount(ENCODER_R_INST);
-    }
+    (void)wheel;
     return 0u;
 }
 

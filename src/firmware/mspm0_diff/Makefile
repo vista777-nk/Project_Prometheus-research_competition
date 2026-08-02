@@ -77,7 +77,8 @@ endif
 
 # 共享库源文件。unity.c 是测试框架，绝不进固件。
 COMMON_SRCS = $(COMMON)/pid.c $(COMMON)/crc16.c $(COMMON)/protocol_frame.c \
-              $(COMMON)/faults.c
+              $(COMMON)/faults.c $(COMMON)/ibus.c $(COMMON)/quadrature.c \
+              $(COMMON)/rc_safety.c
 
 OBJS  = $(patsubst src/%.c,$(BUILD)/%.o,$(SRCS))
 OBJS += $(patsubst $(COMMON)/%.c,$(BUILD)/common/%.o,$(COMMON_SRCS))

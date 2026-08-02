@@ -93,14 +93,24 @@ typedef struct {
 #define TIM_CR1_ARPE        (1uL << 7)
 #define TIM_CR2_MMS_UPDATE  (2uL << 4)
 #define TIM_DIER_UIE        (1uL << 0)
+#define TIM_DIER_CC1IE      (1uL << 1)
+#define TIM_DIER_CC2IE      (1uL << 2)
+#define TIM_DIER_CC3IE      (1uL << 3)
+#define TIM_DIER_CC4IE      (1uL << 4)
 #define TIM_SR_UIF          (1uL << 0)
+#define TIM_SR_CC1IF        (1uL << 1)
+#define TIM_SR_CC2IF        (1uL << 2)
+#define TIM_SR_CC3IF        (1uL << 3)
+#define TIM_SR_CC4IF        (1uL << 4)
 #define TIM_EGR_UG          (1uL << 0)
 #define TIM_CCER_CC1E       (1uL << 0)
 #define TIM_CCER_CC1P       (1uL << 1)
 #define TIM_CCER_CC2E       (1uL << 4)
 #define TIM_CCER_CC2P       (1uL << 5)
 #define TIM_CCER_CC3E       (1uL << 8)
+#define TIM_CCER_CC3P       (1uL << 9)
 #define TIM_CCER_CC4E       (1uL << 12)
+#define TIM_CCER_CC4P       (1uL << 13)
 #define TIM_BDTR_MOE        (1uL << 15)
 /** 从模式：编码器模式 3 —— TI1 与 TI2 双边沿计数，即 4 倍频 */
 #define TIM_SMCR_SMS_ENCODER3   (3uL << 0)
@@ -110,6 +120,8 @@ typedef struct {
 /** 输入捕获映射到 TIx (编码器模式需要) */
 #define TIM_CCMR1_CC1S_TI1      (1uL << 0)
 #define TIM_CCMR1_CC2S_TI2      (1uL << 8)
+#define TIM_CCMR2_CC3S_TI3      (1uL << 0)
+#define TIM_CCMR2_CC4S_TI4      (1uL << 8)
 
 /* ===================== USART ===================== */
 typedef struct {
@@ -212,6 +224,7 @@ typedef struct {
 #define RCC_APB1ENR_PWREN   (1uL << 28)
 /* APB2ENR 位 */
 #define RCC_APB2ENR_TIM1EN   (1uL << 0)
+#define RCC_APB2ENR_TIM8EN   (1uL << 1)
 #define RCC_APB2ENR_USART1EN (1uL << 4)
 #define RCC_APB2ENR_ADC1EN   (1uL << 8)
 
@@ -262,6 +275,7 @@ typedef struct {
 /** 中断号 (RM0090 表 62)，只列本固件用到的 */
 #define IRQn_TIM6_DAC       54
 #define IRQn_USART1         37
+#define IRQn_TIM8_CC        46
 
 /** 使能一个外设中断 */
 static inline void nvic_enable_irq(uint32_t irqn)

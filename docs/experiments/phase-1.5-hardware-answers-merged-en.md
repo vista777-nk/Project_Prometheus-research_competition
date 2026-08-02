@@ -1,5 +1,10 @@
 # Phase 1.5 Hardware Answers — Merged from Six Folders + Electronics Team
 
+> **Review note (2026-08-03):** This is the translated input record, not the final wiring
+> authority. The proposed MSPM0 PB4/PB1 PWM and TIMG7 QEI allocation is invalid according
+> to the official device alternate-function/timer tables. Use
+> [ADR-0019](../decisions/ADR-0019.md) and the rolling hardware baseline instead.
+
 > **Status**: All questions that have answers from datasheets, SDK code, factory firmware,
 > and the electronics team's on-site inspection are compiled here.  
 > **Date**: 2026-08-03  

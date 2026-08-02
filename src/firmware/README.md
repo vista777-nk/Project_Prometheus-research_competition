@@ -26,6 +26,9 @@
 | `protocol_frame.c/.h` | 帧打包 / 拆包状态机（SOF/LEN/CRC/EOF） | `stm32_mecanum/test/` |
 | `pid.c/.h` | 条件积分抗饱和 PID 速度环 | `stm32_mecanum/test/` |
 | `faults.c/.h` | 故障位图（线上契约，两板逐位一致）+ 故障状态机 | `mspm0_diff/test/` |
+| `ibus.c/.h` | Flysky IA6B iBUS 定长帧、校验和、通道归一化 | `stm32_mecanum/test/` |
+| `rc_safety.c/.h` | CH5 解锁、100ms 失联、3s 中位保持、MANUAL/AUTO/杆量接管 | `stm32_mecanum/test/` |
+| `quadrature.c/.h` | GPIO 双边沿 Gray 码正交解码与非法跳变计数 | `stm32_mecanum/test/` |
 | `mcu_port.h` | **移植层接口** —— 固件里唯一碰寄存器的地方，每块板一份实现 | 各板用假外设替身 |
 | `unity.c/.h` | 极简 Unity 风格测试框架（**仅 Host 测试链接，不进固件**） | — |
 
@@ -69,7 +72,7 @@ port_stm32f407.c            port_driverlib.c · port_stub.c
 | 移植层实现 | `port_stm32f407.c`（裸机寄存器） | `port_driverlib.c`（TI SDK）· `port_stub.c`（CI） |
 | 发送策略 | TXE 中断驱动 | 就地忙等 FIFO |
 | 故障判定 | `common/faults.c` | `common/faults.c` |
-| Host 用例数 | 64 | 71 |
+| Host 用例数 | 80 | 71 |
 
 发送策略的差异被完全挡在移植层里：两块板共用同一份 `uart.c` 环形缓冲逻辑，
 差异只体现在各自的 `port_uart_tx_start()` 实现中。

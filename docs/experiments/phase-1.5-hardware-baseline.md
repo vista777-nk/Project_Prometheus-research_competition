@@ -1,8 +1,8 @@
 # Phase 1.5 实机硬件基线（滚动记录）
 
 > 本文件是 BOM、模块边界和上机缺口的滚动权威表。长期边界已经由
-> [ADR-0018](../decisions/ADR-0018.md) 冻结；尚缺的机械尺寸、pinmux 和电气参数
-> 继续在这里补充，不能用常见型号参数代填。
+> [ADR-0018](../decisions/ADR-0018.md) 冻结；地面车参数、电气与 RC 安全基线由
+> [ADR-0019](../decisions/ADR-0019.md) 冻结。未到货或未实测参数不能用常见值代填。
 
 ## 1. Raspberry Pi 边缘计算基线
 
@@ -62,7 +62,79 @@
 - Wi-Fi 已联网，采样时以太网无载波且地址由 DHCP 分配。最终实验网静态地址仍待
   两校区网络方案确认，不把本次临时地址固化进配置。
 
-## 5. 已发现的部署前缺口
+## 5. 已确认的地面车工程参数
+
+| 项目 | 差速模块 | 麦轮模块 |
+|---|---|---|
+| MC520P30 | 30:1；13 PPR；AB 四倍频；1560 counts/输出轴转；12V 空载 360±20 RPM | 同左 |
+| 有效轮半径 | 0.031m（含当前压缩估计） | 0.0395m（含当前压缩估计） |
+| 轮距 | 0.166m | 0.166m |
+| 轴距 | 不适用 | 0.124m（Lx=0.062m） |
+| 轮序 | left/right | FL/FR/RL/RR，经典 X 型 |
+| 电池 | 3S 2200mAh 25C XT60 | 3S 2200mAh 25C XT60 |
+| MCU | LP-MSPM0G3507，当前工程时钟基线 32MHz | STM32F407VET6，8MHz HSE→168MHz |
+
+“360 RPM”是空载值，额定负载转速未知；真实最大速度和 PID 必须在离地、落地、
+载荷三个阶段分别测。有效半径也必须用直线里程标定，不能只用卡尺外径。
+
+### 5.1 ICM42688、A2M12 与云台/OpenMV
+
+| 设备 | 冻结配置 | 仍需实测 |
+|---|---|---|
+| ICM42688-P | `/dev/i2c-1`、地址 0x69、WHO_AM_I 0x47、100Hz、±4g/±500dps；Y 前/X 左/Z 下，发布前映射 `(y,x,-z)` | `i2cdetect`、静置轴符号、噪声/温漂 |
+| RPLIDAR A2M12 | 256000 bps，安装在前部；前向约 225° 可用，后部约 135° 被云台遮挡 | USB VID/PID/序列号、实际遮挡角与外参 |
+| OpenMV | H7 Plus OPENMV4P/H743，固件 4.5.9，USB CDC 接 Pi；工厂 UART3 为 115200 8N1 | USB 身份、生产检测脚本 |
+| 二维云台 | Jibot1-V2 Model B，2×PWM15S；50Hz，500–2500µs，中位 1500µs；pan ±90°、tilt +45°/−60°；OpenMV 直接控制 | 精确安装坐标、舵机电流与机械软限位 |
+
+### 5.2 HC-SR04 与 MCU 候选接线
+
+所有 Echo 均先通过 2.2k/3.3k 分压，5V 高电平约降至 3V。固定顺序
+front/rear/left/right，每 50ms 只触发一路，Trigger 为 10µs；超时上报 `0xFFFF`。
+
+| 功能 | MSPM0 差速 | STM32 麦轮 |
+|---|---|---|
+| 电机 PWM | PB8/PB9 = TIMA0_C0/C1 | PE9/11/13/14 = TIM1_CH1..4 |
+| 电机 IN2 | PB6/PB7 | PD0/2/4/6 |
+| 编码器 | PA12/13、PA15/16，GPIO 双边沿软件解码 | TIM2/3/4/5 硬件编码器模式 |
+| Pi UART | PA10/PA11 UART0 | PA9/PA10 USART1 |
+| IA6B | PA9 UART1_RX | PA3 USART2_RX |
+| HC-SR04 Trig | PB0/1/4/13 | PD8/9/10/11 |
+| HC-SR04 Echo | PA17/22/24/25 + TIMG12 时基 | PC6/7/8/9 = TIM8_CH1..4 |
+| 急停/灯 | PA18 NC / PB2 | PB0 NC / PC13 |
+
+MSPM0 旧答复的 PB4/PB1 PWM、PA14 和 TIMG7 QEI 已作废。上表仍是
+**SysConfig 候选接线**，不是焊接授权；STM32 表已进入固件但仍须示波器验收。
+
+### 5.3 IA6B 通道与失联基线
+
+- iBUS-SERVO，115200 8N1；CH1=右杆水平，CH2=右杆垂直，CH4=左杆水平；
+- 差速用 CH2 前后、CH1 转向；麦轮用 CH2 前后、CH1 横移、CH4 旋转；
+- CH5=AUX ARM，CH6=MANUAL/AUTO。CH3 不参与地面车速度；
+- failsafe：CH1/2/4=1500、CH5=低。100ms 无有效帧、CH5 低、通道越界或物理
+  常闭急停触发时立即刹停；链路恢复不自动解锁；
+- 解锁要求 CH5 低→高且三根运动通道连续 3s 位于中心死区；AUTO 下杆量偏离立即接管。
+
+共用 iBUS 帧解析器及 CH5 解锁、100ms 失联、3s 中位保持、MANUAL/AUTO/杆量接管
+状态机已入库并通过 Host 测试；两块 MCU 的第二 UART 尚未把它接入控制环。接入前
+必须在车轮架空状态记录三套发射机的真实通道、端点和 failsafe 帧。
+
+## 6. 供电与配电门禁
+
+车用 3S 电池经总保险/反接保护后形成星形母线：动力支路直供各 DRV8871；受保护
+5V 支路给 Pi 5 与逻辑；云台另配 5–8.4V 舵机 BEC。所有通信地共地，但 Pi USB
+不得反向给 MCU/舵机供电。每个动力、Pi、舵机支路分别加保险。
+
+Pi 5 官方推荐插头处 5V/5A；A2M12 官方系统电流为 450–600mA。现有未知型号
+9–24V→5V/5A 模块在完成以下测试前不能验收为整车电源：
+
+1. 空载、2A、4A、5A 持续负载下的插头端电压与 20 分钟温升；
+2. 电机启动/反转、雷达启动和云台快速转动时的最低电压、纹波和过冲；
+3. Pi `dmesg`/`vcgencmd get_throttled` 无欠压，USB 高电流模式符合预期；
+4. 断开任一支路不通过信号线/USB 回灌其他支路。
+
+无人机电池基线为 4S 5200mAh 35C XT60；动力与飞控参数等到整套到货后另行冻结。
+
+## 7. 已发现的部署前缺口
 
 1. `/boot/firmware/config.txt` 中 `dtparam=i2c_arm=on` 仍被注释，当前只有
    `/dev/i2c-13`、`/dev/i2c-14`，没有车机配置要求的 `/dev/i2c-1`。
@@ -76,7 +148,7 @@
 5. 64 GB 新卡烧录时应创建 UID 1000 的 `airground` 用户。现有 systemd 单元和
    容器 bind mount 以这个身份为权限边界，换用别的 UID 会导致日志与设备权限错配。
 
-## 6. 换卡后的两阶段预检
+## 8. 换卡后的两阶段预检
 
 ```bash
 # 刚烧完 64 GB 卡：核对板型、架构、系统、内存和实际分区容量
@@ -90,33 +162,39 @@ python3 src/deployment/healthcheck/check_pi_host.py --stage deploy --role car
 `deploy` 阶段才检查 Docker/Compose；车机还要求 `/dev/i2c-1`，两种角色都要求
 40 针排针 UART `/dev/ttyAMA0`。传感器稳定名和 USB 身份在实物到齐后追加。
 
-## 7. 仍待电子组/机械组确认
+## 9. 仍待电子组/机械组确认
 
-- 两台 Pi 的散热器/风扇及安装风道；5 V/5 A 模块的压降、纹波和瞬态实测；
-- MC520P30 编码器 PPR、减速比、12 V 空载/负载最高转速；
-- 两底盘组装后的轴距、轮距、轮序和编码器正方向；
-- MSPM0/STM32 的最终 PWM、IN2、QEI、HC-SR04、急停和 IA6B pinmux；
-- HC-SR04 ECHO 电平转换与四路防串扰轮询间隔；
-- IA6B 输出协议（iBUS/PPM/PWM）、通道映射、失控值和三套接收机绑定关系；
-- ICM42688 I²C 地址；USB 设备 VID/PID/序列号与稳定名；
-- 二维云台舵机型号、工作电压、限位、PWM/总线协议，以及由 Pi 还是 OpenMV 驱动；
+- 5V/5A 模块的型号、压降、纹波、瞬态与持续温升；新增云台舵机 BEC 的型号/容量；
+- 两底盘载荷装好后的总质量、重心、轮胎压缩量、有效半径里程标定和编码器方向；
+- MSPM0 SysConfig 无冲突生成、GPIO 中断接入与最高速漏计数；STM32 接线实测；
+- 三套 IA6B 的真实通道/端点/failsafe 帧、AUX 开关映射与独立绑定；
+- ICM42688 `i2cdetect`/轴符号；USB 设备 VID/PID/序列号与稳定名；
+- 二维云台精确安装坐标、舵机堵转电流与 OpenMV 生产脚本；
 - D435i CB 连接形态，或双 CSI 相机具体型号、端口和 libcamera profile；
 - 数传固件/协议和地面端宿主；Pixhawk TELEM1/TELEM2 参数实测；
-- 电池电芯数、容量、C 数、接头、低压阈值及 F450 实际起飞重量/重心；
-- 64 GB 卡型号、耐久等级，以及是否准备可直接替换的克隆备份卡；
+- 车/机低压阈值及 F450 实际起飞重量/重心；
+- 64GB 卡镜像恢复演练与可直接替换的克隆备份卡；
 - 梁乡实验网与中关村服务器之间的受控隧道地址和断线恢复策略。
 
-## 8. 已完成的软件对齐
+## 10. 已完成的软件对齐
 
 - DRV8871 IN1/IN2 控制替代旧 TB6612/BTS7960 假设；电流遥测明确为 `NaN`；
 - MCU 协议 v0.2 增加四路超声波快照，Pi 生产桥验证板型/底盘/版本并失败关闭；
-- A2M12 固定 256000 bps；轮半径为差速 32.5 mm、麦轮 40 mm；
+- A2M12 固定 256000 bps；差速/麦轮几何已同步为 31mm/39.5mm 有效半径、
+  166mm 轮距与 124mm 麦轮轴距；编码器统一 1560 counts/rev、360RPM 空载限幅；
+- ICM42688 地址改为 0x69，并按实物安装轴转换到 REP-103；
+- STM32 TIM8 四路超声波捕获与 50ms 顺序调度已实现；共用 iBUS、RC 安全状态机和
+  GPIO 正交解码器已实现；
+- MSPM0 旧 pinmux 已拒绝，真实构建在 SysConfig/软件编码器完成前编译期失败；
 - 真车启动不再直接用 Pi GPIO 驱动 HC-SR04；
 - 无人机真实入口包含 MAVROS + D435i + GPS/点云适配；双 CSI 未确认时拒绝启动；
 - compose 允许把宿主 UART/USB 路径映射到稳定容器路径，915 MHz 电台不再被错误地
   作为两台 Pi 的公共必需设备。
 
-## 9. 参考
+## 11. 参考
 
 - [Docker Engine on Debian](https://docs.docker.com/engine/install/debian/)
 - [ROS REP-3 Target Platforms](https://www.ros.org/reps/rep-0003.html)
+- [Raspberry Pi 5 供电要求](https://www.raspberrypi.com/documentation/computers/raspberry-pi.html#power-supply)
+- [SLAMTEC RPLIDAR A2 规格](https://www.slamtec.com/en/lidar/a2spec)
+- [TI MSPM0G3507 数据手册](https://www.ti.com/lit/ds/symlink/mspm0g3507.pdf)

@@ -13,7 +13,7 @@ import math
 import os
 import sys
 import time
-from typing import Tuple
+from typing import Sequence, Tuple
 
 import rospy
 from sensor_msgs.msg import Imu
@@ -35,7 +35,7 @@ SECTION = "icm42688"
 REQUIRED_KEYS = (
     "bus", "address", "topic", "frame_id", "update_rate",
     "accel_range_g", "gyro_range_dps", "reconnect_interval",
-    "gyro_noise_stddev", "accel_noise_stddev",
+    "gyro_noise_stddev", "accel_noise_stddev", "axis_mapping",
 )
 
 # --- 寄存器 (User Bank 0, 见 ICM-42688-P Datasheet §14) ---
@@ -61,6 +61,38 @@ ODR_TABLE = {1000: 0x06, 200: 0x07, 100: 0x08, 50: 0x09, 25: 0x0A}
 
 GRAVITY = 9.80665
 DEG_TO_RAD = math.pi / 180.0
+
+
+def parse_axis_mapping(mapping: Sequence[str]) -> Tuple[Tuple[int, float], ...]:
+    """校验并编译三轴映射，如 ``["y", "x", "-z"]``。
+
+    返回的三个元素依次描述 base_link X/Y/Z 从传感器哪一轴取得以及符号。
+    每个源轴必须且只能出现一次，避免配置错误悄悄产生非正交坐标系。
+    """
+    if not isinstance(mapping, (list, tuple)) or len(mapping) != 3:
+        raise ValueError("icm42688/axis_mapping must contain exactly 3 axes")
+    axis_index = {"x": 0, "y": 1, "z": 2}
+    compiled = []
+    used = set()
+    for item in mapping:
+        token = str(item).strip().lower()
+        sign = -1.0 if token.startswith("-") else 1.0
+        name = token[1:] if token[:1] in ("-", "+") else token
+        if name not in axis_index or name in used:
+            raise ValueError(
+                "icm42688/axis_mapping must use x, y, z exactly once"
+            )
+        used.add(name)
+        compiled.append((axis_index[name], sign))
+    return tuple(compiled)
+
+
+def remap_vector(
+    vector: Tuple[float, float, float],
+    mapping: Tuple[Tuple[int, float], ...],
+) -> Tuple[float, float, float]:
+    """把传感器坐标向量转换为 REP-103 ``base_link`` 坐标。"""
+    return tuple(vector[index] * sign for index, sign in mapping)
 
 
 def to_int16(high: int, low: int) -> int:
@@ -113,6 +145,7 @@ class ICM42688Driver:
         self.reconnect_interval = positive_float(
             config["reconnect_interval"], "icm42688/reconnect_interval"
         )
+        self.axis_mapping = parse_axis_mapping(config["axis_mapping"])
         accel_range = int(config["accel_range_g"])
         gyro_range = int(config["gyro_range_dps"])
         if accel_range not in ACCEL_RANGE_TABLE:
@@ -203,6 +236,8 @@ class ICM42688Driver:
             accel, gyro = decode_imu_frame(
                 raw, self.accel_lsb_per_g, self.gyro_lsb_per_dps
             )
+            accel = remap_vector(accel, self.axis_mapping)
+            gyro = remap_vector(gyro, self.axis_mapping)
         except (OSError, RuntimeError, ValueError) as error:
             # I2C 挂死时 read 会一直报错。断开重连，不静默失败 (评审建议 3)。
             rospy.logwarn_throttle(

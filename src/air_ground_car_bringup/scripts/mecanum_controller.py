@@ -93,10 +93,10 @@ class MecanumController:
     """ROS adapter for mecanum wheel commands and selectable odometry."""
 
     def __init__(self) -> None:
-        self.wheel_base = float(rospy.get_param("~wheel_base", 0.20))
-        self.track_width = float(rospy.get_param("~track_width", 0.18))
-        self.wheel_radius = float(rospy.get_param("~wheel_radius", 0.040))
-        max_rpm = float(rospy.get_param("~max_rpm", 300.0))
+        self.wheel_base = float(rospy.get_param("~wheel_base", 0.124))
+        self.track_width = float(rospy.get_param("~track_width", 0.166))
+        self.wheel_radius = float(rospy.get_param("~wheel_radius", 0.0395))
+        max_rpm = float(rospy.get_param("~max_rpm", 360.0))
         self.command_timeout = rospy.Duration(
             float(rospy.get_param("~command_timeout", 0.5))
         )

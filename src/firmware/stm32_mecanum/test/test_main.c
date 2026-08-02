@@ -16,6 +16,9 @@
 void run_crc16_tests(void);
 void run_encoder_tests(void);
 void run_kinematics_tests(void);
+void run_ibus_tests(void);
+void run_quadrature_tests(void);
+void run_rc_safety_tests(void);
 void run_pid_tests(void);
 void run_protocol_tests(void);
 
@@ -30,6 +33,9 @@ int main(void)
     UNITY_BEGIN();
     run_crc16_tests();
     run_kinematics_tests();
+    run_ibus_tests();
+    run_quadrature_tests();
+    run_rc_safety_tests();
     run_encoder_tests();
     run_pid_tests();
     run_protocol_tests();

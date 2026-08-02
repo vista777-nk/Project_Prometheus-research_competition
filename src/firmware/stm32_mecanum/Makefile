@@ -54,7 +54,8 @@ LDFLAGS += -lc -lm -lnosys
 SRCS        = $(wildcard src/*.c)
 # 共享库源文件。unity.c 是测试框架，绝不进固件。
 COMMON_SRCS = $(COMMON)/pid.c $(COMMON)/crc16.c $(COMMON)/protocol_frame.c \
-              $(COMMON)/faults.c
+              $(COMMON)/faults.c $(COMMON)/ibus.c $(COMMON)/quadrature.c \
+              $(COMMON)/rc_safety.c
 
 OBJS  = $(patsubst src/%.c,$(BUILD)/%.o,$(SRCS))
 OBJS += $(patsubst $(COMMON)/%.c,$(BUILD)/common/%.o,$(COMMON_SRCS))
@@ -64,11 +65,13 @@ DEPS  = $(OBJS:.o=.d)
 # 只编译与硬件无关的模块。encoder.c 之所以能进来，是因为重构后它只调用
 # mcu_port.h 的两个原语，测试里用假编码器替换掉 —— 这正是移植层分离的收益。
 # motor.c / uart.c / main.c / port_stm32f407.c / startup 不参与。
-TEST_SRCS = test/test_main.c test/test_crc16.c test/test_kinematics.c \
+TEST_SRCS = test/test_main.c test/test_crc16.c test/test_kinematics.c test/test_ibus.c \
+            test/test_quadrature.c test/test_rc_safety.c \
             test/test_pid.c test/test_protocol.c test/test_encoder.c \
             src/kinematics.c src/protocol.c src/encoder.c \
             $(COMMON)/crc16.c $(COMMON)/pid.c $(COMMON)/protocol_frame.c \
-            $(COMMON)/faults.c $(COMMON)/unity.c
+            $(COMMON)/faults.c $(COMMON)/ibus.c $(COMMON)/quadrature.c \
+            $(COMMON)/rc_safety.c $(COMMON)/unity.c
 TEST_CFLAGS = -std=c99 -O1 -g -Wall -Wextra -Wpedantic -DTEST_HOST \
               -I src -I $(COMMON) -I test
 TEST_BIN = $(BUILD)/test_runner

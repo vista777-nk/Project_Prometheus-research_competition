@@ -11,12 +11,12 @@
 #include "unity.h"
 
 /* 测试几何：与 chassis_params.yaml : mecanum_chassis 一致
-   wheel_base=0.20 → lx=0.10 ; track_width=0.18 → ly=0.09 */
-#define TEST_R          0.033f
-#define TEST_LX         0.10f
-#define TEST_LY         0.09f
-#define TEST_MAX_RPM    330.0f
-#define TEST_LEVER      (TEST_LX + TEST_LY)     /* 0.19 */
+   wheel_base=0.124 → lx=0.062 ; track_width=0.166 → ly=0.083 */
+#define TEST_R          0.0395f
+#define TEST_LX         0.062f
+#define TEST_LY         0.083f
+#define TEST_MAX_RPM    360.0f
+#define TEST_LEVER      (TEST_LX + TEST_LY)     /* 0.145 */
 
 #define RADPS_TO_RPM    9.549296585513720f
 #define EPS             1e-3f
@@ -44,7 +44,7 @@ static void test_forward(void)
 
     TEST_ASSERT_EQUAL_INT(KIN_OK, inverse_kinematics(&cmd, rpm));
 
-    const float want = expected_rpm(0.5f);   /* ≈ 144.69 RPM */
+    const float want = expected_rpm(0.5f);   /* ≈ 120.88 RPM */
     for (int i = 0; i < NUM_WHEELS; i++) {
         TEST_ASSERT_TRUE_MESSAGE(rpm[i] > 0.0f, "forward: every wheel must spin forward");
         TEST_ASSERT_FLOAT_WITHIN(EPS, want, rpm[i]);
@@ -82,7 +82,7 @@ static void test_rotate_ccw(void)
 
     TEST_ASSERT_EQUAL_INT(KIN_OK, inverse_kinematics(&cmd, rpm));
 
-    const float want = expected_rpm(TEST_LEVER * 1.0f);   /* ≈ 54.98 RPM */
+    const float want = expected_rpm(TEST_LEVER * 1.0f);   /* ≈ 35.05 RPM */
     TEST_ASSERT_FLOAT_WITHIN(EPS, -want, rpm[WHEEL_FRONT_LEFT]);
     TEST_ASSERT_FLOAT_WITHIN(EPS, +want, rpm[WHEEL_FRONT_RIGHT]);
     TEST_ASSERT_FLOAT_WITHIN(EPS, -want, rpm[WHEEL_REAR_LEFT]);
@@ -122,7 +122,7 @@ static void test_zero_input(void)
 static void test_saturation(void)
 {
     init_default_geometry();
-    /* vx = 2.0 m/s 对应约 578 RPM，远超 330 RPM 上限 */
+    /* vx = 2.0 m/s 对应约 484 RPM，远超 360 RPM 上限 */
     const RobotVelocity cmd = { 2.0f, 0.0f, 0.0f };
     float rpm[NUM_WHEELS];
 

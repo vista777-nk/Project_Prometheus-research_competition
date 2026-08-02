@@ -10,8 +10,8 @@
  *   src/air_ground_car_bringup/urdf/diff_chassis.urdf.xacro
  * 二者不一致会导致"仿真能跑、实车跑偏"，改动时务必同步。
  *
- * ⚠ 引脚映射 (§六) 是**按 LP-MSPM0G3507 LaunchPad 的建议排布**，
- *   尚未经 TI SysConfig 生成核对。上板前必须走 README §7 的核对流程。
+ * ⚠ 引脚映射 (§六) 已按 MSPM0G3507 Rev.C 数据手册与 LaunchPad Rev.D 40-pin
+ *   接口重排，但尚未由本工程 SysConfig 生成物验证。上板前必须走 README §7。
  */
 #ifndef MSPM0_DIFF_BOARD_CONFIG_H
 #define MSPM0_DIFF_BOARD_CONFIG_H
@@ -19,35 +19,34 @@
 /* ===================== 一、底盘几何 ===================== */
 
 /** 轮半径 (m) —— chassis_params.yaml: diff_chassis.wheel_radius */
-#define CHASSIS_WHEEL_RADIUS_M      0.0325f
+#define CHASSIS_WHEEL_RADIUS_M      0.031f
 /** 轮间距 (m) —— chassis_params.yaml: diff_chassis.track_width */
-#define CHASSIS_TRACK_WIDTH_M       0.18f
+#define CHASSIS_TRACK_WIDTH_M       0.166f
 
-/** 电机空载最高转速临时值 (RPM)，MC520P30 的实际减速比/空载转速待实物确认。
- *  与麦轮固件同型号电机，因此暂时取值一致。
+/** MC520P30 @12V 空载最高转速 (RPM)，供应方给定 360±20 RPM。
  *
- *  能力换算：330 RPM → 轮缘线速度 330/60 × 2π × 0.033 = 1.140 m/s。
+ *  能力换算：360 RPM → 轮缘线速度 360/60 × 2π × 0.031 = 1.169 m/s。
  *  yaml 里 max_linear_speed=1.0 / max_angular_speed=3.0 各自都够用，
  *  但**两者不可同时取满**：v=1.0 且 ω=3.0 时右轮需要 1.27 m/s (367 RPM)，
- *  超出 330 RPM，逆解会按 0.898 等比缩放。这是底盘的物理极限，不是 bug；
+ *  超出 360 RPM，逆解会等比缩放。这是底盘的物理极限，不是 bug；
  *  上位机若需要严格跟踪轨迹，应自行把速度指令限制在可行域内。 */
-#define MOTOR_MAX_RPM               330.0f
+#define MOTOR_MAX_RPM               360.0f
 
 /* ===================== 二、编码器 ===================== */
 
-/** 编码器每转脉冲数临时值（电机轴侧），待 MC520P30 实物一圈计数确认。 */
-#define ENCODER_PPR                 11.0f
-/** 减速比临时值 (电机轴 : 输出轴)，不得当作 MC520P30 已确认参数。 */
+/** 编码器每转脉冲数（电机轴侧）。 */
+#define ENCODER_PPR                 13.0f
+/** 减速比 (电机轴 : 输出轴)。 */
 #define ENCODER_GEAR_RATIO          30.0f
 /** 定时器编码器模式的倍频系数 (AB 双相双边沿 = 4×) */
 #define ENCODER_QUADRATURE          4.0f
-/** 输出轴每转计数 = PPR × 倍频 × 减速比 = 1320 */
+/** 输出轴每转计数 = PPR × 倍频 × 减速比 = 1560 */
 #define ENCODER_COUNTS_PER_REV      (ENCODER_PPR * ENCODER_QUADRATURE * ENCODER_GEAR_RATIO)
 
 /* 转速测量窗口 —— 与麦轮固件同一套推理，结论也一样。
- * 按 1ms 采样直接算转速，分辨率只有 60000/(1320×1) ≈ 45 RPM/计数，
+ * 按 1ms 采样直接算转速，分辨率只有 60000/(1560×1) ≈ 38.5 RPM/计数，
  * 比整个调速范围的 1/7 还大，PID 会被量化噪声牵着走。
- * 改成 10ms 窗口后分辨率约 4.5 RPM，代价是速度反馈延迟 10ms
+ * 改成 10ms 窗口后分辨率约 3.85 RPM，代价是速度反馈延迟 10ms
  * (相对 80ms 的电机时间常数可接受)。速度环仍然跑满 1kHz，
  * 只是每 10 次才拿到一个新的测量值。
  * Phase 2 若要更高精度，应改用 M/T 法 (同时测计数与相邻边沿间隔)。 */
@@ -74,8 +73,8 @@
    与麦轮固件同型号电机 + 同控制频率，因此默认增益一致；
    但差速底盘负载分布不同 (只有两轮承担全部牵引力)，实车必须复整定。
 
-   kp 的量纲是 (占空比 / RPM)：满量程 330 RPM 对应满占空比 1.0，
-   因此静态前馈级别的增益约为 1/330 ≈ 0.003。 */
+   kp 的量纲是 (占空比 / RPM)：360 RPM 空载值仅给出静态前馈量级，
+   真实带载增益必须台架整定。 */
 #define PID_KP_DEFAULT              0.0035f
 #define PID_KI_DEFAULT              0.030f
 #define PID_KD_DEFAULT              0.00004f
@@ -100,8 +99,9 @@
 
 /* ===================== 六、引脚映射 =====================
  *
- * ⚠ 以下为 LP-MSPM0G3507 LaunchPad 的**建议**排布，必须用 TI SysConfig
- *   重新生成并核对后才能上板。核对流程见 README §7。
+ * ⚠ 先前答复中的 PB4=TIMA0_C0、PB1=TIMA0_C1、TIMG7=QEI 均不成立，
+ *   不得按旧表接线。下面方案只使用 LaunchPad 40-pin 已引出的引脚；仍须以
+ *   SysConfig 无冲突生成 + 示波器实测为最终冻结门槛。
  *   固件代码只依赖这里的符号名，改接线不动算法。
  *
  * 轮序号约定 (俯视图，车头朝上)：
@@ -109,24 +109,38 @@
  */
 
 /** DRV8871 IN1：TIMA0_C0 / TIMA0_C1 输出 PWM */
-#define MOTOR_PWM_PIN_LEFT          "PB4"    /* TIMA0_C0 */
-#define MOTOR_PWM_PIN_RIGHT         "PB1"    /* TIMA0_C1 */
+#define MOTOR_PWM_PIN_LEFT          "PB8"    /* TIMA0_C0 */
+#define MOTOR_PWM_PIN_RIGHT         "PB9"    /* TIMA0_C1 */
 /** PWM 载频 (Hz)，20kHz 避开可听频段 */
 #define MOTOR_PWM_FREQ_HZ           20000u
 
-/** DRV8871 IN2：每轮 1 根方向 GPIO；PB7/PB9 从旧 TB6612 方案释放。 */
+/** DRV8871 IN2：每轮 1 根方向 GPIO。 */
 #define MOTOR_DIR_PIN_LEFT          "PB6"
-#define MOTOR_DIR_PIN_RIGHT         "PB8"
+#define MOTOR_DIR_PIN_RIGHT         "PB7"
 
-/* 编码器定时器：TIMG8 / TIMG7 正交编码器模式 (对应轮 0 / 1)
- *   TIMG8 : PA12 / PA13
- *   TIMG7 : PA14 / PA15
+/* MSPM0G3507 只有 TIMG8 一路支持 QEI，无法让两轮都用硬件 QEI。
+ * 两路统一采用 GPIO 双边沿 + Gray 码查表软件解码，避免左右实现不对称：
+ *   左轮 : PA12 / PA13
+ *   右轮 : PA15 / PA16
+ * 360RPM、1560 count/rev 时两轮合计约 18.7k edge/s，32MHz 下仍须上板量 ISR 占用。
  * 若某轮方向与车体约定相反，翻转下面的符号即可，不要改接线。 */
+#define ENCODER_PIN_LEFT_A          "PA12"
+#define ENCODER_PIN_LEFT_B          "PA13"
+#define ENCODER_PIN_RIGHT_A         "PA15"
+#define ENCODER_PIN_RIGHT_B         "PA16"
 #define ENCODER_DIR_SIGN_LEFT       (+1)
 #define ENCODER_DIR_SIGN_RIGHT      (-1)
 
 /** 上位机串口：UART0 TX=PA10 RX=PA11；Pi 容器内统一映射为 /dev/mcu。 */
 #define UART_BAUDRATE               115200u
+
+/** IA6B iBUS：接收机 iBUS-SERVO → UART1_RX=PA9，115200 8N1；PA8 不接。 */
+#define RC_IBUS_RX_PIN              "PA9"
+#define RC_IBUS_BAUDRATE            115200u
+
+/** HC-SR04 仅单路轮流触发；每个 Echo 必须先经 2.2k/3.3k 分压再入 MCU。 */
+#define ULTRASONIC_TRIG_PINS        "PB0,PB1,PB4,PB13"
+#define ULTRASONIC_ECHO_PINS        "PA17,PA22,PA24,PA25"
 
 /** 硬件急停输入。按**常闭 (NC)** 接法：
  *  回路完好且未按下时把引脚拉到低电平；按下或线缆断开都会因内部上拉变成高电平
@@ -139,8 +153,8 @@
  *  0 = 台架调试：忽略急停引脚。**上车前必须改回 1**。 */
 #define ESTOP_REQUIRE_HARDWARE      1
 
-/** 状态指示灯：LaunchPad 板载 LED */
-#define LED_PIN                     "PA0"
+/** 状态指示灯：机器人扩展板 D1（电子组样例已验证）。 */
+#define LED_PIN                     "PB2"
 
 /* ===================== 七、电赛扩展预留 =====================
  *

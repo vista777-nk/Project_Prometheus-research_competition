@@ -354,7 +354,7 @@ if __name__ == '__main__':
 """ICM42688-P 6-axis IMU 驱动骨架.
 
 发布: /car/imu (sensor_msgs/Imu)
-参数: ~bus (default 1), ~address (default 0x68)
+参数: ~bus (default 1), ~address (default 0x69)
 """
 
 import rospy
@@ -375,7 +375,7 @@ class ICM42688Driver:
         self.i2c = i2c
         self.pub = rospy.Publisher('/car/imu', Imu, queue_size=10)
         self.bus = rospy.get_param('~bus', 1)
-        self.address = rospy.get_param('~address', 0x68)
+        self.address = rospy.get_param('~address', 0x69)
 
     def start(self):
         if not self.i2c.open(self.bus, self.address):
@@ -938,7 +938,7 @@ mavlink_secret.key
 密钥文件的 `0600` 权限在 Windows 上验不了（MSYS 不落实 chmod），
 Linux/树莓派侧以 `umask 077` + `chmod 600` 双保险。
 
-## Phase 1.5 跟进偏差（更新至 2026-08-02）
+## Phase 1.5 跟进偏差（更新至 2026-08-03）
 
 本节记录后续实机阶段的变化，不回写上面的 Phase 1 交付证据（69 条是当时真实数字）。
 
@@ -951,10 +951,13 @@ Linux/树莓派侧以 `umask 077` + `chmod 600` 双保险。
 - 真实 ROS 启动抓到 Catkin devel relay 的同名自导入：纯 Host 测试全绿，实际
   roslaunch 却无法从 relay `hardware_interface.py` 导入接口。驱动现在优先真实源码目录；
   mock 五节点已持续运行 8 秒，real 无设备时已验证整套关闭。
-- 确认 BOM 后 Host 套件为 78/78：新增统一底盘协议、PONG 板卡/底盘身份、v0.2
+- 确认 BOM 后 Host 套件先增至 78/78：新增统一底盘协议、PONG 板卡/底盘身份、v0.2
   最低版本和 MCU 四路超声波失败关闭；删除不再符合模块边界的 Pi GPIO 直驱测试。
 - HC-SR04 已明确下沉到底盘 MCU；电子组冻结引脚与捕获定时器前，真实移植层返回
   `false` 且 Pi 拒绝进入 ready，不用 Python sleep 或全零帧制造假绿灯。
+- 英文硬件答复处理后，ICM42688 地址改为 `0x69`，并按安装方向执行
+  `(sensor_y, sensor_x, -sensor_z)` 轴映射；增加 3 条映射/配置测试，当前 Host
+  套件为 81/81。STM32 HC-SR04 已实现，MSPM0 仍保持失败关闭。
 
 ---
 

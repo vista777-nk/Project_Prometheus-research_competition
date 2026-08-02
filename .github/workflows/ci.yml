@@ -437,7 +437,7 @@ jobs:
           python3 -m py_compile src/air_ground_car_bringup/scripts/*.py
           echo "全部驱动骨架语法正确"
 
-      # Phase 1.5 确认 BOM 后本地实测: 78 passed。断言覆盖 UART/I2C Linux、
+      # Phase 1.5 确认 BOM 与安装轴后本地实测: 81 passed。断言覆盖 UART/I2C Linux、
       # 统一底盘协议/PONG 身份/超声波失败关闭，RPLIDAR A2M12 协议解析，
       # 访问层、RPLIDAR 协议解析、IMU 量纲换算、
       # OpenMV JSON 校验, 以及**驱动话题与 car_preprocessor

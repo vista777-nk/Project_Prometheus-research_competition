@@ -19,34 +19,34 @@
 /* ===================== 一、底盘几何 ===================== */
 
 /** 轮半径 (m) —— chassis_params.yaml: mecanum_chassis.wheel_radius */
-#define CHASSIS_WHEEL_RADIUS_M      0.040f
+#define CHASSIS_WHEEL_RADIUS_M      0.0395f
 /** 前后轴距 (m) —— chassis_params.yaml: mecanum_chassis.wheel_base */
-#define CHASSIS_WHEEL_BASE_M        0.20f
+#define CHASSIS_WHEEL_BASE_M        0.124f
 /** 左右轮距 (m) —— chassis_params.yaml: mecanum_chassis.track_width */
-#define CHASSIS_TRACK_WIDTH_M       0.18f
+#define CHASSIS_TRACK_WIDTH_M       0.166f
 /** 轮距半长 Lx (前后方向) */
 #define CHASSIS_LX_M                (CHASSIS_WHEEL_BASE_M * 0.5f)
 /** 轮距半宽 Ly (左右方向) */
 #define CHASSIS_LY_M                (CHASSIS_TRACK_WIDTH_M * 0.5f)
 
-/** 电机空载最高转速临时值 (RPM)。MC520P30 的实际减速比/空载转速待实物确认。 */
-#define MOTOR_MAX_RPM               330.0f
+/** MC520P30 @12V 空载最高转速 (RPM)，供应方给定 360±20 RPM。 */
+#define MOTOR_MAX_RPM               360.0f
 
 /* ===================== 二、编码器 ===================== */
 
-/** 编码器每转脉冲数临时值（电机轴侧），待 MC520P30 实物一圈计数确认。 */
-#define ENCODER_PPR                 11.0f
-/** 减速比临时值 (电机轴 : 输出轴)，不得当作 MC520P30 已确认参数。 */
+/** 编码器每转脉冲数（电机轴侧）。 */
+#define ENCODER_PPR                 13.0f
+/** 减速比 (电机轴 : 输出轴)。 */
 #define ENCODER_GEAR_RATIO          30.0f
 /** 定时器编码器模式的倍频系数 (AB 双相双边沿 = 4×) */
 #define ENCODER_QUADRATURE          4.0f
-/** 输出轴每转计数 = PPR × 倍频 × 减速比 = 1320 */
+/** 输出轴每转计数 = PPR × 倍频 × 减速比 = 1560 */
 #define ENCODER_COUNTS_PER_REV      (ENCODER_PPR * ENCODER_QUADRATURE * ENCODER_GEAR_RATIO)
 
 /* 转速测量窗口。
- * 单纯按 1ms 采样算转速，分辨率只有 60000/(1320×1) ≈ 45 RPM/计数 —— 这个台阶
- * 比整个调速范围的 1/8 还大，PID 会被量化噪声牵着走。改成 10ms 窗口后
- * 分辨率降到约 4.5 RPM，代价是速度反馈延迟 10ms (相对 80ms 的电机时间常数可接受)。
+ * 单纯按 1ms 采样算转速，分辨率只有 60000/(1560×1) ≈ 38.5 RPM/计数 —— 这个台阶
+ * 比整个调速范围的 1/9 还大，PID 会被量化噪声牵着走。改成 10ms 窗口后
+ * 分辨率降到约 3.85 RPM，代价是速度反馈延迟 10ms (相对 80ms 的电机时间常数可接受)。
  * 速度环仍然跑满 1kHz，只是每 10 次才拿到一个新的测量值。
  * Phase 2 若要更高精度，应改用 M/T 法 (同时测计数与相邻边沿间隔)。 */
 #define ENCODER_SPEED_WINDOW_TICKS  10u
@@ -70,8 +70,8 @@
 /* ===================== 四、PID 整定参数 ===================== */
 
 /* 速度环 PID：输入 RPM 误差，输出 PWM 占空比 [-1, 1]。
-   kp 的量纲是 (占空比 / RPM)：满量程 330 RPM 对应满占空比 1.0，
-   因此静态前馈级别的增益约为 1/330 ≈ 0.003。 */
+   kp 的量纲是 (占空比 / RPM)：360 RPM 空载值仅给出静态前馈量级，
+   真实带载增益必须台架整定。 */
 #define PID_KP_DEFAULT              0.0035f
 #define PID_KI_DEFAULT              0.030f
 #define PID_KD_DEFAULT              0.00004f
@@ -132,6 +132,26 @@
 
 /** 上位机串口：USART1 TX=PA9 RX=PA10 (AF7)，对接树莓派 /dev/ttyAMA0 */
 #define UART_BAUDRATE               115200u
+
+/** IA6B iBUS：iBUS-SERVO → USART2_RX=PA3，115200 8N1；USART2_TX 不接。 */
+#define RC_IBUS_PORT                GPIOA
+#define RC_IBUS_RX_PIN              3u
+#define RC_IBUS_BAUDRATE            115200u
+
+/** HC-SR04：Trigger 轮流输出，Echo 经每路 2.2k/3.3k 分压后进 TIM8 捕获。 */
+#define ULTRASONIC_TRIG_PORT        GPIOD
+#define ULTRASONIC_TRIG_PIN_FRONT   8u
+#define ULTRASONIC_TRIG_PIN_REAR    9u
+#define ULTRASONIC_TRIG_PIN_LEFT    10u
+#define ULTRASONIC_TRIG_PIN_RIGHT   11u
+#define ULTRASONIC_ECHO_PORT        GPIOC
+#define ULTRASONIC_ECHO_PIN_FRONT   6u    /* TIM8_CH1, AF3 */
+#define ULTRASONIC_ECHO_PIN_REAR    7u    /* TIM8_CH2, AF3 */
+#define ULTRASONIC_ECHO_PIN_LEFT    8u    /* TIM8_CH3, AF3 */
+#define ULTRASONIC_ECHO_PIN_RIGHT   9u    /* TIM8_CH4, AF3 */
+#define ULTRASONIC_TRIGGER_GAP_MS   50u
+#define ULTRASONIC_ECHO_TIMEOUT_MS  30u
+#define ULTRASONIC_UNAVAILABLE_MM   0xFFFFu
 
 /** 硬件急停输入：PB0，接物理急停开关。
  *  按**常闭 (NC)** 接法：回路完好且未按下时把引脚拉到低电平；

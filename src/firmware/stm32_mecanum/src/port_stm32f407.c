@@ -11,6 +11,7 @@
  * 外设分配：
  *   TIM1        四路 PWM (CH1..CH4 → PE9/PE11/PE13/PE14, AF1), 20kHz
  *   TIM2/3/4/5  四路正交编码器 (4 倍频)
+ *   TIM8        PC6..PC9 四路 HC-SR04 Echo 输入捕获（一次只触发一路）
  *   TIM6        1kHz 控制中断
  *   USART1      PA9/PA10 (AF7), 115200 8N1, RXNE/IDLE/TXE 中断
  *   DRV8871     每轮 TIM1 PWM→IN1、GPIOD→IN2（单 PWM + 方向控制）
@@ -344,15 +345,159 @@ uint16_t port_encoder_read_count(int wheel)
     return (uint16_t)s_encoder_tim[wheel]->CNT;
 }
 
-bool port_ultrasonic_snapshot_mm(uint16_t ranges_mm[4])
+/* ===================== 五、HC-SR04 (TIM8 输入捕获) ===================== */
+
+static const uint32_t s_ultrasonic_trig_pins[4] = {
+    ULTRASONIC_TRIG_PIN_FRONT, ULTRASONIC_TRIG_PIN_REAR,
+    ULTRASONIC_TRIG_PIN_LEFT, ULTRASONIC_TRIG_PIN_RIGHT
+};
+static __IO uint32_t *const s_ultrasonic_ccr[4] = {
+    &TIM8->CCR1, &TIM8->CCR2, &TIM8->CCR3, &TIM8->CCR4
+};
+static const uint32_t s_ultrasonic_flags[4] = {
+    TIM_SR_CC1IF, TIM_SR_CC2IF, TIM_SR_CC3IF, TIM_SR_CC4IF
+};
+static const uint32_t s_ultrasonic_polarity[4] = {
+    TIM_CCER_CC1P, TIM_CCER_CC2P, TIM_CCER_CC3P, TIM_CCER_CC4P
+};
+
+static volatile int8_t s_ultrasonic_active = -1;
+static volatile bool s_ultrasonic_waiting_fall;
+static volatile uint16_t s_ultrasonic_rise_tick;
+static volatile uint16_t s_ultrasonic_ranges_mm[4];
+static volatile uint8_t s_ultrasonic_completed_mask;
+static volatile uint32_t s_ultrasonic_started_ms;
+static bool s_ultrasonic_initialized;
+static uint8_t s_ultrasonic_next;
+
+static void ultrasonic_set_rising_edge(uint8_t sensor)
 {
-    (void)ranges_mm;
-    /* 电子组尚未给出 STM32 板的 4×Trig/Echo 引脚与电平转换方案。
-       返回 false 会让 Pi 实机入口失败关闭；不得发送全零假快照。 */
-    return false;
+    TIM8->CCER &= ~s_ultrasonic_polarity[sensor];
 }
 
-/* ===================== 五、串口 (USART1) ===================== */
+static void ultrasonic_set_falling_edge(uint8_t sensor)
+{
+    TIM8->CCER |= s_ultrasonic_polarity[sensor];
+}
+
+static void ultrasonic_init(void)
+{
+    static const uint32_t echo_pins[4] = {
+        ULTRASONIC_ECHO_PIN_FRONT, ULTRASONIC_ECHO_PIN_REAR,
+        ULTRASONIC_ECHO_PIN_LEFT, ULTRASONIC_ECHO_PIN_RIGHT
+    };
+
+    for (int sensor = 0; sensor < 4; sensor++) {
+        gpio_config(ULTRASONIC_TRIG_PORT, s_ultrasonic_trig_pins[sensor],
+                    GPIO_MODE_OUTPUT, 0u, GPIO_PULL_DOWN);
+        ULTRASONIC_TRIG_PORT->BSRR =
+            1uL << (s_ultrasonic_trig_pins[sensor] + 16u);
+        gpio_config(ULTRASONIC_ECHO_PORT, echo_pins[sensor],
+                    GPIO_MODE_AF, 3u, GPIO_PULL_DOWN);
+        s_ultrasonic_ranges_mm[sensor] = ULTRASONIC_UNAVAILABLE_MM;
+    }
+
+    RCC->APB2ENR |= RCC_APB2ENR_TIM8EN;
+    TIM8->CR1 = 0uL;
+    TIM8->PSC = (TIMCLK_APB2_HZ / 1000000uL) - 1uL;
+    TIM8->ARR = 0xFFFFuL;
+    TIM8->CCMR1 = TIM_CCMR1_CC1S_TI1 | TIM_CCMR1_CC2S_TI2;
+    TIM8->CCMR2 = TIM_CCMR2_CC3S_TI3 | TIM_CCMR2_CC4S_TI4;
+    TIM8->CCER = TIM_CCER_CC1E | TIM_CCER_CC2E | TIM_CCER_CC3E | TIM_CCER_CC4E;
+    TIM8->DIER = TIM_DIER_CC1IE | TIM_DIER_CC2IE | TIM_DIER_CC3IE | TIM_DIER_CC4IE;
+    TIM8->EGR = TIM_EGR_UG;
+    TIM8->SR = 0uL;
+    TIM8->CR1 = TIM_CR1_CEN;
+    nvic_enable_irq(IRQn_TIM8_CC);
+    s_ultrasonic_initialized = true;
+}
+
+/** TIM8 捕获中断：先记上升沿，再切到下降沿并换算脉宽。 */
+void TIM8_CC_IRQHandler(void)
+{
+    const uint32_t pending = TIM8->SR &
+        (TIM_SR_CC1IF | TIM_SR_CC2IF | TIM_SR_CC3IF | TIM_SR_CC4IF);
+    TIM8->SR = ~pending;
+
+    const int sensor = s_ultrasonic_active;
+    if (sensor < 0 || sensor >= 4 ||
+        (pending & s_ultrasonic_flags[sensor]) == 0u) {
+        return;
+    }
+
+    const uint16_t captured = (uint16_t)*s_ultrasonic_ccr[sensor];
+    if (!s_ultrasonic_waiting_fall) {
+        s_ultrasonic_rise_tick = captured;
+        s_ultrasonic_waiting_fall = true;
+        ultrasonic_set_falling_edge((uint8_t)sensor);
+        return;
+    }
+
+    const uint16_t pulse_us = (uint16_t)(captured - s_ultrasonic_rise_tick);
+    /* HC-SR04 经验公式 distance_cm = pulse_us / 58。范围外按 unavailable。 */
+    uint16_t distance_mm = ULTRASONIC_UNAVAILABLE_MM;
+    if (pulse_us >= 116u && pulse_us <= 23200u) {
+        distance_mm = (uint16_t)(((uint32_t)pulse_us * 10uL + 29uL) / 58uL);
+    }
+    s_ultrasonic_ranges_mm[sensor] = distance_mm;
+    s_ultrasonic_completed_mask |= (uint8_t)(1uL << sensor);
+    ultrasonic_set_rising_edge((uint8_t)sensor);
+    s_ultrasonic_waiting_fall = false;
+    s_ultrasonic_active = -1;
+}
+
+static void ultrasonic_trigger(uint8_t sensor, uint32_t now_ms)
+{
+    s_ultrasonic_active = (int8_t)sensor;
+    s_ultrasonic_waiting_fall = false;
+    s_ultrasonic_started_ms = now_ms;
+    ultrasonic_set_rising_edge(sensor);
+    TIM8->SR = ~s_ultrasonic_flags[sensor];
+
+    ULTRASONIC_TRIG_PORT->BSRR = 1uL << s_ultrasonic_trig_pins[sensor];
+    const uint16_t start = (uint16_t)TIM8->CNT;
+    while ((uint16_t)((uint16_t)TIM8->CNT - start) < 10u) {
+        /* 10us 脉冲只在主循环生成；1kHz 控制 ISR 仍可抢占。 */
+    }
+    ULTRASONIC_TRIG_PORT->BSRR =
+        1uL << (s_ultrasonic_trig_pins[sensor] + 16u);
+}
+
+bool port_ultrasonic_snapshot_mm(uint16_t ranges_mm[4])
+{
+    if (!s_ultrasonic_initialized) {
+        ultrasonic_init();
+    }
+
+    const uint32_t now_ms = port_millis();
+    port_irq_disable();
+    if (s_ultrasonic_active >= 0 &&
+        (now_ms - s_ultrasonic_started_ms) >= ULTRASONIC_ECHO_TIMEOUT_MS) {
+        const uint8_t sensor = (uint8_t)s_ultrasonic_active;
+        s_ultrasonic_ranges_mm[sensor] = ULTRASONIC_UNAVAILABLE_MM;
+        s_ultrasonic_completed_mask |= (uint8_t)(1uL << sensor);
+        ultrasonic_set_rising_edge(sensor);
+        s_ultrasonic_waiting_fall = false;
+        s_ultrasonic_active = -1;
+    }
+
+    bool snapshot_ready = (s_ultrasonic_completed_mask == 0x0Fu);
+    if (snapshot_ready) {
+        for (int sensor = 0; sensor < 4; sensor++) {
+            ranges_mm[sensor] = s_ultrasonic_ranges_mm[sensor];
+        }
+        s_ultrasonic_completed_mask = 0u;
+    }
+    port_irq_enable();
+
+    if (s_ultrasonic_active < 0) {
+        ultrasonic_trigger(s_ultrasonic_next, now_ms);
+        s_ultrasonic_next = (uint8_t)((s_ultrasonic_next + 1u) & 3u);
+    }
+    return snapshot_ready;
+}
+
+/* ===================== 六、串口 (USART1) ===================== */
 
 void port_uart_init(uint32_t baudrate)
 {
@@ -415,7 +560,7 @@ void USART1_IRQHandler(void)
     }
 }
 
-/* ===================== 六、ADC（当前 BOM 未使用） ===================== */
+/* ===================== 七、ADC（当前 BOM 未使用） ===================== */
 
 void port_adc_init(void)
 {
@@ -428,7 +573,7 @@ uint16_t port_adc_read(uint8_t channel)
     return 0u;
 }
 
-/* ===================== 七、GPIO (急停 / LED) ===================== */
+/* ===================== 八、GPIO (急停 / LED) ===================== */
 
 void port_gpio_init(void)
 {

@@ -3,13 +3,15 @@
 > **读者是 AI，不是人。** 这份文档的目标是让一个没有任何本项目上下文的模型，
 > 在 15 分钟内达到可以安全动手的状态，并且**知道自己不知道什么**。
 >
-> 写于 2026-08-01；同日 Phase 1.5 接手后已在 Ubuntu 20.04 实验室服务器完成
-> ROS 真环境基线与部署失败关闭，实机硬件联调继续按本文顺序推进。
+> 写于 2026-08-01，2026-08-03 按英文硬件答复更新；Phase 1.5 接手后已在
+> Ubuntu 20.04 实验室服务器完成 ROS 真环境基线与部署失败关闭，实机硬件联调
+> 继续按本文顺序推进。
 > 上一份同类文档是 [phase1-pre-departure-brief.md](../../obsolete-documentation/phase1-pre-departure-brief.md)（Phase 0→1 交接，已归档）。
 >
-> **2026-08-02 当前覆盖**：完整 BOM 与五个物理模块见
-> [phase-1.5-hardware-baseline.md](./phase-1.5-hardware-baseline.md) 和 ADR-0018。
-> ADR-0013 已采纳“HC-SR04 由底盘 MCU 定时”，不再预留；Pi GPIO 驱动已删除。
+> **2026-08-03 当前覆盖**：完整 BOM、五个物理模块和最新验收缺口见
+> [phase-1.5-hardware-baseline.md](./phase-1.5-hardware-baseline.md)；ADR-0018
+> 冻结模块边界，ADR-0019 冻结地面车参数、电气和 RC 安全基线。ADR-0013 已采纳
+> “HC-SR04 由底盘 MCU 定时”，不再预留；Pi GPIO 驱动已删除。
 > 旧文中的 A1/115200、3DR 经两台 Pi、M8N、TB6612/BTS7960、`ttyAMA1`
 > 都是历史方案，禁止按其接线。
 
@@ -41,10 +43,10 @@ curl -sSL "https://api.github.com/repos/vista777-nk/research_compitition/actions
 | 项 | 值 |
 |---|---|
 | 分支 | `feat/task-XX`（**不是** main；main 落后很多，合并是人的决定） |
-| HEAD | `dc2b38e`（2026-08-01；此后的提交均为纯文档，代码状态同 `a419b98`） |
+| HEAD | 不在文档里钉死；以本机 `git log --oneline -1` 为准 |
 | Phase | Phase 0 仿真 ✅ 9/9 · Phase 1 基础设施 ✅ 6/6 · **Phase 1.5 实机接入进行中** · Phase 2 未开始 |
-| 最近 CI | run #25 (`fe0cf66`) 全绿；run #26 (`a419b98`) 是 cppcheck 转阻塞后的首跑；此后 4 个提交均为纯文档 |
-| ADR | 0001–0018 已用；0013=HC-SR04 MCU 时序，0018=确认 BOM/模块边界 |
+| 最近 CI | 2026-08-03 接手人报告当前远端 CI 全绿；本次硬件参数同步提交后必须重新确认 |
+| ADR | 0001–0019 已用；0013=HC-SR04 MCU 时序，0018=BOM/模块边界，0019=地面车参数/电气/RC |
 
 ⚠ **提交会自动推送**（VSCode 的 post-commit sync）。`git commit` 之后
 `origin/feat/task-XX` 立刻就前进了。**把每一次 commit 当成已公开**。
@@ -145,10 +147,10 @@ docs/decisions/ADR-*.md        决策记录，不可变
 | `python3 src/deployment/calibration/test/test_calib_pipeline.py` | `Ran 16 tests OK` + 实测值对比表 | numpy, opencv, pyyaml |
 | `python3 src/deployment/test/test-serial-loopback.py --self-test` | `通过 10 · 失败 0` | 仅标准库 |
 | `python3 src/deployment/test/test-observation-pipeline.py` | `Ran 10 tests OK` | numpy, opencv, pyyaml |
-| `python3 -m pytest src/air_ground_car_bringup/test/host -q` | `78 passed` | pytest, pyyaml |
+| `python3 -m pytest src/air_ground_car_bringup/test/host -q` | `81 passed` | pytest, pyyaml |
 | `python3 src/deployment/test/test_server_deployment.py` | `Ran 9 tests OK` | 仅标准库 |
 | `python3 src/deployment/test/test_pi_preflight.py` | `Ran 10 tests OK` | 仅标准库 |
-| `cd src/firmware/stm32_mecanum && make test` | Unity 全过 | gcc + make |
+| `cd src/firmware/stm32_mecanum && make test` | 80 用例全过 | gcc + make |
 | `cd src/firmware/mspm0_diff && make test` | 71 用例全过 | gcc + make |
 | `make test-unit` | `82 tests` | **仅 Ubuntu 20.04 + ROS Noetic** |
 | `make test-all` / `make test-e2e` | 全套回归 / `33/33` | Ubuntu 20.04 + ROS Noetic + Xvfb |
@@ -173,7 +175,7 @@ yamllint 1.38.0（钉）、flake8 7.1.1（钉）、cppcheck（**不钉**，理�
 | ROS 真环境基线 | Ubuntu 20.04.6 / Noetic：6 包构建成功；Phase 1 基线 80/80，新增服务器测试后当前 82/82（ADR-0014） |
 | 部署配置静态正确性 | 系统 Python 跑 `validate.sh`；45 个健康检查 + 10 个入口模式 + 9 个服务器常驻部署 + 10 个 Pi 主机预检用例 |
 | 实机模式失败关闭 | real→real；mock→DEGRADED；sim→仿真；缺 real launch 不回退（ADR-0015） |
-| UART / I²C 真实访问层 | pyserial / Linux SMBus 生产类；Host 全套 78/78；错误芯片 ID、错误 MCU/底盘身份、半截握手、运行中拔线均有负向用例 |
+| UART / I²C 真实访问层 | pyserial / Linux SMBus 生产类；Host 全套 81/81；错误芯片 ID、错误 MCU/底盘身份、半截握手、运行中拔线均有负向用例 |
 | 真实 ROS 传感器入口 | mock 五节点持续运行 8s；real 在无设备服务器上整套关闭；同时抓出并修复 Catkin relay 同名自导入 |
 | 实验室服务器入口 | `192.168.3.30` 真机：5 个服务端节点、`0.0.0.0:9090`，TCP heartbeat 解码到 `/server/car/state`（ADR-0016） |
 | 服务器常驻与恢复 | `Linger=yes` 用户 systemd 已启用；required 节点故障注入后 `NRestarts=1`、五节点和 `127.0.0.1:9090` 自动恢复（ADR-0017） |
@@ -196,6 +198,9 @@ yamllint 1.38.0（钉）、flake8 7.1.1（钉）、cppcheck（**不钉**，理�
 | U11 | 两套 OpenCV 的逐项数值差 | 读下一次 CI 里 `test_calib_pipeline` 打印的对比表 | 系统性偏移可以躲在 3~10 倍容差里 |
 | U12 | UART / I²C 对**真实传感器** | 分别接 RPLIDAR、OpenMV、ICM42688，使用 §7-C 的单节点入口 | 当前证明了 OS 访问与失败语义，尚未证明具体线材/固件/电气连接 |
 | U13 | 跨校区隧道与时钟 | 确认 VPN/SSH 隧道后只测 TCP，不把 ROS 暴露跨 WAN；记录三机相对同一参考源的偏差 | 服务器本地健康不能证明良乡端可达或时间戳一致 |
+| U14 | 地面车完整接线/供电 | 按 ADR-0019 与硬件基线逐路示波器、电子负载和架空轮测试 | 候选 pinmux 正确不等于板级接线、分压、瞬态和方向已验证 |
+| U15 | IA6B 三套实测 | 记录 iBUS 通道/端点/failsafe，验证 100ms 失联与低→高解锁 | 解析器/安全状态机已测，但第二 UART 尚未接入控制环 |
+| U16 | 无人机本体 | 到货后无桨→动力台→系留分级验收 | 当前不能冻结 PX4/ESC/GPS/数传参数或宣称可飞 |
 
 ### U1 已关闭（2026-08-01）
 
@@ -246,7 +251,8 @@ cd src/firmware/stm32_mecanum && make && make size     # 烧 build/*.bin
 CHASSIS=mecanum bash src/deployment/test/test-serial-loopback.sh /dev/ttyAMA0
 ```
 期望：`✓ 收到 PONG: 固件 v0.2.0 · 板卡 STM32F407 · 底盘 mecanum`，随后收到
-固定顺序为 `front/rear/left/right` 的四路超声波快照。
+固定顺序为 `front/rear/left/right` 的四路超声波快照。当前固件候选接线为
+`PD8..11` Trigger、`PC6..9/TIM8_CH1..4` Echo；每路 Echo 必须先经 2.2k/3.3k 分压。
 这一条同时验证 ADR-0003 的三份实现（STM32 / MSPM0 / Pi 端 Python）一致——解 U9。
 
 中止条件：
@@ -258,7 +264,9 @@ CHASSIS=mecanum bash src/deployment/test/test-serial-loopback.sh /dev/ttyAMA0
 # B2 MSPM0G3507 差速 —— 预期有摩擦
 ```
 ⚠ CI 产出的是 `ci-link` 剖面，**移植层为空实现，不可烧录**（ADR-0004 §决策-3）。
-要接 TI MSPM0 SDK + SysConfig，见 `src/firmware/mspm0_diff/README.md` §7。解 U10。
+旧 PB4/PB1 PWM、PA14、TIMG7 QEI 表已被 ADR-0019 作废；新候选表需要 GPIO 软件
+正交解码和 SysConfig 无冲突生成，真实剖面会用 `#error` 阻止提前构建。见
+`src/firmware/mspm0_diff/README.md` §7。解 U10。
 
 ### C. 车机树莓派
 
@@ -269,8 +277,9 @@ CHASSIS=mecanum bash src/deployment/test/test-serial-loopback.sh /dev/ttyAMA0
 - `sim`：仿真适配器。
 
 实机联调只能用 `real`。UART / I²C Linux 访问层已经实现，但尚未接真实传感器；
-HC-SR04 已改由 MCU 经 `/dev/mcu` 上报。最终 pinmux 尚未确认时 MCU 不发首帧，
-Pi 入口失败关闭，这是正确中止条件。
+HC-SR04 已改由 MCU 经 `/dev/mcu` 上报。STM32 候选 pinmux 已进入固件但未上板，
+MSPM0 真实剖面仍拒绝构建；MCU 没有正确身份/数据帧时 Pi 入口失败关闭，这是正确
+中止条件。
 逐件台架验收时用 `car_edge_real.launch` 的 `enable_*` 参数关闭其余传感器，
 不要把该临时子集当成满配部署。
 
