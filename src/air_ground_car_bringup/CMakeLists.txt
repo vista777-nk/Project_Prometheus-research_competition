@@ -67,13 +67,14 @@ catkin_install_python(
     scripts/chassis_swapper.py
     scripts/gimbal_controller.py
     scripts/mecanum_controller.py
+    scripts/chassis_protocol.py
+    scripts/chassis_bridge.py
     scripts/hardware_interface.py
     scripts/mock_hardware.py
     scripts/real_hardware.py
     scripts/sensor_config.py
     scripts/rplidar_driver.py
     scripts/icm42688_driver.py
-    scripts/hcsr04_driver.py
     scripts/openmv_bridge.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

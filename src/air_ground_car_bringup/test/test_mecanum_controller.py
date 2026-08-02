@@ -19,7 +19,7 @@ from mecanum_controller import (  # noqa: E402
 class MecanumKinematicsTest(TestCase):
     WHEEL_BASE = 0.20
     TRACK_WIDTH = 0.18
-    WHEEL_RADIUS = 0.033
+    WHEEL_RADIUS = 0.040
     MAX_SPEED = 100.0
 
     def inverse(self, linear_x, linear_y, angular_z, max_speed=None):

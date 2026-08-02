@@ -2,8 +2,8 @@
 
 > **Task-12** · Phase 1 基础设施 · 两台树莓派5（车机 + 无人机）共用一套配置
 >
-> 状态：配置完成并通过静态校验（45 个健康检查 Host 用例 + 8 个入口模式用例 +
-> 9 个服务器常驻部署用例 + 9 个 Pi 主机预检用例；`validate.sh` 55/55）·
+> 状态：配置完成并通过静态校验（45 个健康检查 Host 用例 + 10 个入口模式用例 +
+> 9 个服务器常驻部署用例 + 10 个 Pi 主机预检用例；`validate.sh` 55/55）·
 > **尚未在真实树莓派上执行过**，
 > 服务器常驻服务已实机安装；已知限制见 §9；
 > `EDGE_MODE` 的失败关闭语义见 §5.4 与 ADR-0015
@@ -16,18 +16,19 @@
 
 | 角色 | IP | 连接的硬件 | 启动 |
 |------|-----|-----------|------|
-| 车机 | `192.168.1.10` | STM32/MSPM0 下位机 · RPLIDAR · ICM42688 · OpenMV · 3DR(ground) | `car_edge.launch` |
-| 无人机 | `192.168.1.20` | Pixhawk 6C · RealSense D435i · 3DR(air) | `drone_edge.launch` |
+| 车机 | `192.168.1.10` | 共享 Pi 载荷 + STM32/麦轮或 MSPM0/差速控制模块 | `car_edge_real.launch` |
+| 无人机 | `192.168.1.20` | Pixhawk 6C TELEM2 + D435i 可换载荷 | `drone-edge-real.launch` |
 
 ```
 中关村服务器：本地 ROS Master + TCP 回环 :9090
         ↕ 经批准的 VPN / SSH 隧道（方案与地址待网络协调）
-良乡车机 Pi 192.168.1.10 ←─3DR 无线─→ 无人机 Pi 192.168.1.20
-   ↕ /dev/mcu (下位机)              ↕ /dev/pixhawk (飞控)
+良乡车机 Pi 192.168.1.10             无人机 Pi 192.168.1.20
+   ↕ /dev/mcu                           ↕ /dev/pixhawk → Pixhawk TELEM2
+STM32/麦轮 或 MSPM0/差速             Pixhawk TELEM1 ↔ 915 MHz ↔ 地面站
 ```
 
-车机 Pi 是 MAVLink 的汇集点，也是局域网 NTP 服务器 —— 两件事同一个理由，
-见 [ADR-0006](../../docs/decisions/ADR-0006.md)。
+同一隔离网内车机仍可作为 NTP server；跨校区时服务器不依赖它，见 ADR-0017。
+915 MHz 数传不经过两台 Pi，也不承载图像。
 
 ---
 
@@ -100,7 +101,7 @@ src/deployment/
 │
 ├── network/
 │   ├── 99-air-ground-devices.rules   udev：把会漂移的设备名钉死
-│   ├── setup-3dr-radio.py            SiK 电台 AT 配置（默认只读）
+│   ├── setup-3dr-radio.py            仅在实物确认 SiK 后使用的兼容工具（默认只读）
 │   ├── check-usb3.sh                 确认 D435i 在 USB3 口上
 │   ├── air-ground-lan.nmconnection.template
 │   └── drone-hardware.md             无人机侧接线与上电顺序
@@ -140,7 +141,7 @@ src/deployment/
 │
 ├── test/                             集成验证（task-15 Part B）
 │   ├── test-serial-loopback.sh       入口，转发给 .py
-│   ├── test-serial-loopback.py     ★ 帧协议第三份实现 + 13 条自测
+│   ├── test-serial-loopback.py     ★ 帧协议第三份实现 + 10 条自测
 │   ├── test_entrypoint_modes.py    ★ real/mock/sim 路由 + 负向验证 8 条
 │   ├── test_pi_preflight.py        ★ Pi 主机基线与负向验证 9 条
 │   ├── test_server_deployment.py   ★ 服务器常驻/恢复/安全默认值 9 条
@@ -513,8 +514,8 @@ bash src/deployment/validate.sh
 | 检查项 | 本地(Git-Bash) | Linux CI |
 |--------|:---:|:---:|
 | shell 语法 `bash -n` | ✓ | ✓ |
-| Python 语法 + 45 个健康检查 + 8 个入口模式 + 9 个服务器部署 + 9 个 Pi 预检用例 | ✓ | ✓ |
-| 串口协议自测 13 条（黄金帧 / CRC / 拆帧） | ✓ | ✓ |
+| Python 语法 + 45 个健康检查 + 10 个入口模式 + 9 个服务器部署 + 10 个 Pi 预检用例 | ✓ | ✓ |
+| 串口协议自测 10 条（黄金帧 / CRC / 拆帧） | ✓ | ✓ |
 | 标定流水线 16 条（合成真值） | 需 numpy+OpenCV | ✓ |
 | compose 结构 + 话题名一致性（含标定采集话题） | ✓ | ✓ |
 | 行尾必须是 LF | ✓ | ✓ |
@@ -552,7 +553,7 @@ bash src/deployment/validate.sh
 | 症状 | 先查这里 |
 |------|---------|
 | 服务起不来 | `journalctl -u air-ground-*-edge -n 50 --no-pager` |
-| 容器起不来，报 device not found | `ls -l /dev/ \| grep -E 'mcu\|pixhawk\|telem'`；没有符号链接就是 udev 没生效 |
+| 容器起不来，报 device not found | 核对 `.env` 的 `CAR_MCU_DEVICE` / `DRONE_FCU_DEVICE`；排针生产连接应有 `/dev/ttyAMA0` |
 | 容器内 `Permission denied: /dev/mcu` | `.env` 里的 `HOST_GID_*` 与宿主机不符，用 `getent group dialout i2c` 核对 |
 | 节点可见但话题没数据 | `ROS_IP` 没设或设错 |
 | 健康检查一直报 Master 不可达 | `ping 192.168.1.100`；再 `cat /opt/air-ground/.env \| grep MASTER` |
@@ -576,16 +577,19 @@ bash src/deployment/validate.sh
 - **`systemd-analyze verify` 已在 Ubuntu 20.04 实验室服务器执行**。校验器会隔离
   `/etc/systemd/system` 的宿主机单元，并过滤受限环境的 Varlink 连接噪声；项目
   10 个系统/用户单元通过。
-- **udev 规则里的 VID/PID 与序列号需上机核对。** 3DR 数传和 RPLIDAR
-  都用 CP2102 芯片（`10c4:ea60`），必须靠序列号区分。规则里留的是
+- **udev 规则里的 VID/PID 与序列号需上机核对。** 915 MHz 地面电台和 RPLIDAR
+  可能使用相同 USB-UART 芯片，必须靠序列号区分。规则里留的是
   `REPLACE_WITH_*_SERIAL` 占位符 —— 不填的话那两条规则不匹配任何设备，
   这是刻意的：宁可符号链接不出现（`wait-for-device.sh` 会报出来），
   也不要两个设备随机抢同一个名字。
-- **`setup-3dr-radio.py` 未在真实电台上验证。** AT 命令集依据 SiK 固件
-  公开文档。默认只读，首次上机先确认能进命令模式再考虑 `--apply`。
-- **UART / I²C real 后端已实现但尚未接真实传感器验证**；HC-SR04 GPIO 仍等待
-  ADR-0013 的时序 A/B/C 实测。满配 `car_edge_real.launch` 默认 real 且任一必需节点
-  退出会关闭整套；无硬件冒烟必须显式用 `backend:=mock`。
+- **`setup-3dr-radio.py` 只兼容 SiK。** BOM 只确认 915 MHz/500 mW，实物固件
+  未确认；默认只读，确认 SiK 和参数备份前禁止 `--apply`。
+- **UART / I²C real 后端已实现但尚未接真实传感器验证**；HC-SR04 已按
+  ADR-0013 归底盘 MCU，最终 pinmux 未定时不会发布首帧，Pi 入口会失败关闭。
+- **Pi 5 当前仅看到 `/dev/ttyAMA10` 不足以部署。** 它是 3 针调试口；40 针
+  GPIO14/15 需 `dtoverlay=uart0-pi5` 并验收 `/dev/ttyAMA0`。
+- **双 Raspberry Pi Camera 模式暂时失败关闭。** 电子组给出具体型号、CSI 端口和
+  libcamera profile 后再补驱动；D435i 路径已进入真实 launch。
 - **降级状态目前只覆盖 `car_edge_real.launch` 这一种情况。** 传感器掉线、
   相机没枚举到之类的部分能力缺失还没有对应的判定——那需要 task-14 的
   `Capability` 消息，不是一个启动期状态文件能表达的。
@@ -602,6 +606,8 @@ bash src/deployment/validate.sh
 | [ADR-0005](../../docs/decisions/ADR-0005.md) | 为什么用 Docker 而不是裸机部署 |
 | [ADR-0006](../../docs/decisions/ADR-0006.md) | 静态 IP 与时钟主从的分配方案 |
 | [ADR-0007](../../docs/decisions/ADR-0007.md) | `network_mode: host` 的暴露面与重估触发条件 |
+| [ADR-0013](../../docs/decisions/ADR-0013.md) | HC-SR04 由底盘 MCU 定时并走统一协议 |
+| [ADR-0018](../../docs/decisions/ADR-0018.md) | 确认 BOM、五个模块与无人机链路边界 |
 | [network/drone-hardware.md](network/drone-hardware.md) | 无人机侧接线与上电顺序 |
 | [PLATFORM.md §三](../../project-prometheus-tasks/PLATFORM.md) | 物理部署映射 |
 | [SECURITY.md](../../SECURITY.md) | 项目安全策略 |

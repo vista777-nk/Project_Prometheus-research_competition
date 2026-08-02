@@ -465,6 +465,7 @@ class _RospyStub(types.ModuleType):
         self.Time = Time
         self.Duration = Duration
         self._shutdown = True
+        self._shutdown_callbacks = []
         # rospy.timer.TimerEvent —— car_preprocessor 的类型注解会取到它
         timer_module = types.ModuleType("rospy.timer")
         timer_module.TimerEvent = TimerEvent
@@ -496,6 +497,9 @@ class _RospyStub(types.ModuleType):
 
     def spin(self) -> None:
         return None
+
+    def on_shutdown(self, callback) -> None:
+        self._shutdown_callbacks.append(callback)
 
     def sleep(self, _duration) -> None:
         return None

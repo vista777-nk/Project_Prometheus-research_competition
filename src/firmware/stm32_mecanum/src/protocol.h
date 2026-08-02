@@ -15,9 +15,10 @@
  * | 0x01 | Pi→STM32  | SET_VELOCITY   | vx(f32) vy(f32) ω(f32) = 12 B               |
  * | 0x02 | Pi→STM32  | EMERGENCY_STOP | 无                                          |
  * | 0x03 | Pi→STM32  | PING           | 无                                          |
- * | 0x11 | STM32→Pi  | TELEMETRY      | rpm(f32×4) + 电流(f32×4) + 故障码(u16) = 34 B |
+ * | 0x11 | STM32→Pi  | TELEMETRY      | rpm(f32×4) + 电流(f32×4, 当前 NaN) + 故障码(u16) = 34 B |
  * | 0x12 | STM32→Pi  | ACK            | 被确认的 CMD(u8) = 1 B                       |
  * | 0x13 | STM32→Pi  | PONG           | major,minor,patch,board_type,chassis_type = 5 B |
+ * | 0x14 | STM32→Pi  | ULTRASONIC     | front,rear,left,right (u16 mm ×4) = 8 B  |
  * | 0xFF | STM32→Pi  | ERROR          | 错误码(u8) + 变长详情                        |
  *
  * 帧内所有多字节标量均为小端序。
@@ -42,6 +43,7 @@ extern "C" {
 #define CMD_TELEMETRY           0x11u
 #define CMD_ACK                 0x12u
 #define CMD_PONG                0x13u
+#define CMD_ULTRASONIC          0x14u
 #define CMD_ERROR               0xFFu
 
 /* --- 各命令的 DATA 段长度 --- */
@@ -51,6 +53,8 @@ extern "C" {
 #define PAYLOAD_LEN_TELEMETRY       34u
 #define PAYLOAD_LEN_ACK              1u
 #define PAYLOAD_LEN_PONG             5u
+#define PAYLOAD_LEN_ULTRASONIC       8u
+#define ULTRASONIC_UNAVAILABLE_MM    0xFFFFu
 
 /** ERROR 帧的错误码 */
 typedef enum {
@@ -129,12 +133,15 @@ void protocol_send_pong(void);
 /**
  * 上报遥测。
  * @param rpm     四轮实测转速，索引同 kinematics.h
- * @param current 四轮电流 (A)
+ * @param current 四轮电流 (A)；DRV8871 无反馈脚且 BOM 无采样电路时固定为 NaN
  * @param fault   故障位图，见 main.c 的 FAULT_* 定义
  */
 void protocol_send_telemetry(const float rpm[NUM_WHEELS],
                              const float current[NUM_WHEELS],
                              uint16_t fault);
+
+/** 上报四路 HC-SR04 毫米值，顺序固定为 front,rear,left,right。 */
+void protocol_send_ultrasonic(const uint16_t ranges_mm[4]);
 
 void protocol_send_error(uint8_t code, const uint8_t *detail, uint8_t detail_len);
 

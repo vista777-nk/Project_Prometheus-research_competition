@@ -161,6 +161,33 @@ printf '%s\\n' "$@" > "$AIR_GROUND_TEST_CAPTURE"
         self.assertIn("不支持 EDGE_MODE=mock", result.stderr)
         self.assertFalse(self.capture.exists())
 
+    def test_drone_real_uses_hardware_launch_and_d435i(self) -> None:
+        result = self._run("real", role="drone", package=CAR_PACKAGE)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            self._args(),
+            [
+                "air_ground_drone_bringup",
+                "drone-edge-real.launch",
+                "vision_mode:=d435i",
+            ],
+        )
+        self.assertIn("AIR_GROUND_DRONE_VISION=d435i", self._state())
+
+    def test_drone_pi_dual_fails_closed_until_camera_profile_is_known(self) -> None:
+        old = os.environ.get("DRONE_VISION")
+        os.environ["DRONE_VISION"] = "pi_dual"
+        try:
+            result = self._run("real", role="drone", package=CAR_PACKAGE)
+        finally:
+            if old is None:
+                os.environ.pop("DRONE_VISION", None)
+            else:
+                os.environ["DRONE_VISION"] = old
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("尚未具备可验证的实机驱动配置", result.stderr)
+        self.assertFalse(self.capture.exists())
+
     def test_real_launch_defaults_to_real_backend(self) -> None:
         root = ET.parse(str(REAL_LAUNCH)).getroot()
         backend = root.find("arg[@name='backend']")

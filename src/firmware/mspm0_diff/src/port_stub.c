@@ -109,6 +109,12 @@ uint16_t port_encoder_read_count(int wheel)
     return 0u;
 }
 
+bool port_ultrasonic_snapshot_mm(uint16_t ranges_mm[4])
+{
+    (void)ranges_mm;
+    return false;
+}
+
 void port_uart_init(uint32_t baudrate) { (void)baudrate; }
 
 /**

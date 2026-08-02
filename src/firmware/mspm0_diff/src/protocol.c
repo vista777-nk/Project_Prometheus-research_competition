@@ -102,6 +102,18 @@ void protocol_send_telemetry(const float rpm[NUM_WHEELS],
     (void)emit_frame(CMD_TELEMETRY, payload, PAYLOAD_LEN_TELEMETRY);
 }
 
+void protocol_send_ultrasonic(const uint16_t ranges_mm[4])
+{
+    if (ranges_mm == 0) {
+        return;
+    }
+    uint8_t payload[PAYLOAD_LEN_ULTRASONIC];
+    for (int i = 0; i < 4; i++) {
+        frame_put_u16(&payload[i * 2], ranges_mm[i]);
+    }
+    (void)emit_frame(CMD_ULTRASONIC, payload, PAYLOAD_LEN_ULTRASONIC);
+}
+
 void protocol_send_error(uint8_t code, const uint8_t *detail, uint8_t detail_len)
 {
     uint8_t payload[FRAME_MAX_DATA_LEN];

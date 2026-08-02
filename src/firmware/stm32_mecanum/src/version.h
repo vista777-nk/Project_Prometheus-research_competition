@@ -13,7 +13,7 @@
 #define STM32_MECANUM_VERSION_H
 
 #define FW_MAJOR                0u
-#define FW_MINOR                1u
+#define FW_MINOR                2u
 #define FW_PATCH                0u
 
 #ifndef FW_COMMIT_HASH

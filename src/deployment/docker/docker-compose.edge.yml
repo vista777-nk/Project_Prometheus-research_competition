@@ -71,11 +71,6 @@ services:
         max-size: "50m"
         max-file: "5"
 
-    # 公共设备: 3DR SiK 数传 (车机=ground 端, 无人机=air 端, 两边都有)
-    #
-    # ⚠ devices 里列出的设备**不存在时容器直接启动失败**。
-    #   这对数传和下位机是想要的行为 (没有它们边缘节点本来也没意义, 失败要响);
-    #   对可插拔的可选传感器不是, 因此 RPLIDAR 之类放在
-    #   docker-compose.car-sensors.yml 里, 接上了才叠加。
-    devices:
-      - /dev/telem:/dev/telem
+    # 公共层不挂硬件。915 MHz 数传的空中端接 Pixhawk TELEM1，地面端接
+    # QGroundControl 所在主机；它不是两台 Pi 的公共设备。角色特定设备只在
+    # car/drone override 中声明，防止一个未接入 Pi 的电台阻止容器启动。

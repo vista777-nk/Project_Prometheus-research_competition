@@ -44,7 +44,7 @@
         output="screen">
     <param name="wheel_base" value="0.20"/>
     <param name="track_width" value="0.18"/>
-    <param name="wheel_radius" value="0.033"/>
+    <param name="wheel_radius" value="0.040"/>
     <param name="max_rpm" value="300.0"/>
     <param name="command_timeout" value="0.5"/>
     <param name="gazebo_model_name" value="$(arg model_name)"/>

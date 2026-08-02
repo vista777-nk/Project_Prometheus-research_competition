@@ -1,77 +1,72 @@
-# 无人机树莓派5 硬件连接
+# 无人机 Raspberry Pi 5 / Pixhawk 6C 硬件连接
 
-> task-12 §12.5 的落地版。车机侧的连接见 [task-12 §12.5](../../../project-prometheus-tasks/task-12-drone-firmware-and-rpi-deployment.md) 的硬件清单与 [`../README.md`](../README.md) §1 角色表。
-
-无人机 Pi 的连接比车机敏感：Pixhawk USB 断开等于飞控失联，D435i 带宽不足会
-让深度图悄悄降质而**不报任何错误**。
-
----
+> ADR-0018 的部署落地版。生产连接与台架 USB 连接必须明确区分。
 
 ## 1. 连接表
 
-| 外设 | Pi 接口 | 稳定设备名 | 协议 | 备注 |
-|------|---------|-----------|------|------|
-| Pixhawk 6C | USB-C | `/dev/pixhawk` | MAVLink 2 @921600 | udev 按 VID 固定，见 [`99-air-ground-devices.rules`](99-air-ground-devices.rules) |
-| RealSense D435i | **USB3（蓝色口）** | `/dev/video*` + `/dev/bus/usb` | UVC + libusb | 插 USB2 不报错、只降质，用 [`check-usb3.sh`](check-usb3.sh) 确认 |
-| 3DR SiK 数传 | UART GPIO 14/15 | `/dev/telem` | 透传 57600 | 角色 = `air`，与车机那只配对 |
-| 供电 | GPIO 5V (Pin 2/4) | — | — | 由机上 BEC 5V/3A 供电，**不要**用 USB 供电 |
+| 外设 | 连接 | 容器内接口 | 协议/备注 |
+|---|---|---|---|
+| Pixhawk 6C TELEM2 | Pi 5 GPIO14 TX ↔ RX、GPIO15 RX ↔ TX、GND 共地 | `/dev/pixhawk` | MAVLink 2 @921600；宿主需 `dtoverlay=uart0-pi5`，实际为 `/dev/ttyAMA0` |
+| Pixhawk 6C TELEM1 | 915 MHz/500 mW 空中电台 | 不进入 Pi 容器 | 地面端接 QGroundControl 主机；不传图像 |
+| D435i CB | Pi USB3 | `/dev/bus/usb` | UVC + libusb；用 `check-usb3.sh` 核对链路速率 |
+| 双 Pi Camera | 两个 CSI 口 | 待定 | 具体型号/端口/libcamera profile 未确认，`DRONE_VISION=pi_dual` 失败关闭 |
+| IA6B | Pixhawk RC 输入 | 不进入 Pi | 输出协议、通道和 failsafe 待上机确认 |
+| M9N GPS | Pixhawk GPS 口 | 由 MAVROS 间接提供 | 不直连 Pi |
+| Pi 供电 | 独立 9–24 V→5 V/5 A 模块 | — | 与飞控/动力共地；先测压降、纹波和瞬态 |
 
-> **为什么不用 USB 供电**：树莓派5 满载瞬时电流可以到 5A。USB 口供电在电机
-> 启动的电流尖峰下会掉压重启 —— 现象是"飞起来就重启"，地面测试永远复现不了。
+TELEM 口与 Pi UART 均为 3.3 V 逻辑。不要把 Pixhawk TELEM2 的 5 V 引脚接到 Pi
+5 V 电源；Pi 使用独立 5 V/5 A 模块供电。Pixhawk 由 PM07 按官方接线供电。
 
----
+## 2. 链路拓扑
 
-## 2. MAVLink 链路走向
+```text
+无人机 Pi
+  MAVROS ── /dev/pixhawk ── GPIO14/15 ── Pixhawk TELEM2
+  D435i ── USB3
 
-```
-无人机 Pi (192.168.1.20)
-   MAVROS ──/dev/pixhawk──> Pixhawk 6C
-      │
-      └── gcs_url ──> /dev/telem (3DR air)
-                          ╎ 无线
-                      (3DR ground) ──> 车机 Pi (192.168.1.10)
-                                          └── UDP :14550 ──> 服务器
-```
-
-车机 Pi 是 MAVLink 的汇集点，因此 MAVROS 的 `gcs_url` 指向车机而不是服务器。
-时钟同步的主从关系也是同一个理由（车机当 NTP server，见
-[`../chrony/chrony-car-server.conf`](../chrony/chrony-car-server.conf)）。
-
----
-
-## 3. MAVROS launch 片段
-
-task-12 §12.5 给的 launch 片段依赖 `/dev/pixhawk` 这个符号链接，
-它由本目录的 udev 规则提供。实际的 launch 文件由 **task-14** 交付
-（实机传感器驱动骨架），这里只记录接口约定：
-
-```xml
-<arg name="fcu_url" default="/dev/pixhawk:921600"/>
-<arg name="gcs_url" default="udp://:14550@192.168.1.10:14550"/>
+Pixhawk TELEM1 ── 915 MHz 空中端 ╎ 无线 ╎ 地面端 ── QGroundControl
+Pixhawk RC     ── IA6B
+Pixhawk GPS    ── M9N
 ```
 
-> `fcu_url` 里的波特率要与 Pixhawk 侧 `SER_TEL1_BAUD` 一致。
-> 921600 是 USB CDC 上的名义值，USB 连接实际不受此限制，但参数写错时
-> MAVROS 会一直报 "Device error"。
+Pi 的 MAVROS `gcs_url` 为空；遥测地面链路由 Pixhawk 直接处理。图像/Observation
+走受控 IP 链路和项目 TCP 桥，不能转进低带宽电台。
 
----
+## 3. 主机和 PX4 配置
 
-## 4. 上电顺序
+Pi 5 的 `/dev/ttyAMA10` 是独立 3 针调试 UART，不是 40 针 GPIO14/15。生产接线：
 
-1. **先**接好 3DR 数传与飞控，**再**给 Pi 上电
-   —— udev 规则在开机时统一触发，热插拔虽然也能识别，但
-   `air-ground-drone-edge.service` 的设备等待窗口只有 30 秒
-2. 等状态灯稳定后再上动力电
-3. 确认 `systemctl status air-ground-drone-edge` 是 `active (running)`
+```ini
+# /boot/firmware/config.txt
+enable_uart=1
+dtoverlay=uart0-pi5
+```
 
-设备没识别出来时：
+同时用 `raspi-config` 关闭串口 login shell，重启后确认 `/dev/ttyAMA0`。`.env`：
+
+```dotenv
+DRONE_FCU_DEVICE=/dev/ttyAMA0
+DRONE_VISION=d435i
+```
+
+Pixhawk 侧 TELEM2 必须配置成 MAVLink 2，波特率与 `drone-edge-real.launch` 的
+921600 一致；TELEM1 保留给遥测电台。参数名和取值以烧录的 PX4 版本/QGroundControl
+为准，修改前导出完整参数备份。
+
+台架允许用 Pixhawk USB：先用 udev 得到 `/dev/pixhawk`，再把
+`DRONE_FCU_DEVICE=/dev/pixhawk`。USB 是调试备选，不改变容器内路径。
+
+## 4. 上电/验收顺序
+
+1. 拆下螺旋桨，断开动力电；检查 PM07、5 V/5 A 模块极性和共地；
+2. 只给 Pixhawk/Pi 低压上电，验证 TELEM2 MAVROS heartbeat；
+3. 接地面电台，验证 TELEM1 到 QGroundControl，断开电台不应终止 Pi 容器；
+4. D435i 接 USB3，验证 RGB、对齐深度、点云和 10 分钟重连；
+5. 验证 IA6B 通道、失控值、解锁开关，导出参数备份；
+6. 完成无桨电机序号/方向测试后，才进入保护区系留实飞。
 
 ```bash
-lsusb                                    # 总线上有没有
-ls -l /dev/ | grep -E 'pixhawk|telem'    # 符号链接有没有
-sudo udevadm control --reload-rules && sudo udevadm trigger
-udevadm info -a -n /dev/ttyACM0 | grep -m2 -E 'idVendor|idProduct'
+python3 src/deployment/healthcheck/check_pi_host.py --stage deploy --role drone
+ls -l /dev/ttyAMA0
+docker compose -f docker-compose.edge.yml -f docker-compose.drone.yml config
 ```
-
-最后一条查出来的 VID/PID 与 udev 规则里的对不上，就改规则 ——
-**不要**去改上层的设备路径，那会让符号链接这层抽象白做。

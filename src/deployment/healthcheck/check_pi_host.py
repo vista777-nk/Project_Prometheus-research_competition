@@ -95,6 +95,8 @@ def collect_facts() -> PiFacts:
     known_devices = (
         "/dev/i2c-1",
         "/dev/serial0",
+        "/dev/ttyAMA0",
+        "/dev/ttyAMA10",
         "/dev/mcu",
         "/dev/telem",
         "/dev/pixhawk",
@@ -172,6 +174,14 @@ def evaluate(facts: PiFacts, stage: str, role: str) -> list[CheckResult]:
                     "要求 /dev/i2c-1；启用 dtparam=i2c_arm=on 后重启",
                 )
             )
+        results.append(
+            CheckResult(
+                "40 针排针 UART",
+                "/dev/ttyAMA0" in facts.devices,
+                "要求 /dev/ttyAMA0；Pi 5 启用 dtoverlay=uart0-pi5 后重启。"
+                " /dev/ttyAMA10 只是 3 针调试口",
+            )
+        )
 
     return results
 

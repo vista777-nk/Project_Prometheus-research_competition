@@ -17,6 +17,12 @@
 > 实机宿主基线已确认为 Raspberry Pi 5 / ARM64 / 8 GB / Debian 13 / 64 GB microSD
 > **硬件依赖**：无（Docker build 可在 CI 中验证，systemd 可语法检查）
 > **ROS 依赖**：仅 Docker 内（通过 CI 构建容器镜像验证）
+>
+> **2026-08-02 实机 BOM 覆盖**：无人机为 F450 + Pixhawk 6C/PM07/M9N +
+> A2212 980KV/BL32 30A/1045，视觉为 D435i CB 或双 Pi Camera。915 MHz 空中端
+> 接 TELEM1、地面端接地面站，Pi 经 TELEM2；旧正文的 3DR 经两台 Pi、M8N、
+> `/dev/ttyAMA1` 和 USB-only 飞控拓扑均被 ADR-0018 替代。生产 Pi 5 排针 UART
+> 使用 `dtoverlay=uart0-pi5` → `/dev/ttyAMA0`。
 
 ---
 
@@ -35,14 +41,15 @@
 
 | 角色 | 环境变量 | 连接的硬件 | 运行的 ROS 节点 |
 |------|----------|-----------|----------------|
-| **无人机树莓派5** | `ROLE=drone` | Pixhawk 6C (USB `/dev/ttyACM0`) · D435i (USB3) · 3DR 数传 (UART `/dev/ttyAMA0`) | `drone_edge.launch` + `mavlink_bridge` |
-| **车机树莓派5** | `ROLE=car` | STM32F407/MSPM0G3507 (UART `/dev/ttyAMA1`) · RPLIDAR (USB `/dev/ttyUSB0`) · ICM42688 (I2C) · HC-SR04×4 (GPIO) · OpenMV (UART) · 3DR 数传 (UART `/dev/ttyAMA0`) | `car_edge.launch` + `mavlink_bridge` + `edge_server_bridge` |
+| **无人机树莓派5** | `ROLE=drone` | Pixhawk 6C TELEM2（容器内 `/dev/pixhawk`）· D435i CB，或按赛题换双 Pi Camera | `drone-edge-real.launch`（MAVROS + 视觉 + `edge_server_bridge`） |
+| **共享车载树莓派5** | `ROLE=car` | 当前底盘 MCU（容器内 `/dev/mcu`）· A2M12 · ICM42688 · 云台/OpenMV；HC-SR04 只接 MCU | `car_edge_real.launch` + `chassis_bridge` + `edge_server_bridge` |
 
 部署覆盖以下方面：
 
 1. **Docker 容器化**：ROS Noetic + 项目节点 → 一键 `docker build`，同一镜像适配两个角色
 2. **systemd 自启服务**：开机自动启动对应角色的 ROS edge node
-3. **网络配置**：静态 IP + 3DR 数传参数（车机=ground端，无人机=air端）+ WiFi/4G 切换
+3. **网络配置**：静态 IP + WiFi/有线切换；915 MHz 空中端接 Pixhawk
+   TELEM1，地面端接地面站，不经车载 Pi 转发
 4. **SSH 加固**：密钥认证 + fail2ban + 最小权限 + 防火墙
 5. **健康检查**：节点存活监控 + 自动重启
 6. **日志管理**：结构化日志 + logrotate
@@ -58,11 +65,13 @@
   Docker: air_ground_lab_server
     ↕ TCP :9090 (WiFi)
     
-车机树莓派5 (192.168.1.10)              无人机树莓派5 (192.168.1.20)
+共享车载树莓派5 (192.168.1.10)          无人机树莓派5 (192.168.1.20)
   Docker: air_ground_car_edge              Docker: air_ground_drone_edge
-    ↕ UART /dev/ttyAMA1 (STM32)             ↕ UART /dev/ttyAMA0 (Pixhawk 6C)
-    ↕ I2C / GPIO / SPI (传感器)             ↕ USB (RealSense D435i)
-    ↕ MAVLink UDP :14550 ──────────────→   接收 MAVLink 数传
+    ↕ /dev/mcu (当前底盘 MCU)               ↕ /dev/pixhawk → Pixhawk TELEM2
+    ↕ USB/I2C (A2M12/IMU/OpenMV)            ↕ USB3 (D435i CB) 或双 Pi Camera
+    ⇄ WiFi/以太网 ⇄ 实验室服务器            ⇄ WiFi/以太网 ⇄ 实验室服务器
+
+Pixhawk TELEM1 ⇄ 915 MHz 空中电台 …… 915 MHz 地面电台 ⇄ 地面站
 ```
 
 ---

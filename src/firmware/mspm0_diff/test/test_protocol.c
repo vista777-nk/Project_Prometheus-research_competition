@@ -263,6 +263,22 @@ static void test_telemetry_tolerates_null_arrays(void)
     TEST_ASSERT_EQUAL_HEX16(FAULT_NONE, frame_get_u16(&s_tx[at + 16]));
 }
 
+/** HC-SR04 快照按 front,rear,left,right 的 u16 毫米值上报。 */
+static void test_ultrasonic_frame_layout(void)
+{
+    setup_protocol();
+    const uint16_t ranges[4] = { 123u, 456u, 4000u, ULTRASONIC_UNAVAILABLE_MM };
+    protocol_send_ultrasonic(ranges);
+
+    uint8_t len = 0u;
+    const int at = find_frame(CMD_ULTRASONIC, &len);
+    TEST_ASSERT_TRUE(at >= 0);
+    TEST_ASSERT_EQUAL_UINT(PAYLOAD_LEN_ULTRASONIC, len);
+    for (int i = 0; i < 4; i++) {
+        TEST_ASSERT_EQUAL_HEX16(ranges[i], frame_get_u16(&s_tx[at + i * 2]));
+    }
+}
+
 /** 未知命令回 ERROR/UNKNOWN_CMD，并把冒犯的命令字带回去 */
 static void test_unknown_command_is_rejected(void)
 {
@@ -371,7 +387,7 @@ static void test_extension_handler_rejection_is_reported(void)
  * 任何一端"顺手优化"了字段顺序、字节序或 CRC 参数，都会在这里红掉。
  *
  * 帧内容：
- *   SOF=A5, LEN=9 (=5+4), CMD=13, DATA = 00 01 00 02 02  (v0.1.0, board/chassis=0x02)
+ *   SOF=A5, LEN=9 (=5+4), CMD=13, DATA = 00 02 00 02 02  (v0.2.0, board/chassis=0x02)
  *   CRC-16/CCITT-FALSE over {13 00 01 00 02 02}, 小端存放, EOF=5A
  * CRC 期望值由 crc16_ccitt() 独立算出而非硬编码 —— 硬编码一个我没验算过的
  * 常数，只会把"测试通过"变成"测试和实现一起错"。CRC 算法本身的正确性
@@ -393,13 +409,13 @@ static void test_pong_golden_frame(void)
     TEST_ASSERT_EQUAL_HEX8(PAYLOAD_LEN_PONG + FRAME_LEN_OVERHEAD, frame[1]);   /* LEN = 9 */
     TEST_ASSERT_EQUAL_HEX8(CMD_PONG, frame[2]);
     TEST_ASSERT_EQUAL_HEX8(0x00u, frame[3]);   /* major */
-    TEST_ASSERT_EQUAL_HEX8(0x01u, frame[4]);   /* minor */
+    TEST_ASSERT_EQUAL_HEX8(0x02u, frame[4]);   /* minor */
     TEST_ASSERT_EQUAL_HEX8(0x00u, frame[5]);   /* patch */
     TEST_ASSERT_EQUAL_HEX8(0x02u, frame[6]);   /* board   = MSPM0G3507 */
     TEST_ASSERT_EQUAL_HEX8(0x02u, frame[7]);   /* chassis = differential */
 
     /* CRC 覆盖 CMD+DATA，小端存放；用独立算的值复核，不信任被测代码 */
-    const uint8_t crc_input[6] = { CMD_PONG, 0x00u, 0x01u, 0x00u, 0x02u, 0x02u };
+    const uint8_t crc_input[6] = { CMD_PONG, 0x00u, 0x02u, 0x00u, 0x02u, 0x02u };
     const uint16_t expect_crc = crc16_ccitt(crc_input, sizeof(crc_input));
     TEST_ASSERT_EQUAL_HEX16(expect_crc, frame_get_u16(&frame[8]));
     TEST_ASSERT_EQUAL_HEX8(FRAME_EOF, frame[10]);
@@ -478,6 +494,7 @@ static void test_protocol_without_writer_is_safe(void)
     protocol_send_pong();
     protocol_send_ack(CMD_PING);
     protocol_send_error(PROTO_ERR_UNKNOWN_CMD, 0, 0);
+    protocol_send_ultrasonic(0);
 
     uint8_t data[PAYLOAD_LEN_SET_VELOCITY];
     memset(data, 0, sizeof(data));
@@ -503,6 +520,7 @@ void run_protocol_tests(void)
     RUN_TEST(test_pong_identifies_mspm0_differential);
     RUN_TEST(test_telemetry_frame_layout);
     RUN_TEST(test_telemetry_tolerates_null_arrays);
+    RUN_TEST(test_ultrasonic_frame_layout);
     RUN_TEST(test_unknown_command_is_rejected);
 
     RUN_TEST(test_extension_routes_subcommand_and_payload);

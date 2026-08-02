@@ -3,9 +3,10 @@
   car_edge_real.launch — Task-14 实机模式车机边缘节点
 
   与 car_edge.launch 的区别: 那份只起 car_preprocessor (数据来自 Gazebo 插件),
-  这份额外起 4 个实机传感器驱动, 由它们发布 Layer 1 原始话题。
+  这份额外起共享载荷的 3 个实机传感器驱动与 1 个底盘串口桥，
+  由它们发布 Layer 1 原始话题。
 
-  backend:=real (默认) — UART/I2C 访问真设备；GPIO 未决时整套启动失败。
+  backend:=real (默认) — UART/I2C 访问真设备；MCU 身份或四路超声波缺失时失败。
   backend:=mock        — 假数据后端。只验证节点/参数/话题与重连路径；
                          **必须显式指定，不产生任何真实读数**。
                           这是刻意的: 一个"能跑但读不到硬件"的空实现,
@@ -16,14 +17,14 @@
     roslaunch air_ground_car_bringup car_edge_real.launch backend:=mock
     # 单传感器台架联调（整车默认仍全部启用）
     roslaunch air_ground_car_bringup car_edge_real.launch \
-      enable_icm42688:=false enable_hcsr04:=false enable_openmv:=false
+      enable_icm42688:=false enable_chassis_bridge:=false enable_openmv:=false
 -->
 <launch>
   <arg name="backend" default="real"/>
   <arg name="default_chassis" default="diff"/>
   <arg name="enable_rplidar" default="true"/>
   <arg name="enable_icm42688" default="true"/>
-  <arg name="enable_hcsr04" default="true"/>
+  <arg name="enable_chassis_bridge" default="true"/>
   <arg name="enable_openmv" default="true"/>
   <arg name="enable_preprocessor" default="true"/>
   <arg name="sensor_config"
@@ -51,14 +52,15 @@
     <param name="backend" value="$(arg backend)"/>
   </node>
 
-  <node name="hcsr04_driver"
+  <node name="chassis_bridge"
         pkg="air_ground_car_bringup"
-        type="hcsr04_driver.py"
-        if="$(arg enable_hcsr04)"
+        type="chassis_bridge.py"
+        if="$(arg enable_chassis_bridge)"
         required="true"
         output="screen">
     <rosparam command="load" file="$(arg sensor_config)"/>
     <param name="backend" value="$(arg backend)"/>
+    <param name="chassis" value="$(arg default_chassis)"/>
   </node>
 
   <node name="openmv_bridge"

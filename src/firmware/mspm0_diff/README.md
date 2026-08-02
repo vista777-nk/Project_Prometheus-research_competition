@@ -2,7 +2,8 @@
 
 > **Task-11** · Phase 1 基础设施 · 与 [`stm32_mecanum`](../stm32_mecanum/) 共享 [`common/`](../common/)
 >
-> 状态：算法层完成并测试覆盖（Host 70/70）· HAL 移植层待接 TI SDK 与真实硬件
+> 状态：算法层完成并测试覆盖（Host 71/71）· DriverLib/HC-SR04 引脚与 IA6B
+> 协议、通道及失控仲裁待电子组定稿；当前不得宣称可遥控或超声波已上板
 
 ---
 
@@ -15,7 +16,9 @@
          二进制帧 + CRC16          本固件              ◀──AB 相编码器──
 ```
 
-接收 `(v, ω)`，做差速逆解、两路独立 PID 速度环（1kHz），回报实际转速、电流与故障码。
+接收 `(v, ω)`，做差速逆解、两路独立 PID 速度环（1kHz），回报转速和故障码；
+v0.2 已定义四路超声波帧，真实移植层会在捕获定时器完成前拒绝发布。
+电流字段因 DRV8871 无反馈脚而固定为 `NaN`。
 **不做感知、不做决策、不做通信路由。**
 
 ### 电赛合规声明
@@ -55,7 +58,7 @@
 
 **被空实现掉的只有 `port_stub.c` 里那十几个寄存器原语。**
 运动学、协议、PID、测速窗口、环形缓冲、故障状态机全部是真实代码，
-且被 70 个 Host 用例覆盖。连 1kHz 控制中断本身在 `ci-link` 下也是真跑的
+且被 71 个 Host 用例覆盖。连 1kHz 控制中断本身在 `ci-link` 下也是真跑的
 （SysTick 是 ARM 内核外设，与 TI 无关）。
 
 要得到可烧录固件 → §7。
@@ -69,18 +72,16 @@
 
 轮序号约定（俯视图，车头朝上）：`[0] 左轮 LEFT` · `[1] 右轮 RIGHT`
 
-### 3.1 电机（TB6612FNG）
+### 3.1 电机（DRV8871 ×2）
 
 | 功能 | 引脚 | 外设 | 说明 |
 |------|------|------|------|
 | 左轮 PWM | PB4 | TIMA0_C0 | 20kHz，避开可听频段 |
 | 右轮 PWM | PB1 | TIMA0_C1 | 同上 |
-| 左轮方向 A | PB6 | GPIO | TB6612 AIN1 |
-| 左轮方向 B | PB7 | GPIO | TB6612 AIN2 |
-| 右轮方向 A | PB8 | GPIO | TB6612 BIN1 |
-| 右轮方向 B | PB9 | GPIO | TB6612 BIN2 |
+| 左轮 IN2 | PB6 | GPIO | DRV8871 左驱动 |
+| 右轮 IN2 | PB8 | GPIO | DRV8871 右驱动 |
 
-TB6612 方向真值表（`PortMotorDirection`）：
+DRV8871 输入真值表（IN1 由 PWM 通道输出）：
 
 | IN1 | IN2 | 状态 |
 |:---:|:---:|------|
@@ -105,10 +106,9 @@ TB6612 方向真值表（`PortMotorDirection`）：
 
 | 功能 | 引脚 | 说明 |
 |------|------|------|
-| UART TX | PA10 | 对接树莓派 `/dev/ttyAMA1` |
+| UART TX | PA10 | Pi 容器内统一映射为 `/dev/mcu` |
 | UART RX | PA11 | 115200 8N1 |
-| 左电流采样 | PA24 / ADC0_CH4 | TB6612 分流电阻 + 运放 |
-| 右电流采样 | PA25 / ADC0_CH5 | 同上 |
+| HC-SR04 ×4 | 待电子组定稿 | MCU 轮询触发，固定顺序 front/rear/left/right |
 | 硬件急停 | PA18 | **常闭 (NC) 接法**，见下 |
 | 状态灯 | PA0 | LaunchPad 板载 LED |
 
@@ -141,9 +141,10 @@ CRC-16/CCITT-FALSE（poly 0x1021, init 0xFFFF, 不反射），标准向量 "1234
 | `0x02` | Pi→MCU | `EMERGENCY_STOP` | — | 0 B |
 | `0x03` | Pi→MCU | `PING` | — | 0 B |
 | `0x10` | Pi→MCU | `EXTENSION` | `子命令(u8) + 变长载荷` | ≥1 B |
-| `0x11` | MCU→Pi | `TELEMETRY` | `rpm(f32×2) + 电流(f32×2) + 故障码(u16)` | 18 B |
+| `0x11` | MCU→Pi | `TELEMETRY` | `rpm(f32×2) + 电流(f32×2, 当前 NaN) + 故障码(u16)` | 18 B |
 | `0x12` | MCU→Pi | `ACK` | 被确认的 CMD(u8) | 1 B |
 | `0x13` | MCU→Pi | `PONG` | `major,minor,patch,board,chassis` | 5 B |
+| `0x14` | MCU→Pi | `ULTRASONIC` | `front,rear,left,right` 各 u16 mm；不可用为 0xFFFF | 8 B |
 | `0xFF` | MCU→Pi | `ERROR` | 错误码(u8) + 变长详情 | ≥1 B |
 
 **与麦轮固件的差异只有三处**：`SET_VELOCITY` 8B（vs 12B）、`TELEMETRY` 18B（vs 34B）、
@@ -171,7 +172,7 @@ CRC-16/CCITT-FALSE（poly 0x1021, init 0xFFFF, 不反射），标准向量 "1234
 
 | 位 | 名称 | 生命周期 |
 |----|------|----------|
-| `0x0001` | `OVERCURRENT` | 跟随实际电流，20Hz 更新 |
+| `0x0001` | `OVERCURRENT` | 当前不可用；依赖未来外部电流采样电路 |
 | `0x0002` | `STALL` | 跟随实际状态，1kHz 更新（见下方注意） |
 | `0x0004` | `CMD_TIMEOUT` | 收到新指令即清除 |
 | `0x0008` | `ESTOP` | **锁存**，只能复位退出 |
@@ -190,9 +191,8 @@ CRC-16/CCITT-FALSE（poly 0x1021, init 0xFFFF, 不反射），标准向量 "1234
 Pi → MCU  (PING):
   A5 04 03 <crc_lo> <crc_hi> 5A          CRC over {03}
 
-MCU → Pi  (PONG, v0.1.0, board=0x02, chassis=0x02):
-  A5 09 13 00 01 00 02 02 <crc_lo> <crc_hi> 5A
-                          └ CRC over {13 00 01 00 02 02}
+MCU → Pi  (PONG, v0.2.0, board=0x02, chassis=0x02):
+  A5 09 13 00 02 00 02 02 3C 71 5A
 ```
 
 CRC 值刻意不写死在这里 —— 见 `test/test_protocol.c` 的 `test_pong_golden_frame()`，
@@ -213,12 +213,12 @@ make clean
 make help
 ```
 
-### 5.1 测试覆盖（70 个用例）
+### 5.1 测试覆盖（71 个用例）
 
 | 文件 | 用例 | 覆盖 |
 |------|:---:|------|
 | `test_kinematics.c` | 14 | §11.6 的 6 个必测用例 + 曲率保持 + 饱和阈值 + 往返 + NaN/NULL/非法几何 |
-| `test_protocol.c` | 17 | 命令表、载荷布局、错误注入、`0x10` 扩展、黄金帧、跨板帧兼容、空闲重同步 |
+| `test_protocol.c` | 18 | 命令表、载荷布局、错误注入、四路超声波帧、黄金帧、跨板帧兼容、空闲重同步 |
 | `test_encoder.c` | 11 | 16 位回绕（正反向）、测速窗口保持、EMA 系数、方向符号、双轮独立 |
 | `test_faults.c` | 21 | 故障状态机全部迁移：三类生命周期 + 位间优先级 + 轮数边界 + NULL 安全 |
 | `test_control_loop.c` | 7 | 逆解+双 PID+正解**整链**：直线 / 弧线 / 原地旋转 / 非对称负载 / 饱和路径 / 急停复位 |
@@ -406,7 +406,7 @@ mspm0_diff/
 │   ├── port_stub.c             移植层空实现 (CI)，但 SysTick 与控制中断是真的
 │   └── port_driverlib.c        移植层 TI DriverLib 实现 (真实硬件)
 │       （移植层接口在 ../common/mcu_port.h，与麦轮固件共用同一份）
-└── test/                       70 个 Host 用例
+└── test/                       71 个 Host 用例
 ```
 
 ### 移植层为什么值得多一层间接

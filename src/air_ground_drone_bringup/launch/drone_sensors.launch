@@ -7,6 +7,7 @@
   <arg name="camera_depth_source" default="/iris/camera/depth/image_raw"/>
   <arg name="camera_points_source" default="/iris/camera/depth/points"/>
   <arg name="gps_source" default="/mavros/global_position/global"/>
+  <arg name="enable_gps_converter" default="true"/>
 
   <arg name="camera_rgb_output" default="/drone/camera/rgb/image_raw"/>
   <arg name="camera_depth_output" default="/drone/camera/depth/image_raw"/>
@@ -33,7 +34,8 @@
   </node>
 
   <node pkg="air_ground_drone_bringup" type="gps_converter.py"
-        name="gps_converter" output="screen">
+        name="gps_converter" output="screen"
+        if="$(arg enable_gps_converter)">
     <rosparam command="load" file="$(arg config_file)"/>
     <param name="input_topic" value="$(arg gps_source)"/>
     <param name="output_topic" value="$(arg gps_output)"/>

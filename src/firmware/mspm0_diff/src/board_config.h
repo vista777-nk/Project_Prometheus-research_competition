@@ -19,12 +19,12 @@
 /* ===================== 一、底盘几何 ===================== */
 
 /** 轮半径 (m) —— chassis_params.yaml: diff_chassis.wheel_radius */
-#define CHASSIS_WHEEL_RADIUS_M      0.033f
+#define CHASSIS_WHEEL_RADIUS_M      0.0325f
 /** 轮间距 (m) —— chassis_params.yaml: diff_chassis.track_width */
 #define CHASSIS_TRACK_WIDTH_M       0.18f
 
-/** 电机空载最高转速 (RPM)，520 减速电机 @12V 实测值，整定后修改。
- *  与麦轮固件同型号电机，因此取值一致。
+/** 电机空载最高转速临时值 (RPM)，MC520P30 的实际减速比/空载转速待实物确认。
+ *  与麦轮固件同型号电机，因此暂时取值一致。
  *
  *  能力换算：330 RPM → 轮缘线速度 330/60 × 2π × 0.033 = 1.140 m/s。
  *  yaml 里 max_linear_speed=1.0 / max_angular_speed=3.0 各自都够用，
@@ -35,9 +35,9 @@
 
 /* ===================== 二、编码器 ===================== */
 
-/** 编码器每转脉冲数 (电机轴侧) —— chassis_params.yaml: motor_encoder_ppr */
+/** 编码器每转脉冲数临时值（电机轴侧），待 MC520P30 实物一圈计数确认。 */
 #define ENCODER_PPR                 11.0f
-/** 减速比 (电机轴 : 输出轴)，520 电机常见 1:30 */
+/** 减速比临时值 (电机轴 : 输出轴)，不得当作 MC520P30 已确认参数。 */
 #define ENCODER_GEAR_RATIO          30.0f
 /** 定时器编码器模式的倍频系数 (AB 双相双边沿 = 4×) */
 #define ENCODER_QUADRATURE          4.0f
@@ -63,6 +63,8 @@
 #define CONTROL_DT_S                (1.0f / (float)CONTROL_FREQ_HZ)
 /** 遥测上报周期 (ms) = 20Hz */
 #define TELEMETRY_PERIOD_MS         50u
+/** 四路超声波完整快照上报周期 (ms)；实际触发由移植层轮询调度。 */
+#define ULTRASONIC_PERIOD_MS        50u
 /** 指令看门狗：超过该时间未收到 SET_VELOCITY 即刹停 (ms) */
 #define CMD_TIMEOUT_MS              500u
 
@@ -87,10 +89,10 @@
 
 /* ===================== 五、故障阈值 ===================== */
 
-/** 单电机过流阈值 (A)，超过即全部停机。
- *  差速底盘只有两个电机分担整车牵引，单机电流天然比麦轮高，
- *  因此阈值比麦轮固件的 2.5A 略放宽。 */
-#define FAULT_CURRENT_LIMIT_A       3.0f
+/** DRV8871 仅通过 ILIM 电阻内部限流，不向 MCU 输出模拟电流。
+ *  当前 BOM 没有外部分流/放大电路，因此 TELEMETRY 电流字段发送 NaN，
+ *  软件过流位不启用。本正数只满足通用故障配置的参数约束。 */
+#define FAULT_CURRENT_LIMIT_A       3.6f
 /** 堵转判据：目标 RPM 高于该值但实测 RPM 低于 STALL_RPM_FLOOR 持续 STALL_TIME_MS */
 #define FAULT_STALL_TARGET_RPM      30.0f
 #define FAULT_STALL_RPM_FLOOR       3.0f
@@ -106,17 +108,15 @@
  *      [0] 左轮 LEFT    [1] 右轮 RIGHT
  */
 
-/** 电机 PWM：TIMA0_C0 / TIMA0_C1 两路互补输出到 TB6612 的 PWMA / PWMB */
+/** DRV8871 IN1：TIMA0_C0 / TIMA0_C1 输出 PWM */
 #define MOTOR_PWM_PIN_LEFT          "PB4"    /* TIMA0_C0 */
 #define MOTOR_PWM_PIN_RIGHT         "PB1"    /* TIMA0_C1 */
 /** PWM 载频 (Hz)，20kHz 避开可听频段 */
 #define MOTOR_PWM_FREQ_HZ           20000u
 
-/** 方向控制：TB6612 双路 IN，每轮 2 根 */
-#define MOTOR_DIR_PIN_LEFT_A        "PB6"
-#define MOTOR_DIR_PIN_LEFT_B        "PB7"
-#define MOTOR_DIR_PIN_RIGHT_A       "PB8"
-#define MOTOR_DIR_PIN_RIGHT_B       "PB9"
+/** DRV8871 IN2：每轮 1 根方向 GPIO；PB7/PB9 从旧 TB6612 方案释放。 */
+#define MOTOR_DIR_PIN_LEFT          "PB6"
+#define MOTOR_DIR_PIN_RIGHT         "PB8"
 
 /* 编码器定时器：TIMG8 / TIMG7 正交编码器模式 (对应轮 0 / 1)
  *   TIMG8 : PA12 / PA13
@@ -125,13 +125,7 @@
 #define ENCODER_DIR_SIGN_LEFT       (+1)
 #define ENCODER_DIR_SIGN_RIGHT      (-1)
 
-/** 电流采样：ADC0 通道，接 TB6612 分流电阻后的运放输出 */
-#define CURRENT_ADC_CHANNEL_LEFT    4u    /* PA24 / ADC0_CH4 */
-#define CURRENT_ADC_CHANNEL_RIGHT   5u    /* PA25 / ADC0_CH5 */
-/** 电流采样标定：分流电阻 + 运放增益折算，单位 A/LSB (12bit @3.3V) */
-#define CURRENT_ADC_SCALE_A_PER_LSB 0.00806f
-
-/** 上位机串口：UART0 TX=PA10 RX=PA11，对接树莓派 /dev/ttyAMA1 */
+/** 上位机串口：UART0 TX=PA10 RX=PA11；Pi 容器内统一映射为 /dev/mcu。 */
 #define UART_BAUDRATE               115200u
 
 /** 硬件急停输入。按**常闭 (NC)** 接法：

@@ -37,12 +37,12 @@
 
 | Capability | Provider | Interface | Consumer | Replaceability | Phase |
 |------------|----------|-----------|----------|:---:|:---:|
-| **2D LiDAR 扫描** | RPLIDAR A1 / Gazebo `libgazebo_ros_laser.so` | `/car/scan` (LaserScan) → `Observation.msg` | `car_preprocessor.py` → World Model | ★★★★★ | Phase 1 ✅ · 实机⏳ |
+| **2D LiDAR 扫描** | RPLIDAR A2M12 / Gazebo `libgazebo_ros_laser.so` | `/car/scan` (LaserScan) → `Observation.msg` | `car_preprocessor.py` → World Model | ★★★★★ | Phase 1.5 驱动对齐 ✅ · 实机⏳ |
 | **RGB 图像** | D435i / OpenMV / Gazebo camera plugin | `sensor_msgs/Image` → `Observation.rgb` | `car_preprocessor.py` / `drone_preprocessor.py` → World Model | ★★★★★ | Phase 1 ✅ · 实机⏳ |
 | **深度图像** | D435i / Gazebo depth plugin | `sensor_msgs/Image` → `Observation.depth` | `drone_preprocessor.py` → World Model | ★★★★★ | Phase 1 ✅ · 实机⏳ |
 | **IMU** | ICM42688 / Pixhawk 6C 板载 / Gazebo IMU plugin | `sensor_msgs/Imu` → `Observation` (angular_velocity, linear_acceleration) | `car_preprocessor.py` / `drone_preprocessor.py` → World Model | ★★★★★ | Phase 1 ✅ · 实机⏳ |
-| **超声波测距** | 4×HC-SR04 / Gazebo ultrasonic plugin | `sensor_msgs/Range×4` → `Observation.ultrasonic_ranges` | `car_preprocessor.py` → World Model | ★★★★★ | Phase 1 ✅ · 实机⏳（时序方案未定，ADR-0013 预留） |
-| **GPS 定位** | M8N GPS / Gazebo GPS plugin | `sensor_msgs/NavSatFix` → `RobotState.pose` | `gps_converter.py` → World Model | ★★★★☆ | Phase 1 ✅ · 实机⏳ |
+| **超声波测距** | 每底盘 4×HC-SR04 / Gazebo plugin | MCU `0x14` → `LaserScan×4` → `Observation.ultrasonic_ranges` | `car_preprocessor.py` → World Model | ★★★★★ | ADR-0013/协议 ✅ · pinmux 实机⏳ |
+| **GPS 定位** | M9N+Pixhawk EKF / Gazebo GPS plugin | 实机 `PoseStamped`；仿真 `NavSatFix` → `RobotState.pose` | MAVROS local pose（实机）/ `gps_converter.py`（仿真）→ World Model | ★★★★☆ | Phase 1 ✅ · 实机⏳ |
 | **OpenMV 目标检测** | OpenMV 云台 / (仿真无对照) | `/car/openmv/detections` (JSON String) → `Observation` | `car_preprocessor.py` → World Model | ★★★☆☆ | Phase 1 ✅ · 实机⏳ |
 
 ### 通信 (Communication)
@@ -77,11 +77,11 @@
 | 数据流 | 传感器 | 驱动/仿真 | 预处理 | Observation 字段 | 消费者 |
 |--------|--------|----------|--------|-----------------|--------|
 | **车机 RGB** | OpenMV / Gazebo | `openmv_bridge.py` / `libgazebo_ros_camera.so` | `car_preprocessor.py` | `Observation.rgb` | World Model → VLM |
-| **车机 LiDAR** | RPLIDAR A1 / Gazebo | `rplidar_driver.py` / `libgazebo_ros_laser.so` | `car_preprocessor.py` | `Observation.lidar_ranges` | World Model → SLAM |
+| **车机 LiDAR** | RPLIDAR A2M12 / Gazebo | `rplidar_driver.py` @256000 / Gazebo plugin | `car_preprocessor.py` | `Observation.lidar_ranges` | World Model → SLAM |
 | **车机 IMU** | ICM42688 / Gazebo | `icm42688_driver.py` / `libgazebo_ros_imu.so` | `car_preprocessor.py` | `Observation.angular/linear_accel` | World Model |
-| **车机超声波** | HC-SR04 ×4 / Gazebo | `hcsr04_driver.py` / `libgazebo_ros_ultrasonic.so` | `car_preprocessor.py` | `Observation.ultrasonic_ranges` | World Model |
-| **无人机 RGB+Depth** | D435i / Gazebo | (MAVROS + camera plugin) | `drone_preprocessor.py` | `Observation.rgb`, `Observation.depth` | World Model → VLM |
-| **无人机 GPS+IMU** | M8N+Pixhawk / Gazebo | `gps_converter.py` | `drone_preprocessor.py` | `RobotState.pose` | World Model |
+| **车机超声波** | 每底盘 HC-SR04 ×4 / Gazebo | `chassis_bridge.py`（MCU 定时）/ Gazebo plugin | `car_preprocessor.py` | `Observation.ultrasonic_ranges` | World Model |
+| **无人机 RGB+Depth** | D435i CB 或双 Pi Camera / Gazebo | `drone-edge-real.launch` / camera plugin | `drone_preprocessor.py` | `Observation.rgb`, `Observation.depth` | World Model → VLM |
+| **无人机 GPS+IMU** | M9N+Pixhawk / Gazebo | MAVROS EKF local pose（实机）/ `gps_converter.py`（仿真） | `drone_preprocessor.py` | `RobotState.pose` | World Model |
 
 ---
 
@@ -115,7 +115,8 @@
 |------|--------|------|
 | 2026-07-28 | ChatGPT (终审架构师) | 初始创建，覆盖 Phase 0 + Phase 1 全部能力 |
 | 2026-08-01 | 接手方 AI 助手 (文档对齐) | Phase 1 各行补交付状态标记与图例；底盘热切换服务名更正为 `/car/swap_chassis` |
+| 2026-08-02 | Codex | BOM 对齐到 A2M12/M9N/DRV8871；HC-SR04 改由底盘 MCU；补无人机视觉可换载荷 |
 
 ---
 
-*版本: v1.1 · 日期: 2026-08-01 · 与 ICD.md 配套使用 · 每次架构变更后更新*
+*版本: v1.2 · 日期: 2026-08-02 · 与 ICD.md 配套使用 · 每次架构变更后更新*

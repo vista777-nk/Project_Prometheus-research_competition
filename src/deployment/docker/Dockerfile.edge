@@ -24,7 +24,7 @@ FROM ros:noetic-ros-base-focal
 
 LABEL maintainer="vista777-nk"
 LABEL description="Air-Ground Joint EQA Edge Node (Drone or Car)"
-LABEL org.opencontainers.image.source="https://github.com/vista777-nk/research_compitition"
+LABEL org.opencontainers.image.source="https://github.com/vista777-nk/Project_Prometheus-research_competition"
 
 # 构建期不要交互式 tzdata 提问
 ARG DEBIAN_FRONTEND=noninteractive
@@ -50,6 +50,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ros-noetic-mavros \
         ros-noetic-mavros-extras \
         ros-noetic-mavros-msgs \
+        ros-noetic-realsense2-camera \
         ros-noetic-ros-control \
         ros-noetic-ros-controllers \
         ros-noetic-robot-localization \
@@ -75,9 +76,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # `manylinux_2_28_aarch64` —— 老 pip 认不出, 就退回去编译 lxml 源码,
 # 而镜像里没有 libxml2-dev / libxslt1-dev / 编译器, 于是 exit 1。
 #
-# lxml 是 pymavlink 的**构建期**依赖: pymavlink 在 PyPI 上只发 sdist,
-# 它的 setup.py 会在安装时现场生成 MAVLink dialect, 那一步要用 lxml。
-# 所以这里两手都做, 哪一环判断错了都不至于再挂一次:
+# lxml 是 pymavlink 的运行/构建依赖；具体 Python/架构若没有可用 pymavlink wheel，
+# pip 会退回 sdist 并在安装时生成 MAVLink dialect。ARM64 发布形态会随版本变化，
+# 因此这里不能假定永远有 wheel。这里两手都做：
 #   1) 上面 apt 装 python3-lxml / python3-future —— 预编译的 arm64 deb,
 #      不存在"编译失败"这条路径
 #   2) 这里把 pip 升到 <25 (pip 25.0 起不再支持 Python 3.8) —— 万一 pip 走
@@ -99,6 +100,10 @@ RUN pip3 install --no-cache-dir --retries 5 --timeout 120 \
 # 也就是说"装失败"在运行期是**静默降级**, 只有在这里查才查得到。
 RUN python3 -c "import pymavlink, serial; from pymavlink import mavutil; print('OK pymavlink', pymavlink.__version__, '| pyserial', serial.__version__)"
 
+# rosdep 最终仍调用 apt。把 no-recommends 写入 APT 配置，避免 PCL/Gazebo 的
+# 推荐依赖把桌面、音频服务一并装进 64 GB SD 卡使用的边缘镜像。
+COPY ./src/deployment/docker/99-no-recommends /etc/apt/apt.conf.d/99-no-recommends
+
 # --- 非 root 用户 ---
 # 说明: 容器内的 dialout/i2c 组 GID 未必与树莓派宿主机一致。
 # 真正生效的是宿主机 GID, 因此 compose 里用 group_add 注入 (见 docker-compose.edge.yml)。
@@ -119,6 +124,14 @@ RUN rosdep update --rosdistro noetic 2>/dev/null || true \
         && catkin build --summarize --no-status" \
     && rm -rf /var/lib/apt/lists/* \
     && chown -R airground:airground /home/airground
+
+# 只解析、不启动实机图。这样在 ARM64 CI 构建阶段就能发现缺包、错误 include 或
+# launch 参数漂移，不必等到良乡现场接上飞控/相机才报 Resource not found。
+RUN /bin/bash -c "source /opt/ros/noetic/setup.bash \
+        && source /home/airground/catkin_ws/devel/setup.bash \
+        && rospack find realsense2_camera >/dev/null \
+        && roslaunch --files air_ground_car_bringup car_edge_real.launch >/dev/null \
+        && roslaunch --files air_ground_drone_bringup drone-edge-real.launch >/dev/null"
 
 # --- 入口点 ---
 COPY --chown=root:root ./src/deployment/docker/entrypoint.sh /entrypoint.sh

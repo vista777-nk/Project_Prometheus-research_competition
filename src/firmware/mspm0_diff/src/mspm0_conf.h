@@ -28,7 +28,7 @@
  *
  * 需要强调的是：**被空实现掉的只有 port_stub.c 里那十几个寄存器原语**。
  * 运动学、协议、PID、测速窗口、环形缓冲、故障状态机全部是真实代码，
- * 且已被 70 个 Host 用例覆盖。
+ * 且已被 71 个 Host 用例覆盖。
  */
 #ifndef MSPM0_DIFF_MSPM0_CONF_H
 #define MSPM0_DIFF_MSPM0_CONF_H

@@ -2,9 +2,14 @@
 
 > Layer 1 硬件层 · 只做运动控制，不做感知 / 决策 / 通信路由
 > 对应任务：[task-10](../../../project-prometheus-tasks/task-10-stm32-mecanum-firmware.md) · 协议规范：[ADR-0003](../../../docs/decisions/ADR-0003.md)
+>
+> 状态：Host 64/64；DRV8871 控制与协议 v0.2 已对齐。HC-SR04 捕获引脚、IA6B
+> 协议/通道/失控仲裁尚待电子组冻结，当前不得宣称可遥控或超声波已上板。
 
 树莓派 5 通过 UART 下发车体速度 `(vx, vy, ω)`，本固件做逆运动学解算、
-四轮独立 PID 速度闭环，并以 20Hz 回传轮速、电流与故障码。
+四轮独立 PID 速度闭环，并以 20Hz 回传轮速、故障码与保留的电流字段；v0.2
+已定义四路超声波帧，真实移植层会在捕获定时器完成前拒绝发布。
+DRV8871 没有电流反馈输出且当前 BOM 没有外部分流采样，电流字段固定为 `NaN`。
 
 ```
 树莓派 5 (Layer 2)  ──UART 115200 8N1──▶  STM32F407VET6 (Layer 1)  ──▶  4× 520 编码器电机
@@ -38,7 +43,7 @@ make clean
 
 ### 单元测试覆盖
 
-63 个用例，Host 侧全绿：
+64 个用例，Host 侧全绿：
 
 | 文件 | 覆盖内容 |
 |------|----------|
@@ -68,14 +73,14 @@ make clean
 | 2 左后 | PE13 | AF1 | TIM1_CH3 |
 | 3 右后 | PE14 | AF1 | TIM1_CH4 |
 
-### 2.2 电机方向 —— TB6612FNG 双 H 桥 ×2
+### 2.2 电机驱动 —— DRV8871 单 H 桥 ×4
 
-| 轮 | IN1 | IN2 |
+| 轮 | IN1（PWM） | IN2（GPIO） |
 |:---:|------|------|
-| 0 左前 | PD0 | PD1 |
-| 1 右前 | PD2 | PD3 |
-| 2 左后 | PD4 | PD5 |
-| 3 右后 | PD6 | PD7 |
+| 0 左前 | PE9 / TIM1_CH1 | PD0 |
+| 1 右前 | PE11 / TIM1_CH2 | PD2 |
+| 2 左后 | PE13 / TIM1_CH3 | PD4 |
+| 3 右后 | PE14 / TIM1_CH4 | PD6 |
 
 真值表：前进 = IN1 高 / IN2 低 · 后退 = IN1 低 / IN2 高 · 滑行 = 双低 · 刹车 = 双高
 
@@ -94,7 +99,7 @@ make clean
 |------|------|------|
 | 上位机串口 TX | PA9  | AF7，USART1 → 树莓派 `/dev/ttyAMA0` RX |
 | 上位机串口 RX | PA10 | AF7，USART1 ← 树莓派 TX |
-| 电流采样 | PC0~PC3 | ADC1_IN10~IN13，对应轮 0~3 |
+| HC-SR04 ×4 | 待电子组定稿 | MCU 轮询触发，固定顺序 front/rear/left/right |
 | 硬件急停 | PB0 | 内部上拉 + **常闭**急停开关，详见 §五 |
 | 状态灯 | PC13 | 慢闪 = 正常 · 快闪 = 有故障 · 常亮 = 急停锁死 |
 
@@ -127,9 +132,10 @@ CRC = CRC-16/CCITT-FALSE，覆盖 CMD + DATA（不含 SOF/LEN/CRC/EOF）
 | `0x01` | Pi→STM32 | SET_VELOCITY | `vx(f32) vy(f32) ω(f32)` = 12 B | ACK |
 | `0x02` | Pi→STM32 | EMERGENCY_STOP | 无 | ACK |
 | `0x03` | Pi→STM32 | PING | 无 | PONG |
-| `0x11` | STM32→Pi | TELEMETRY | 4×RPM(f32) + 4×电流(f32) + 故障码(u16) = 34 B | — |
+| `0x11` | STM32→Pi | TELEMETRY | 4×RPM(f32) + 4×电流(f32，当前 NaN) + 故障码(u16) = 34 B | — |
 | `0x12` | STM32→Pi | ACK | 被确认的 CMD(u8) = 1 B | — |
 | `0x13` | STM32→Pi | PONG | major,minor,patch,board_type(0x01),chassis_type(0x01) = 5 B | — |
+| `0x14` | STM32→Pi | ULTRASONIC | front,rear,left,right 各 u16 mm；不可用为 0xFFFF | — |
 | `0xFF` | STM32→Pi | ERROR | 错误码(u8) + 变长详情 | — |
 
 TELEMETRY 由固件每 50ms（20Hz）主动上报，Pi 无需轮询。
@@ -138,7 +144,7 @@ TELEMETRY 由固件每 50ms（20Hz）主动上报，Pi 无需轮询。
 
 | 位 | 名称 | 含义 |
 |:---:|------|------|
-| 0x0001 | OVERCURRENT | 任一电机电流超过阈值，已刹车 |
+| 0x0001 | OVERCURRENT | 当前不可用；依赖未来外部电流采样电路 |
 | 0x0002 | STALL | 有目标转速但轮子不转（堵转 / 编码器断线） |
 | 0x0004 | CMD_TIMEOUT | 超过 500ms 未收到 SET_VELOCITY，已自动刹停 |
 | 0x0008 | ESTOP | 硬件急停被触发（锁死，需复位） |
@@ -153,7 +159,7 @@ TELEMETRY 由固件每 50ms（20Hz）主动上报，Pi 无需轮询。
 | EMERGENCY_STOP | `A5 04 02 B2 C1 5A` |
 | SET_VELOCITY(vx=1.0, vy=0, ω=0) | `A5 10 01 00 00 80 3F 00 00 00 00 00 00 00 00 0D E5 5A` |
 | ACK(0x01) | `A5 05 12 01 3F 68 5A` |
-| PONG(v0.1.0, STM32, 麦轮) | `A5 09 13 00 01 00 01 01 D0 8F 5A` |
+| PONG(v0.2.0, STM32, 麦轮) | `A5 09 13 00 02 00 01 01 0C 14 5A` |
 
 ---
 
@@ -167,7 +173,7 @@ TELEMETRY 由固件每 50ms（20Hz）主动上报，Pi 无需轮询。
 ```
 lever = Lx + Ly                          Lx = wheel_base/2 = 0.10 m
 ω0 = (vx - vy - ω·lever) / R             Ly = track_width/2 = 0.09 m
-ω1 = (vx + vy + ω·lever) / R             R  = 0.033 m
+ω1 = (vx + vy + ω·lever) / R             R  = 0.040 m
 ω2 = (vx + vy - ω·lever) / R
 ω3 = (vx - vy + ω·lever) / R             RPM = ω_wheel × 60 / 2π
 ```
@@ -211,7 +217,7 @@ Phase 2 若要更高精度，应改用 M/T 法（同时测计数与相邻边沿�
 |------|----------|------|----------|
 | 硬件急停 | PB0 被拉高 | 立即刹车，锁死 | **仅能复位 MCU** |
 | 指令看门狗 | 500ms 未收到 SET_VELOCITY | 目标速度清零，刹停 | 收到新指令自动恢复 |
-| 过流保护 | 任一轮电流 > 2.5A | 刹车 | 电流回落自动恢复 |
+| 驱动板限流 | DRV8871 板载 R_ILIM | 驱动器内部限流 | 上板测 R_ILIM 后记录 |
 | 堵转检测 | 目标 >30 RPM 但实测 <3 RPM 持续 800ms | 置故障位上报 | 轮子转起来自动清除 |
 
 ### 硬件急停按常闭（NC）接法
@@ -271,7 +277,7 @@ stm32_mecanum/
 
 | TIM6 中断（1kHz，硬实时） | 主循环（软实时） |
 |---------------------------|------------------|
-| 编码器采样 · 逆运动学 · 故障评估（含急停）· 四路 PID · PWM 输出 | 串口拆帧与命令分发 · 空闲重同步 · ADC 电流采样 · 20Hz 遥测 · 状态灯 |
+| 编码器采样 · 逆运动学 · 故障评估（含急停）· 四路 PID · PWM 输出 | 串口拆帧与命令分发 · 空闲重同步 · 20Hz 遥测/超声波快照 · 状态灯 |
 
 速度环放在中断里，是因为 PID 的正确性依赖固定的 `dt`。
 若与串口解析、ADC 轮询挤在同一个主循环里，一次 40 字节的遥测发送就能让控制周期抖动几毫秒，
@@ -285,7 +291,7 @@ stm32_mecanum/
 > Phase 1 已达成"CI 编译通过 + Host 单元测试通过"（2026-08-01）。首次上板请按下表逐项确认。
 
 - [ ] **时钟树**：用示波器测 PC13 状态灯周期是否为 1s（验证 168MHz + SysTick）
-- [ ] **串口**：树莓派发 PING，确认收到 `A5 09 13 00 01 00 01 01 D0 8F 5A`
+- [ ] **串口**：树莓派发 PING，确认收到 `A5 09 13 00 02 00 01 01 0C 14 5A`
 - [ ] **PWM**：示波器测 PE9 载频是否为 20kHz，占空比是否随指令变化
 - [ ] **电机方向**：下发 `vx=+0.2`，确认四轮**全部**朝前推车；哪个反了就改
       `board_config.h` 里对应的 `ENCODER_DIR_SIGN_*` 或调换该轮 IN1/IN2 接线
@@ -297,4 +303,4 @@ stm32_mecanum/
 
 ---
 
-*Firmware v0.1.0 · Phase 1 · task-10*
+*Firmware v0.2.0 · Phase 1.5 · confirmed hardware alignment*

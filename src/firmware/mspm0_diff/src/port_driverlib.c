@@ -26,18 +26,20 @@
 #ifdef USE_TI_DRIVERLIB
 
 #include "board_config.h"
+#include "kinematics.h"
 #include "mcu_port.h"
 
 /* SysConfig 生成物提供以下符号，若名字对不上请以生成物为准修改这里：
      MOTOR_PWM_INST, MOTOR_PWM_C0_IDX, MOTOR_PWM_C1_IDX
      ENCODER_L_INST, ENCODER_R_INST
      UART_COMM_INST, UART_COMM_INST_IRQHandler
-     ADC_CURRENT_INST
-     GPIO_MOTOR_PORT / GPIO_MOTOR_*_PIN
+     GPIO_MOTOR_PORT / GPIO_MOTOR_LEFT_DIR_PIN / GPIO_MOTOR_RIGHT_DIR_PIN
      GPIO_ESTOP_PORT / GPIO_ESTOP_PIN
      GPIO_LED_PORT   / GPIO_LED_PIN                                        */
 
 static volatile uint32_t s_millis;
+static float s_motor_duty[NUM_WHEELS];
+static PortMotorDirection s_motor_direction[NUM_WHEELS];
 
 /* ===================== 系统 ===================== */
 
@@ -100,10 +102,42 @@ void port_motor_init(uint32_t pwm_freq_hz)
 {
     (void)pwm_freq_hz;   /* 载频由 SysConfig 在 MOTOR_PWM_INST 上配好 */
     DL_TimerA_startCounter(MOTOR_PWM_INST);
-    port_motor_set_pwm(0, 0.0f);
-    port_motor_set_pwm(1, 0.0f);
-    port_motor_set_direction(0, PORT_MOTOR_COAST);
-    port_motor_set_direction(1, PORT_MOTOR_COAST);
+    for (int wheel = 0; wheel < NUM_WHEELS; wheel++) {
+        s_motor_duty[wheel] = 0.0f;
+        s_motor_direction[wheel] = PORT_MOTOR_COAST;
+        port_motor_set_direction(wheel, PORT_MOTOR_COAST);
+    }
+}
+
+static void motor_apply(int wheel)
+{
+    const uint32_t period = DL_TimerA_getLoadValue(MOTOR_PWM_INST);
+    float in1_duty = 0.0f;
+    bool in2 = false;
+    switch (s_motor_direction[wheel]) {
+    case PORT_MOTOR_FORWARD:
+        in1_duty = s_motor_duty[wheel];
+        break;
+    case PORT_MOTOR_REVERSE:
+        in1_duty = 1.0f - s_motor_duty[wheel];
+        in2 = true;
+        break;
+    case PORT_MOTOR_BRAKE:
+        in1_duty = 1.0f;
+        in2 = true;
+        break;
+    case PORT_MOTOR_COAST:
+    default:
+        break;
+    }
+    const uint32_t compare = (uint32_t)(in1_duty * (float)period);
+    const DL_TIMER_CC_INDEX idx = (wheel == 0) ? MOTOR_PWM_C0_IDX : MOTOR_PWM_C1_IDX;
+    DL_TimerA_setCaptureCompareValue(MOTOR_PWM_INST, compare, idx);
+
+    const uint32_t dir_pin = (wheel == 0)
+        ? GPIO_MOTOR_LEFT_DIR_PIN : GPIO_MOTOR_RIGHT_DIR_PIN;
+    if (in2) { DL_GPIO_setPins(GPIO_MOTOR_PORT, dir_pin); }
+    else     { DL_GPIO_clearPins(GPIO_MOTOR_PORT, dir_pin); }
 }
 
 void port_motor_set_pwm(int wheel, float duty_abs)
@@ -111,10 +145,8 @@ void port_motor_set_pwm(int wheel, float duty_abs)
     if (wheel < 0 || wheel > 1) {
         return;
     }
-    const uint32_t period = DL_TimerA_getLoadValue(MOTOR_PWM_INST);
-    const uint32_t compare = (uint32_t)(duty_abs * (float)period);
-    const DL_TIMER_CC_INDEX idx = (wheel == 0) ? MOTOR_PWM_C0_IDX : MOTOR_PWM_C1_IDX;
-    DL_TimerA_setCaptureCompareValue(MOTOR_PWM_INST, compare, idx);
+    s_motor_duty[wheel] = duty_abs;
+    motor_apply(wheel);
 }
 
 void port_motor_set_direction(int wheel, PortMotorDirection dir)
@@ -122,24 +154,8 @@ void port_motor_set_direction(int wheel, PortMotorDirection dir)
     if (wheel < 0 || wheel > 1) {
         return;
     }
-    const uint32_t pin_a = (wheel == 0) ? GPIO_MOTOR_LEFT_A_PIN : GPIO_MOTOR_RIGHT_A_PIN;
-    const uint32_t pin_b = (wheel == 0) ? GPIO_MOTOR_LEFT_B_PIN : GPIO_MOTOR_RIGHT_B_PIN;
-
-    /* TB6612 真值表：IN1/IN2 = 00 滑行 · 10 正转 · 01 反转 · 11 刹车 */
-    bool a = false;
-    bool b = false;
-    switch (dir) {
-    case PORT_MOTOR_FORWARD: a = true;  b = false; break;
-    case PORT_MOTOR_REVERSE: a = false; b = true;  break;
-    case PORT_MOTOR_BRAKE:   a = true;  b = true;  break;
-    case PORT_MOTOR_COAST:
-    default:                 a = false; b = false; break;
-    }
-
-    if (a) { DL_GPIO_setPins(GPIO_MOTOR_PORT, pin_a); }
-    else   { DL_GPIO_clearPins(GPIO_MOTOR_PORT, pin_a); }
-    if (b) { DL_GPIO_setPins(GPIO_MOTOR_PORT, pin_b); }
-    else   { DL_GPIO_clearPins(GPIO_MOTOR_PORT, pin_b); }
+    s_motor_direction[wheel] = dir;
+    motor_apply(wheel);
 }
 
 /* ===================== 编码器 ===================== */
@@ -159,6 +175,14 @@ uint16_t port_encoder_read_count(int wheel)
         return (uint16_t)DL_TimerG_getTimerCount(ENCODER_R_INST);
     }
     return 0u;
+}
+
+bool port_ultrasonic_snapshot_mm(uint16_t ranges_mm[4])
+{
+    (void)ranges_mm;
+    /* 等电子组冻结 4×Trig/Echo 引脚、5V Echo 分压和 SysConfig 捕获定时器。
+       false 表示能力未就绪，不向 Pi 发送结构合法但虚假的读数。 */
+    return false;
 }
 
 /* ===================== 串口 ===================== */
@@ -210,26 +234,13 @@ void UART_COMM_INST_IRQHandler(void)
 
 void port_adc_init(void)
 {
-    DL_ADC12_enableConversions(ADC_CURRENT_INST);
+    /* 当前 DRV8871 BOM 没有外部模拟电流反馈。保留接口给未来扩展。 */
 }
 
 uint16_t port_adc_read(uint8_t channel)
 {
-    DL_ADC12_configConversionMem(ADC_CURRENT_INST, DL_ADC12_MEM_IDX_0,
-                                 (DL_ADC12_INPUT_CHAN)channel,
-                                 DL_ADC12_REFERENCE_VOLTAGE_VDDA,
-                                 DL_ADC12_SAMPLE_TIMER_SOURCE_SCOMP0,
-                                 DL_ADC12_AVERAGING_MODE_DISABLED,
-                                 DL_ADC12_BURN_OUT_SOURCE_DISABLED,
-                                 DL_ADC12_TRIGGER_MODE_AUTO_NEXT,
-                                 DL_ADC12_WINDOWS_COMP_MODE_DISABLED);
-    DL_ADC12_startConversion(ADC_CURRENT_INST);
-    while (DL_ADC12_getStatus(ADC_CURRENT_INST) == DL_ADC12_STATUS_CONVERSION_ACTIVE) {
-        /* 单次转换约 2µs，只在 20Hz 遥测周期的主循环里调用 */
-    }
-    const uint16_t value = DL_ADC12_getMemResult(ADC_CURRENT_INST, DL_ADC12_MEM_IDX_0);
-    DL_ADC12_stopConversion(ADC_CURRENT_INST);
-    return value;
+    (void)channel;
+    return 0u;
 }
 
 /* ===================== GPIO ===================== */
@@ -238,8 +249,7 @@ void port_gpio_init(void)
 {
     /* 引脚方向与上下拉由 SysConfig 配置。这里只把电机脚拉到安全状态。 */
     DL_GPIO_clearPins(GPIO_MOTOR_PORT,
-                      GPIO_MOTOR_LEFT_A_PIN | GPIO_MOTOR_LEFT_B_PIN |
-                      GPIO_MOTOR_RIGHT_A_PIN | GPIO_MOTOR_RIGHT_B_PIN);
+                      GPIO_MOTOR_LEFT_DIR_PIN | GPIO_MOTOR_RIGHT_DIR_PIN);
     DL_GPIO_clearPins(GPIO_LED_PORT, GPIO_LED_PIN);
 }
 

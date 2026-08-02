@@ -58,6 +58,7 @@ Environment="COMPOSE_PROJECT_NAME=air-ground"
 # 启动前自检: 镜像在不在。缺了直接说清楚怎么办, 而不是让 compose 抛一句
 # "manifest unknown" 然后进入 10 秒一次的重启循环。
 ExecStartPre=/opt/air-ground/scripts/require-image.sh
+ExecStartPre=/opt/air-ground/scripts/wait-for-device.sh --timeout 30 ${CAR_MCU_DEVICE}
 
 ExecStart=/usr/bin/docker compose \
     -f /opt/air-ground/docker/docker-compose.edge.yml \

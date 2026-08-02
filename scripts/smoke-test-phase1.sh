@@ -135,7 +135,8 @@ section "3. 实机传感器驱动 (task-14 Part A)"
 # =============================================================================
 have_file "RPLIDAR 驱动"                "src/air_ground_car_bringup/scripts/rplidar_driver.py"
 have_file "ICM42688 驱动"               "src/air_ground_car_bringup/scripts/icm42688_driver.py"
-have_file "HC-SR04 驱动"                "src/air_ground_car_bringup/scripts/hcsr04_driver.py"
+have_file "底盘 MCU 协议"              "src/air_ground_car_bringup/scripts/chassis_protocol.py"
+have_file "底盘/HC-SR04 生产桥"        "src/air_ground_car_bringup/scripts/chassis_bridge.py"
 have_file "OpenMV 桥"                   "src/air_ground_car_bringup/scripts/openmv_bridge.py"
 have_file "硬件接口抽象基类"            "src/air_ground_car_bringup/scripts/hardware_interface.py"
 # 注意路径: 任务书写的是 test/mock_hardware.py, 实际在 scripts/ ——
@@ -185,6 +186,8 @@ have_file "研究哲学"                    "project-prometheus-tasks/RESEARCH_P
 have_file "ADR-0003 串口协议"           "docs/decisions/ADR-0003.md"
 have_file "ADR-0011 标定输出格式"       "docs/decisions/ADR-0011.md"
 have_file "ADR-0012 cppcheck 门禁"      "docs/decisions/ADR-0012.md"
+have_file "ADR-0013 超声波 MCU 时序"    "docs/decisions/ADR-0013.md"
+have_file "ADR-0018 确认 BOM/模块边界"  "docs/decisions/ADR-0018.md"
 
 # =============================================================================
 section "8. 接口冒烟 —— 语法与解析"
@@ -196,13 +199,16 @@ if [[ -z "${PYTHON}" ]]; then
     skip "YAML 解析检查 (找不到 python3)"
 else
     py_bad=0
+    # 顶层六个硬件资料包是供应商输入，含旧版 MicroPython/生成脚本；不把它们
+    # 当成本项目 Python/Bash 源码。项目维护边界与 CI lint job 保持一致。
+    mapfile -t project_python < <(find src scripts -name '*.py' -type f | sort)
     while IFS= read -r pyfile; do
         "${PYTHON}" -m py_compile "${pyfile}" 2>/dev/null || {
             fail "语法错误: ${pyfile}"
             py_bad=1
         }
-    done < <(git ls-files '*.py')
-    [[ ${py_bad} -eq 0 ]] && pass "全部 $(git ls-files '*.py' | wc -l) 个 Python 文件语法正确"
+    done < <(printf '%s\n' "${project_python[@]}")
+    [[ ${py_bad} -eq 0 ]] && pass "全部 ${#project_python[@]} 个项目 Python 文件语法正确"
 
     # YAML 用 PyYAML 真解析一遍。yamllint 查的是风格, 查不出"这份 YAML
     # 根本 load 不出来" —— 而 roslaunch / compose 读的是后者。
@@ -223,16 +229,18 @@ else
 
     # Shell 语法
     sh_bad=0
+    mapfile -t project_shell < <(find src scripts -name '*.sh' -type f | sort)
+    [[ -f setup_all.sh ]] && project_shell+=(setup_all.sh)
     while IFS= read -r shfile; do
         bash -n "${shfile}" 2>/dev/null || { fail "语法错误: ${shfile}"; sh_bad=1; }
-    done < <(git ls-files '*.sh')
-    [[ ${sh_bad} -eq 0 ]] && pass "全部 $(git ls-files '*.sh' | wc -l) 个 shell 脚本语法正确"
+    done < <(printf '%s\n' "${project_shell[@]}")
+    [[ ${sh_bad} -eq 0 ]] && pass "全部 ${#project_shell[@]} 个项目 shell 脚本语法正确"
 fi
 
 # =============================================================================
 section "9. 接口冒烟 —— 自测真跑一遍"
 # =============================================================================
-run_selftest "串口协议自测 (黄金帧 / CRC / 拆帧, 13 条)" \
+run_selftest "串口协议自测 (黄金帧 / CRC / 拆帧, 10 条)" \
     "${PYTHON}" src/deployment/test/test-serial-loopback.py --self-test
 run_selftest "标定流水线 (合成真值, 16 条)" \
     "${PYTHON}" src/deployment/calibration/test/test_calib_pipeline.py

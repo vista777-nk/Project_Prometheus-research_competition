@@ -69,7 +69,7 @@ port_stm32f407.c            port_driverlib.c · port_stub.c
 | 移植层实现 | `port_stm32f407.c`（裸机寄存器） | `port_driverlib.c`（TI SDK）· `port_stub.c`（CI） |
 | 发送策略 | TXE 中断驱动 | 就地忙等 FIFO |
 | 故障判定 | `common/faults.c` | `common/faults.c` |
-| Host 用例数 | 63 | 70 |
+| Host 用例数 | 64 | 71 |
 
 发送策略的差异被完全挡在移植层里：两块板共用同一份 `uart.c` 环形缓冲逻辑，
 差异只体现在各自的 `port_uart_tx_start()` 实现中。

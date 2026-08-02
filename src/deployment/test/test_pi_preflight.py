@@ -31,7 +31,7 @@ def baseline(**overrides):
         "root_bytes": 59 * GIB,
         "docker_available": True,
         "compose_available": True,
-        "devices": frozenset({"/dev/i2c-1"}),
+        "devices": frozenset({"/dev/i2c-1", "/dev/ttyAMA0"}),
     }
     values.update(overrides)
     return PiFacts(**values)
@@ -71,13 +71,22 @@ class TestDeployStage(unittest.TestCase):
         self.assertFalse(next(item for item in results if item.name == "Docker Compose").ok)
 
     def test_car_requires_external_i2c_bus(self):
-        results = evaluate(baseline(devices=frozenset()), "deploy", "car")
+        results = evaluate(
+            baseline(devices=frozenset({"/dev/ttyAMA0"})), "deploy", "car"
+        )
         self.assertFalse(next(item for item in results if item.name == "车机 I²C").ok)
 
     def test_drone_does_not_assume_car_i2c_contract(self):
-        results = evaluate(baseline(devices=frozenset()), "deploy", "drone")
+        results = evaluate(
+            baseline(devices=frozenset({"/dev/ttyAMA0"})), "deploy", "drone"
+        )
         self.assertNotIn("车机 I²C", {item.name for item in results})
         self.assertTrue(all(item.ok for item in results))
+
+    def test_debug_uart_does_not_satisfy_40_pin_header_contract(self):
+        facts = baseline(devices=frozenset({"/dev/i2c-1", "/dev/ttyAMA10"}))
+        results = evaluate(facts, "deploy", "car")
+        self.assertFalse(next(item for item in results if item.name == "40 针排针 UART").ok)
 
 
 if __name__ == "__main__":

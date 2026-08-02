@@ -3,7 +3,7 @@
   <xacro:include
     filename="$(find air_ground_car_bringup)/urdf/car_base.urdf.xacro"/>
 
-  <xacro:property name="wheel_radius" value="0.033"/>
+  <xacro:property name="wheel_radius" value="0.0325"/>
   <xacro:property name="wheel_width" value="0.026"/>
   <xacro:property name="wheel_separation" value="0.18"/>
   <xacro:property name="wheel_mass" value="0.05"/>

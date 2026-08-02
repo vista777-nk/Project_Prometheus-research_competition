@@ -45,7 +45,7 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="26ac", SYMLINK+="pixhawk", \
 SUBSYSTEM=="tty", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="5741", SYMLINK+="pixhawk", \
     TAG+="systemd", ENV{SYSTEMD_ALIAS}="/dev/pixhawk", MODE="0660", GROUP="dialout"
 
-# --- 3DR SiK 数传 (SiLabs CP2102: 10c4:ea60) ---------------------------------
+# --- 915 MHz / 500 mW 数传地面端（USB-UART 身份待实物确认）-------------------
 # 注意 CP2102 是通用芯片, RPLIDAR 也常用它。因此这里必须再用序列号区分,
 # 否则两个设备会抢同一个符号链接。序列号用下面这条查:
 #   udevadm info -a -n /dev/ttyUSB0 | grep -m1 '{serial}'
@@ -56,7 +56,7 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", \
     ATTRS{serial}=="REPLACE_WITH_TELEM_SERIAL", SYMLINK+="telem", \
     TAG+="systemd", ENV{SYSTEMD_ALIAS}="/dev/telem", MODE="0660", GROUP="dialout"
 
-# --- RPLIDAR A1 (同为 CP2102, 靠序列号区分) ----------------------------------
+# --- RPLIDAR A2M12（USB-UART 桥型号/序列号必须以实物为准）-------------------
 SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", \
     ATTRS{serial}=="REPLACE_WITH_RPLIDAR_SERIAL", SYMLINK+="rplidar", \
     MODE="0660", GROUP="dialout"
@@ -69,10 +69,9 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="abd1", \
 #
 # 两种接法, 按实际情况留一条:
 #
-# (a) 走树莓派硬件串口 (GPIO 14/15 → /dev/ttyAMA1)。这是 PLATFORM.md 的设计,
-#     设备名固定不漂移, 严格来说不需要 udev 规则; 建符号链接只是为了让
-#     compose 和 ROS 参数在两种接法之间不用改。
-KERNEL=="ttyAMA1", SYMLINK+="mcu", MODE="0660", GROUP="dialout"
+# (a) Pi 5 40 针排针需要 config.txt 的 dtoverlay=uart0-pi5，设备为 ttyAMA0。
+#     ttyAMA10 是 3 针 Debug UART，不是排针 GPIO14/15。生产 compose 直接用
+#     CAR_MCU_DEVICE=/dev/ttyAMA0，因此这里不再为板载 UART 建双重角色别名。
 #
 # (b) 台架调试时常用 USB 转串口 (CH340: 1a86:7523)。取消下面的注释即可。
 #     同时接了多个 CH340 时同样需要补 ATTRS{serial}。

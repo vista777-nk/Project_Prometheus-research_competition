@@ -14,7 +14,7 @@
 services:
   edge-node:
     devices:
-      # RPLIDAR A1 (USB 转串口)
+      # RPLIDAR A2M12 (USB 转串口，256000 bps)
       - /dev/rplidar:/dev/rplidar
       # OpenMV 云台相机 (USB 转串口)
       - /dev/openmv:/dev/openmv

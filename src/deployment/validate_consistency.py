@@ -187,7 +187,8 @@ def _container_devices(path: Path) -> set[str]:
     for item in devices:
         if isinstance(item, str):
             parts = item.split(":")
-            targets.add(parts[1] if len(parts) >= 2 else parts[0])
+            # ${HOST_DEVICE:-/dev/default} 本身含冒号；容器路径始终是最后一段。
+            targets.add(parts[-1] if len(parts) >= 2 else parts[0])
         elif isinstance(item, dict) and item.get("target"):
             targets.add(str(item["target"]))
     return targets

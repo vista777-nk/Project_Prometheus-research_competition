@@ -164,7 +164,7 @@ jobs:
   # 详见 src/firmware/mspm0_diff/src/mspm0_conf.h 与 ADR-0004 §决策-4。
   #
   # 被空实现掉的只有十几个寄存器原语；运动学、协议、PID、测速窗口、环形缓冲
-  # 全部是真实代码，由本 job 的 70 个 Host 用例覆盖。
+  # 全部是真实代码，由本 job 的 71 个 Host 用例覆盖。
   # ---------------------------------------------------------------------------
   build-mspm0-firmware:
     name: Build MSPM0G3507 Differential Firmware (task-11)
@@ -335,9 +335,9 @@ jobs:
   #
   #   工具         版本      范围              提交前实测结果    本 job 行为
   #   ----------   -------   ---------------   ---------------   ----------
-  #   shellcheck   0.10.0    26 个 *.sh        warning 级 0 条   阻塞
-  #   yamllint     1.38.0    16 个 *.y[a]ml    0 条              阻塞
-  #   flake8       7.1.1     58 个 *.py        0 条              阻塞
+  #   shellcheck   0.10.0    项目 src/scripts  warning 级 0 条   阻塞
+  #   yamllint     1.38.0    项目 src 配置     0 条              阻塞
+  #   flake8       7.1.1     项目 src/scripts  0 条              阻塞
   #   cppcheck     随镜像     src/firmware      CI #24/#25 0 条   阻塞 (task-15)
   #
   # 前三个阻塞工具**钉死版本号**。理由: 不钉版本的话, 上游加一条新规则就能
@@ -400,7 +400,10 @@ jobs:
       # -x 让它跟随 source 进去查。
       - name: ShellCheck (blocking, severity>=warning)
         run: |
-          mapfile -d '' -t scripts < <(git ls-files -z '*.sh')
+          # 顶层硬件资料包含供应商示例/生成脚本，作为参考输入保留，不属于本项目
+          # 可维护源码；门禁只检查由本仓库维护的 src/、scripts/ 与根安装脚本。
+          mapfile -d '' -t scripts < <(git ls-files -z -- \
+            'src/**/*.sh' 'scripts/*.sh' 'scripts/**/*.sh' 'setup_all.sh')
           echo "检查 ${#scripts[@]} 个 shell 脚本"
           shellcheck -x --severity=warning -f gcc "${scripts[@]}"
 
@@ -411,13 +414,16 @@ jobs:
       # 其余 relaxed 规则保留, 包括 new-lines (行尾必须 LF): Linux 侧内容实测 0 条。
       - name: yamllint (blocking)
         run: |
-          mapfile -d '' -t yamls < <(git ls-files -z '*.yaml' '*.yml')
+          mapfile -d '' -t yamls < <(git ls-files -z -- \
+            '.github/**/*.yaml' '.github/**/*.yml' \
+            'src/**/*.yaml' 'src/**/*.yml' 'scripts/**/*.yaml' 'scripts/**/*.yml')
           echo "检查 ${#yamls[@]} 个 YAML 文件"
           yamllint -d "{extends: relaxed, rules: {line-length: disable}}" "${yamls[@]}"
 
       - name: flake8 (blocking)
         run: |
-          mapfile -d '' -t pys < <(git ls-files -z '*.py')
+          mapfile -d '' -t pys < <(git ls-files -z -- \
+            'src/**/*.py' 'scripts/*.py' 'scripts/**/*.py')
           echo "检查 ${#pys[@]} 个 Python 文件"
           flake8 --max-line-length=120 --count "${pys[@]}"
 
@@ -431,9 +437,10 @@ jobs:
           python3 -m py_compile src/air_ground_car_bringup/scripts/*.py
           echo "全部驱动骨架语法正确"
 
-      # Phase 1.5 实验室服务器本地实测: 81 passed。断言覆盖 UART/I2C Linux
+      # Phase 1.5 确认 BOM 后本地实测: 78 passed。断言覆盖 UART/I2C Linux、
+      # 统一底盘协议/PONG 身份/超声波失败关闭，RPLIDAR A2M12 协议解析，
       # 访问层、RPLIDAR 协议解析、IMU 量纲换算、
-      # 超声波回波换算、OpenMV JSON 校验, 以及**驱动话题与 car_preprocessor
+      # OpenMV JSON 校验, 以及**驱动话题与 car_preprocessor
       # 订阅的一致性** (test_topic_contract.py) —— 最后这条抓到过三处真实不一致,
       # 见 ADR-0009 §背景。
       - name: 传感器驱动骨架单元测试 (blocking)

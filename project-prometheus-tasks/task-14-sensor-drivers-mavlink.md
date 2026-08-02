@@ -11,6 +11,11 @@
 > 且 §14B.5 的签名自测脚本断言恒为假。这几处照抄的话 CI 会全绿、实机会哑。
 > 请先读文末的[「与原方案的偏差」](#与原方案的偏差2026-07-31-实际执行)再动手。
 > 决策依据见 [ADR-0009](../docs/decisions/ADR-0009.md) 与 [ADR-0010](../docs/decisions/ADR-0010.md)。
+>
+> **2026-08-02 实机 BOM 覆盖**：RPLIDAR 已定为 A2M12/256000；Pi GPIO
+> `hcsr04_driver.py` 已删除，四路 HC-SR04 由各底盘 MCU 定时并经生产
+> `chassis_bridge.py` 上报（ADR-0013）。正文中的 A1、115200 和方案 A/B/C
+> 待选描述作为历史记录保留，不再指导实现。
 
 ---
 
@@ -29,18 +34,19 @@
 
 ### Part A: 实机传感器驱动骨架
 
-为 4 类车机传感器编写"接口正确、逻辑可测、待实机填硬件访问"的 ROS Node 骨架：
+为共享车载载荷和底盘控制模块提供可测试、失败关闭的 ROS 接入：
 
 | 传感器 | 接口 | 驱动骨架 Node | 仿真对照 |
 |--------|------|---------------|----------|
-| RPLIDAR A1 | UART (115200) | `rplidar_driver.py` | Gazebo `libgazebo_ros_laser.so` |
-| ICM42688 | I2C (0x68) | `icm42688_driver.py` | Gazebo `libgazebo_ros_imu.so` |
-| HC-SR04 ×4 | GPIO | `hcsr04_driver.py` | Gazebo `libgazebo_ros_ultrasonic.so` |
-| OpenMV 云台 | UART (串口) | `openmv_bridge.py` | 无仿真对照（Phase 0 未建模） |
+| RPLIDAR A2M12 | UART 256000（`/dev/rplidar`） | `rplidar_driver.py` | Gazebo `libgazebo_ros_laser.so` |
+| ICM42688 | I²C（`/dev/i2c-1`，地址上机探测） | `icm42688_driver.py` | Gazebo `libgazebo_ros_imu.so` |
+| 每底盘 HC-SR04 ×4 | MCU 定时捕获 → `/dev/mcu` v0.2 | `chassis_bridge.py` | 四路单波束 `LaserScan` |
+| 二维云台/OpenMV | USB CDC（`/dev/openmv`）；云台执行器接口待实物确认 | `openmv_bridge.py` | 无仿真对照（Phase 0 未建模） |
 
 **骨架的含义**：
 - 接口层（ROS topic 发布 / 参数读取）→ **完整实现**
-- 硬件访问层（UART/I2C/GPIO 读写）→ **抽象为 `HardwareInterface` 类，提供 Mock 实现**
+- 硬件访问层（UART/I²C 读写）→ **抽象为 `HardwareInterface` 类，提供 Mock 实现**
+- 底盘实时层（电机/编码器/RC/HC-SR04）→ **统一 MCU v0.2 协议，由 `chassis_bridge.py` 校验身份和首帧**
 - 数据处理层（协议解析 / 单位转换）→ **完整实现**
 
 ### Part B: MAVLink 2 消息签名配置
@@ -57,7 +63,7 @@
 | 维度 | 内容 |
 |------|------|
 | **Affected Capability** | Perception: 2D LiDAR / IMU / Ultrasonic / OpenMV 实机驱动 · Communication: MAVLink 2 签名安全 |
-| **Modified Interface** | 新增 `HardwareInterface` ABC (UART/I2C/GPIO) — 定义 Layer 1↔Layer 2 的硬件抽象边界 · 新增 MAVLink 签名配置层 |
+| **Modified Interface** | `HardwareInterface` 管 UART/I²C；MCU v0.2 帧管底盘实时外设；新增 MAVLink 签名配置层 |
 | **New Dependency** | `pymavlink` (签名自测) · OpenCV (RPLIDAR 可选) · `openssl` (密钥生成) |
 | **ADR Required** | ADR-0009: 引入 HardwareInterface ABC 抽象层的设计理由 · ADR-0010: MAVLink 2 签名启用时机选择 |
 | **Risk Level** | 🟡 Medium — 传感器驱动涉及真实硬件时序，但骨架 + Mock 已将风险隔离在 HardwareInterface 层 |
@@ -70,9 +76,9 @@
 
 | 维度 | 今天 (Phase 1) | 明天 (Phase 2+) |
 |------|---------------|-----------------|
-| **Replaceable Component** | RPLIDAR A1 · ICM42688 · HC-SR04 · OpenMV | RPLIDAR S2 · BMI270 · TFmini Plus · OAK-D Lite |
-| **Permanent Interface** | `HardwareInterface` ABC · `/car/scan` (LaserScan) · `/car/imu` (Imu) · `/car/ultrasonic/*` (Range) · `/car/openmv/detections` (String) | 保持不变 — 换传感器只需写新的 Driver，不改 Preprocessor |
-| **Temporary Implementation** | 骨架代码中硬件访问留空 (Mock only) · MAVLink 签名仅自测 | v2: 真实 UART/I2C/GPIO 实现 · MAVLink 签名在实机上启用 · 传感器时间戳硬件同步 (PTP) |
+| **Replaceable Component** | RPLIDAR A2M12 · ICM42688 · HC-SR04 · OpenMV | 同类传感器可在保持 ROS/MCU 契约时替换 |
+| **Permanent Interface** | `/car/scan` · `/car/imu` · `/car/ultrasonic/{front,rear,left,right}`（均为 `LaserScan`）· `/car/openmv/detections` | 保持不变 — 换传感器只改驱动/固件端，不改 Preprocessor |
+| **Temporary Implementation** | Linux UART/I²C 已实现；MCU 超声波真实 pinmux、云台执行器协议和 MAVLink 实机签名待上机 | 冻结电子参数后完成移植层、标定与硬件时间同步 |
 
 ---
 
@@ -932,7 +938,7 @@ mavlink_secret.key
 密钥文件的 `0600` 权限在 Windows 上验不了（MSYS 不落实 chmod），
 Linux/树莓派侧以 `umask 077` + `chmod 600` 双保险。
 
-## Phase 1.5 跟进偏差（2026-08-01）
+## Phase 1.5 跟进偏差（更新至 2026-08-02）
 
 本节记录后续实机阶段的变化，不回写上面的 Phase 1 交付证据（69 条是当时真实数字）。
 
@@ -945,10 +951,10 @@ Linux/树莓派侧以 `umask 077` + `chmod 600` 双保险。
 - 真实 ROS 启动抓到 Catkin devel relay 的同名自导入：纯 Host 测试全绿，实际
   roslaunch 却无法从 relay `hardware_interface.py` 导入接口。驱动现在优先真实源码目录；
   mock 五节点已持续运行 8 秒，real 无设备时已验证整套关闭。
-- Host 套件当前 81/81，新增覆盖真实 UART/I²C 访问、半截 RPLIDAR 握手、运行中拔线、
-  错误芯片身份、实机 launch 必需节点契约。
-- HC-SR04 GPIO **仍未实现**；ADR-0013 继续预留给 A/B/C 时序实测，不用 Python sleep
-  填空。`enable_*` launch 参数只用于逐件台架验收，满配默认仍全部启用。
+- 确认 BOM 后 Host 套件为 78/78：新增统一底盘协议、PONG 板卡/底盘身份、v0.2
+  最低版本和 MCU 四路超声波失败关闭；删除不再符合模块边界的 Pi GPIO 直驱测试。
+- HC-SR04 已明确下沉到底盘 MCU；电子组冻结引脚与捕获定时器前，真实移植层返回
+  `false` 且 Pi 拒绝进入 ready，不用 Python sleep 或全零帧制造假绿灯。
 
 ---
 

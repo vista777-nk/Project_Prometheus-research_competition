@@ -14,7 +14,7 @@
 
 from typing import Dict, Optional
 
-from hardware_interface import GPIOInterface, I2CInterface, UARTInterface
+from hardware_interface import I2CInterface, UARTInterface
 
 
 class MockUART(UARTInterface):
@@ -90,41 +90,3 @@ class MockI2C(I2CInterface):
 
     def close(self) -> None:
         self.is_open = False
-
-
-class MockGPIO(GPIOInterface):
-    """假 GPIO。回波宽度由 echo_us 按 echo 引脚预置，缺省为超时 (-1.0)。"""
-
-    def __init__(self, echo_us: Optional[Dict[int, float]] = None) -> None:
-        """初始化。
-
-        Args:
-            echo_us: {echo 引脚: 回波宽度 μs}。未列出的引脚返回 -1.0（超时）。
-        """
-        self.echo_us: Dict[int, float] = dict(echo_us or {})
-        self.directions: Dict[int, str] = {}
-        self.levels: Dict[int, int] = {}
-        self.triggers = []
-
-    def setup(self, pin: int, direction: str) -> None:
-        self.directions[pin] = direction
-
-    def write(self, pin: int, value: int) -> None:
-        self.levels[pin] = int(value)
-
-    def read(self, pin: int) -> int:
-        return self.levels.get(pin, 0)
-
-    def trigger_and_measure(
-        self,
-        trig_pin: int,
-        echo_pin: int,
-        pulse_us: float,
-        timeout_us: float,
-    ) -> float:
-        self.triggers.append((trig_pin, echo_pin, pulse_us, timeout_us))
-        width = self.echo_us.get(echo_pin, -1.0)
-        # 回波比超时窗还长 = 实机上根本等不到下降沿，与"没有回波"同样处理
-        if width < 0.0 or width > timeout_us:
-            return -1.0
-        return width

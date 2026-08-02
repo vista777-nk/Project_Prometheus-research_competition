@@ -9,7 +9,7 @@
 
 #include "kinematics.h"
 
-/** 配置 PWM、方向 GPIO 与电流采样 ADC。需在 port_system_init() 之后调用。 */
+/** 配置 DRV8871 的 PWM/方向 GPIO。需在 port_system_init() 之后调用。 */
 void motor_init(void);
 
 /**
@@ -19,11 +19,11 @@ void motor_init(void);
  */
 void motor_set_duty(int wheel, float duty);
 
-/** 立即停止全部电机：占空比清零 + 方向脚双低 (TB6612 滑行) */
+/** 立即停止全部电机：DRV8871 IN1=IN2=0（休眠/高阻） */
 void motor_all_stop(void);
 
 /**
- * 让 H 桥进入刹车状态 (方向脚双高)，比滑行停得更快。
+ * 让 DRV8871 进入 IN1=IN2=1 的慢衰减/刹车状态。
  * 用于急停与过流保护。
  */
 void motor_brake_all(void);
@@ -32,8 +32,8 @@ void motor_brake_all(void);
 float motor_get_duty(int wheel);
 
 /**
- * 采样四路电机电流 (A)。ADC 单次转换轮询，约 4×2µs，
- * 只在遥测周期 (20Hz) 于主循环里调用，不在控制中断中调用。
+ * 填充四路电机电流。当前 DRV8871 板没有反馈输出，全部返回 NaN；
+ * 以后增加外部分流/放大电路后才能改为实测值。
  */
 void motor_sample_currents(float out[NUM_WHEELS]);
 

@@ -1,21 +1,23 @@
-# Mechanical metadata shared by the interchangeable chassis implementations.
+# 两个底盘模块的机械元数据。轮径来自已冻结 BOM；轮距/轴距仍为仿真暂定值，
+# 必须在装好电机支架与车轮后测量接地点中心距再回填。
 diff_chassis:
   type: differential_drive
   track_width: 0.18
-  wheel_radius: 0.033
+  wheel_radius: 0.0325
   max_linear_speed: 1.0
   max_angular_speed: 3.0
   motor_encoder_ppr: 11
-  encoder_note: effective wheel counts depend on gearbox ratio and x4 quadrature
+  encoder_note: PROVISIONAL — MC520P30 PPR/减速比/空载 RPM 待铭牌与台架复核
 
 mecanum_chassis:
   type: mecanum
   track_width: 0.18
   wheel_base: 0.20
-  wheel_radius: 0.033
+  wheel_radius: 0.040
   max_linear_speed: 0.8
   max_angular_speed: 2.0
 
 chassis_detect:
+  note: simulation_only — 实机由 MCU PONG 身份核对，不猜测 GPIO
   diff_pin: 1
   mecanum_pin: 0

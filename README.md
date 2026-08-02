@@ -9,12 +9,12 @@
 [![Phase1](https://img.shields.io/badge/phase1_tasks-6/6-brightgreen)](./project-prometheus-tasks/00-OVERVIEW.md)
 [![ROS Tests](https://img.shields.io/badge/ROS_tests-82/82-brightgreen)](./docs/decisions/ADR-0014.md)
 [![E2E](https://img.shields.io/badge/E2E-33/33-brightgreen)](./project-prometheus-tasks/task-09-validation.md)
-[![Firmware Host](https://img.shields.io/badge/firmware_host-133/133-brightgreen)](./src/firmware/README.md)
-[![Deploy Validate](https://img.shields.io/badge/deploy_validate-46-brightgreen)](./src/deployment/README.md)
-[![Smoke Phase1](https://img.shields.io/badge/smoke_phase1-61-brightgreen)](./project-prometheus-tasks/task-15-calibration-validation.md)
+[![Firmware Host](https://img.shields.io/badge/firmware_host-135/135-brightgreen)](./src/firmware/README.md)
+[![Deploy Validate](https://img.shields.io/badge/deploy_validate-55/55-brightgreen)](./src/deployment/README.md)
+[![Smoke Phase1](https://img.shields.io/badge/smoke_phase1-64/64-brightgreen)](./project-prometheus-tasks/task-15-calibration-validation.md)
 [![ROS](https://img.shields.io/badge/ROS-Noetic-brightgreen)](https://wiki.ros.org/noetic)
 [![PX4](https://img.shields.io/badge/PX4-v1.14-blueviolet)](https://px4.io/)
-[![CI](https://github.com/vista777-nk/research_compitition/actions/workflows/ci.yml/badge.svg)](https://github.com/vista777-nk/research_compitition/actions/workflows/ci.yml)
+[![CI](https://github.com/vista777-nk/Project_Prometheus-research_competition/actions/workflows/ci.yml/badge.svg)](https://github.com/vista777-nk/Project_Prometheus-research_competition/actions/workflows/ci.yml)
 
 ---
 
@@ -99,7 +99,7 @@
 |---------|:---:|------|:---:|
 | `air_ground_interfaces` | Layer 3 | 10 个自定义消息 + 2 个服务 + 1 个 Action | — |
 | `air_ground_drone_bringup` | Layer 1 | PX4 SITL 无人机 + 深度相机/GPS/IMU | ✅ |
-| `air_ground_car_bringup` | Layer 1 | 差速/麦轮双底盘 + 车载传感器 + 云台 + 实机驱动 | ROS 40/40 + Host 81/81 |
+| `air_ground_car_bringup` | Layer 1 | 差速/麦轮双底盘 + 车载传感器 + 云台仿真控制/实机边界 | ROS 40/40 + Host 78/78 |
 | `air_ground_com_bridge` | Layer 2 | MAVLink UDP 桥 + TCP JSON 桥 | 17/17 |
 | `air_ground_lab_server` | Layer 2~3 | TCP 接收 + World Model + 研究占位节点 | ✅ |
 | `air_ground_bringup` | Orchestration | 单 Gazebo 世界的顶层集成 Launch | ✅ |
@@ -132,7 +132,7 @@ project-prometheus/
 ├── scripts/                            ← 运行环境 setup + Phase 1 冒烟脚本
 ├── docs/
 │   ├── architecture/                   ← 能力矩阵 (capability_matrix.md)
-│   ├── decisions/                      ← ADR (架构决策记录, ADR-0001~0016；0013 预留)
+│   ├── decisions/                      ← ADR (架构决策记录, ADR-0001~0018)
 │   └── experiments/                    ← 实验记录 + AI_HANDOFF.md (交接必读)
 ├── project-prometheus-tasks/           ← 核心项目文档
 │   ├── 00-OVERVIEW.md                  ← 总索引 + 任务清单
@@ -155,7 +155,7 @@ project-prometheus/
 │   ├── deployment/                     ← 部署配置 (非 ROS)
 │   │   ├── docker/                     ← Docker 镜像
 │   │   ├── systemd/                    ← 自启服务
-│   │   ├── network/                    ← 网络 + 3DR 数传
+│   │   ├── network/                    ← Pi UART / Pixhawk / 915 MHz 数传
 │   │   ├── ssh/                        ← SSH 加固
 │   │   ├── mavlink/                    ← MAVLink 签名
 │   │   ├── calibration/                ← 标定工具链 + 归档规范

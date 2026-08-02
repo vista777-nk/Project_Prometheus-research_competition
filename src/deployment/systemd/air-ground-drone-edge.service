@@ -11,8 +11,8 @@
 # 1. **设备名会漂移。** ttyACM 的编号按枚举顺序分配。无人机 Pi 上同时插了
 #    USB 转串口调试器时, Pixhawk 可能落到 ttyACM1, 于是这条依赖永远等不到,
 #    单元静默停在 inactive —— 在场地上排查这个会非常费时间。
-#    正确做法是先用 udev 按 VID/PID 固定出 /dev/pixhawk (见
-#    network/99-air-ground-devices.rules), 再依赖那个稳定名字。
+#    生产连接是 40 针排针 UART (/dev/ttyAMA0) 到 TELEM2；台架 USB 才使用
+#    udev 的 /dev/pixhawk。实际宿主路径由 DRONE_FCU_DEVICE 选择。
 #
 # 2. **`Requires=` 对设备单元是硬阻塞。** 飞控没插 = 边缘节点完全不启动,
 #    连相机、数传、遥测上报都没有。但这些在飞控没接时仍然有用
@@ -33,11 +33,6 @@ Documentation=file:///opt/air-ground/README.md
 After=network-online.target docker.service chrony.service
 Wants=network-online.target chrony.service
 Requires=docker.service
-
-# 软依赖 + After: 飞控在就等它就绪再启动, 不在也不阻塞开机。
-# dev-pixhawk.device 这个单元名来自 udev 规则里的 ENV{SYSTEMD_ALIAS}。
-Wants=dev-pixhawk.device
-After=dev-pixhawk.device
 
 Conflicts=air-ground-car-edge.service
 
@@ -62,7 +57,7 @@ Environment="COMPOSE_PROJECT_NAME=air-ground"
 ExecStartPre=/opt/air-ground/scripts/require-image.sh
 # 最多等 30 秒让飞控枚举完。超时不中止启动, 只在 journal 里留证据 ——
 # 见脚本内的 --warn-only 说明。
-ExecStartPre=/opt/air-ground/scripts/wait-for-device.sh --warn-only --timeout 30 /dev/pixhawk
+ExecStartPre=/opt/air-ground/scripts/wait-for-device.sh --warn-only --timeout 30 ${DRONE_FCU_DEVICE}
 
 ExecStart=/usr/bin/docker compose \
     -f /opt/air-ground/docker/docker-compose.edge.yml \

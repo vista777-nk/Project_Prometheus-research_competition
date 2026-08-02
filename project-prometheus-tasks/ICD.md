@@ -238,6 +238,9 @@ bool success
 string message
 ```
 
+> Phase 1.5 实物只有一套共享车载智能载荷。该服务表示在人工断电换装完成后选择
+> 对应软件配置并核对 MCU 身份，不代表热插拔、自动机械切换或两底盘同时在线。
+
 ### 4.2 QueryWorldState（查询世界状态）
 
 **方向**：任意节点 → World Model  
@@ -250,6 +253,18 @@ string[] args                # 查询参数
 WorldState result
 bool found
 ```
+
+### 4.3 底盘 MCU 内部契约（Layer 1↔2，不属于稳定研究接口）
+
+- 两种底盘在 Pi 容器内都使用 `/dev/mcu`，115200 8N1；
+- Pi 启动先发 PING，PONG 必须匹配 `STM32/mecanum` 或 `MSPM0/diff` 且版本不低于 0.2；
+- `SET_VELOCITY`：差速为 `v,ω` 两个 f32，麦轮为 `vx,vy,ω` 三个 f32；
+- `ULTRASONIC(0x14)`：`front,rear,left,right` 四个小端 u16 毫米值，
+  `0xFFFF` 表示不可用；
+- `TELEMETRY` 的电流字段因当前 DRV8871 BOM 无采样电路而为 IEEE-754 `NaN`；
+- MCU 独占电机、编码器、IA6B、HC-SR04、急停与命令看门狗，Pi 不实现这些硬实时环。
+
+线上字节规范由 ADR-0003/0013 和两端黄金帧测试约束；上层只消费 ROS 接口。
 
 ---
 
@@ -348,4 +363,4 @@ air_ground_interfaces/
 
 ---
 
-*版本: v6.0 · 日期: 2026-07-25 · 作者: DeepSeek (经 ChatGPT 、 混元3 、 豆包 、 执行端subagent集群审阅后重构)*
+*版本: v6.1 · 日期: 2026-08-02 · Phase 1.5 补充硬件内部契约与共享载荷语义*
