@@ -13,8 +13,7 @@
 > [`src/deployment/README.md` §6](../src/deployment/README.md#6-与任务文档task-12的偏差)
 > ——**动手前先看那张表**（本页"可执行步骤"开头也有摘要）。
 >
-> **适用环境**：任意开发机 OS（纯文本/Dockerfile/systemd unit 文件，不需 Ubuntu 20.04）；
-> 实机宿主基线已确认为 Raspberry Pi 5 / ARM64 / 8 GB / Debian 13 / 64 GB microSD
+> **适用环境**：任意 OS（纯文本/Dockerfile/systemd unit 文件，不需 Ubuntu 20.04）
 > **硬件依赖**：无（Docker build 可在 CI 中验证，systemd 可语法检查）
 > **ROS 依赖**：仅 Docker 内（通过 CI 构建容器镜像验证）
 
@@ -812,9 +811,7 @@ task-14 交付 `car_edge_real.launch` 后，原来的「文件缺失才降级」
 ADR-0007 的外网重估条件；ADR-0017 将服务器改为本地 ROS + 回环 TCP，跨校区只允许
 后续批准的 VPN/SSH 隧道。新增 system/user 两套常驻 unit、9 条部署用例和联合健康
 检查；当前服务器已用 `Linger=yes` 用户服务实装，故障注入自动恢复。使用服务器
-收到代表性 Pi 5 参数后新增 9 条主机预检用例；`/usr/bin/python3` 跑完整部署
-校验现为通过 55、失败 0、跳过 0。确认基线为 ARM64 / 8 GB / Debian 13 / 标称
-64 GB microSD，Noetic 继续封装在 Focal ARM64 容器内，不在宿主机裸装。
+`/usr/bin/python3` 跑完整部署校验为通过 52、失败 0、跳过 0。
 
 ---
 
