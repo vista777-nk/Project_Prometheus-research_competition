@@ -136,7 +136,7 @@ task-14 (传感器 + MAVLink) ── (独立) ── task-15
 > shellcheck 步骤，以及 README 顶部硬编码的假 CI badge。
 >
 > **2026-07-31 补充（task-15，Phase 1 收官）**：标定工具链 + 集成验证就位，
-> `scripts/smoke-test-phase1.sh` 61 项本地全绿。**Phase 1 六个任务全部完成**
+> `scripts/smoke_test_phase1.sh` 61 项本地全绿。**Phase 1 六个任务全部完成**
 > （task-14 的状态本来就该是 ✅，这次一并改正）。
 >
 > 本任务再次印证了 task-13 记下的那条：**任务文档会过期**。task-15 原文里

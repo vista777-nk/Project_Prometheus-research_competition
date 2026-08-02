@@ -156,7 +156,7 @@ src/deployment/
     └── setup-journald.sh
 ```
 
-> `scripts/smoke-test-phase1.sh`（仓库根，不在本目录）是 Phase 1 的总入口，
+> `scripts/smoke_test_phase1.sh`（仓库根，不在本目录）是 Phase 1 的总入口，
 > 它把上面这些的自测串起来跑一遍并检查 CI 归属。`make smoke-phase1`。
 
 ---

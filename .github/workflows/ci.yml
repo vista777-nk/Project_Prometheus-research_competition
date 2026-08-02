@@ -508,7 +508,7 @@ jobs:
   # 依赖直接 `-r requirements.txt`: 本 job 要的 numpy / opencv / pyyaml /
   # pymavlink 恰好就是那一份, 没有理由再抄一遍版本号。
   # ---------------------------------------------------------------------------
-  smoke-test-phase1:
+  smoke_test_phase1:
     name: Phase 1 Smoke Test (task-15)
     runs-on: ubuntu-latest
 
@@ -528,7 +528,7 @@ jobs:
       # 本地跑同一条命令, 同一份脚本。本机会 SKIP 掉需要 numpy/OpenCV 的项,
       # 这里全部真跑 —— 所以 CI 上的 SKIP 数应当是 0。
       - name: Phase 1 smoke test
-        run: bash scripts/smoke-test-phase1.sh
+        run: bash scripts/smoke_test_phase1.sh
 
       # 反向验证: 冒烟脚本必须真的会失败。
       # 没有这一步的话, 哪天 check 函数被改成永远 pass 也不会有人发现 ——
@@ -537,7 +537,7 @@ jobs:
       - name: Smoke test must actually fail on a missing deliverable
         run: |
           mv src/deployment/calibration/calibrate-camera.py /tmp/calibrate-camera.py.bak
-          if bash scripts/smoke-test-phase1.sh >/dev/null 2>&1; then
+          if bash scripts/smoke_test_phase1.sh >/dev/null 2>&1; then
             echo "::error::删掉一个交付物之后冒烟测试竟然通过了 —— 存在性检查是假的"
             mv /tmp/calibrate-camera.py.bak src/deployment/calibration/calibrate-camera.py
             exit 1

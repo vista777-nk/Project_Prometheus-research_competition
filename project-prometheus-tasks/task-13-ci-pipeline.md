@@ -437,7 +437,7 @@ validate.sh                         通过 26 · 失败 0 · 跳过 1
 1. `CONVENTIONS.md` 还允许 `docs/*` 和 `exp/*`，旧白名单本来就与分支规范不一致；
 2. 单独追加当前分支名会把故障推迟到下一次改名，不会消除“CI 静默消失”的结构原因。
 
-`scripts/smoke-test-phase1.sh` 同时增加触发契约检查：CI workflow 必须声明 `push`，
+`scripts/smoke_test_phase1.sh` 同时增加触发契约检查：CI workflow 必须声明 `push`，
 且该事件下不得再出现 `branches`/`branches-ignore`。因此今后仅修改分支名不能让 CI
 无声失效。`pull_request` 仍只针对 `main`，保持 GitHub Flow 的合并门禁边界。
 

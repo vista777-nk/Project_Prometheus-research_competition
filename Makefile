@@ -60,7 +60,7 @@ test-smoke: quick-smoke
 # 在任何装了 python3 的机器上都该能跑 —— 缺 numpy/OpenCV/pymavlink 时
 # 相应的项报 SKIP 而不是失败。
 smoke-phase1:
-	@bash "$(WS)/scripts/smoke-test-phase1.sh"
+	@bash "$(WS)/scripts/smoke_test_phase1.sh"
 
 # 部署配置静态校验 (task-12~15)。与 CI 的 validate-deployment job 同一份脚本。
 validate-deployment:

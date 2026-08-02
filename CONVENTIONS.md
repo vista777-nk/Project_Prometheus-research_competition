@@ -125,6 +125,13 @@ project-prometheus/                     # 仓库根目录 (Git root)
 │
 ├── obsolete-documentation/             # 📁 归档 (历史文档，只读)
 │
+├── imu-icm42688/                       # 📁 硬件参考：ICM42688 IMU 资料
+├── mspm0g3507/                         # 📁 硬件参考：MSPM0G3507 开发资料
+├── openmv-visual-module/               # 📁 硬件参考：OpenMV 视觉模块资料
+├── r5-general-chassis-panel-specifications/  # 📁 硬件参考：R5 底盘底板规格
+├── stm32f407vet6/                      # 📁 硬件参考：STM32F407VET6 资料
+├── two-axis-gimbal/                    # 📁 硬件参考：二轴云台资料
+│
 └── src/                                # 📁 源代码 (ROS 包 + firmware/ + deployment/)
     └── ...
 ```
@@ -138,7 +145,11 @@ project-prometheus/                     # 仓库根目录 (Git root)
 | **不以数字开头** | ❌ `1-docs/` → ✅ `docs/` | |
 | **不嵌套过深** | 最大深度 3 层 | `docs/decisions/ADR-0001.md` ✅ |
 
-> **注意**：当前仓库中 `Project_Prometheus_Tasks/` 和 `Obsolete_or_Outdated_Documentation/` 使用了混合命名风格。已于 2026-07-28 统一重命名为 `project-prometheus-tasks/` 和 `obsolete-documentation/`（`obsolete-documentation/` 内部的个别历史文件保留原文件名，归档只读）。**在新创建的目录中，严格遵守 kebab-case。**
+> **注意**：当前仓库中 `Project_Prometheus_Tasks/` 和 `Obsolete_or_Outdated_Documentation/` 使用了混合命名风格。已于 2026-07-28 统一重命名为 `project-prometheus-tasks/` 和 `obsolete-documentation/`（`obsolete-documentation/` 内部的个别历史文件保留原文件名，归档只读）。
+>
+> 2026-08-03：六个硬件参考目录（`IMU_ICM42688/`、`MSPM0G3507/`、`OpenMV_Visual_Module/`、`R5_General_Chassis_Panel_Specifications/`、`STM32F407VET6/`、`Two-axis_gimbal/`）统一重命名为 kebab-case。**这些目录内部的子目录结构（含中文名称、数字前缀等）系厂商原始资料组织方式，保留原样不动**——仅顶层目录名遵循本规范。
+>
+> **在新创建的目录中，严格遵守 kebab-case。**
 
 ### 2.3 ROS 工作空间映射
 
