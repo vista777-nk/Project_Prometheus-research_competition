@@ -102,7 +102,7 @@ task-15 原文写了个 `preprocess_to_observation()` 号称"模拟 car_preproce
 
 ### 4. 查不了的项要报 SKIP 并说明原因，不能静默略过
 全仓统一约定：**退出码 2 = SKIP（依赖缺失），不算失败；1 = 真失败。**
-`validate.sh` / `smoke-test-phase1.sh` 都按这个解释子进程。
+`validate.sh` / `smoke_test_phase1.sh` 都按这个解释子进程。
 
 ### 5. 写完守卫必须做一次负向测试
 只测"该过的过了"不够，要测"该拦的真的拦住了"。已有先例：
@@ -133,7 +133,7 @@ src/
 └── deployment/                非 ROS。validate.sh 是这个目录的唯一校验入口
     ├── calibration/           task-15 标定工具链
     └── test/                  task-15 集成验证
-scripts/smoke-test-phase1.sh   Phase 1 总入口（`make smoke-phase1`）
+scripts/smoke_test_phase1.sh   Phase 1 总入口（`make smoke-phase1`）
 docs/decisions/ADR-*.md        决策记录，不可变
 ```
 

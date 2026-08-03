@@ -50,7 +50,7 @@
 | 维度 | 内容 |
 |------|------|
 | **Affected Capability** | Perception: 相机内参 · IMU 内参 · 相机-IMU 外参 · DevOps: Phase 1 集成验证 |
-| **Modified Interface** | 新增标定输出格式: `camera_intrinsics.yaml` → ROS `camera_info` · 新增 `smoke-test-phase1.sh` 冒烟测试入口 |
+| **Modified Interface** | 新增标定输出格式: `camera_intrinsics.yaml` → ROS `camera_info` · 新增 `smoke_test_phase1.sh` 冒烟测试入口 |
 | **New Dependency** | OpenCV (`cv2.calibrateCamera`) · Kalibr (可选, 相机-IMU 外参) · `allan_variance_ros` (可选, IMU 标定) |
 | **ADR Required** | ADR-0011: 标定结果 YAML 格式标准化 (可降级为 §15A.2 的设计段落, 不必独立 ADR) |
 | **Risk Level** | 🟢 Low — 标定脚本操作离线数据，不依赖实时硬件 |
@@ -64,7 +64,7 @@
 | 维度 | 今天 (Phase 1) | 明天 (Phase 2+) |
 |------|---------------|-----------------|
 | **Replaceable Component** | OpenCV 棋盘格标定 · 手动标定数据采集 | Kalibr (AprilGrid) · OpenVINS 在线标定 · Kimera 语义标定 · Visual-Inertial Foundation Model 自标定 |
-| **Permanent Interface** | `camera_intrinsics.yaml` 输出格式 · `validate-calibration.py` 合理性检查项 · `smoke-test-phase1.sh` 冒烟测试框架 | 保持不变 — 换标定算法只改采集+解算，不改验证和输出格式 |
+| **Permanent Interface** | `camera_intrinsics.yaml` 输出格式 · `validate-calibration.py` 合理性检查项 · `smoke_test_phase1.sh` 冒烟测试框架 | 保持不变 — 换标定算法只改采集+解算，不改验证和输出格式 |
 | **Temporary Implementation** | 离线 Python 脚本 · 手动触发标定 · 无标定报告自动生成 | v2: ROS 节点内在线标定 · 标定报告自动 PDF 生成 (含 K Matrix / Distortion / RMS / Allan Variance / 日期 / 序列号) · `calibration_db/` 标定历史数据库 (不覆盖, 可对比长期漂移) |
 
 ---
@@ -553,12 +553,12 @@ if __name__ == '__main__':
     unittest.main()
 ```
 
-### 15B.3 Phase 1 冒烟测试 (`smoke-test-phase1.sh`)
+### 15B.3 Phase 1 冒烟测试 (`smoke_test_phase1.sh`)
 
 ```bash
 #!/bin/bash
 # Phase 1 冒烟测试 — 检查所有 Phase 1 交付物
-# 用法: ./smoke-test-phase1.sh
+# 用法: ./smoke_test_phase1.sh
 # 退出码: 0=全部通过, 1=有失败项
 
 set -e
@@ -654,7 +654,7 @@ echo "========================================="
 
 - [x] `test-serial-loopback.sh` 可发送 PING 并判断是否收到 PONG (含 board_type/chassis_type 校验) —— 13 项自测全过
 - [x] `test-observation-pipeline.py` 3 个测试用例通过 ⚠ 实际 10 个用例，且测的是真 `CarPreprocessor` 而非模拟件（ADR-0011）
-- [x] `smoke-test-phase1.sh` 可检查所有 Phase 1 文件存在性 + CI job 存在性 —— 61 项全绿
+- [x] `smoke_test_phase1.sh` 可检查所有 Phase 1 文件存在性 + CI job 存在性 —— 61 项全绿
 - [x] 2026-08-03 Phase 1.5 跟进：增加“任意分支 push 必须触发 CI”契约守卫，当前基线 65 项全绿
 - [x] Phase 1 冒烟测试在 GitHub Actions 中可运行 —— 含删除交付物的负向测试
 - [x] **三问检查** (每完成一个 Task)：Platform 是否更稳定？ / Research 是否更自由？ / 未来替换硬件是否更简单？ —— 见文末「三问检查」记录
@@ -665,7 +665,7 @@ echo "========================================="
 
 1. **细化 IMU 标定输出规范**：IMU 标定输出 YAML 应包含以下字段：`gyro_bias` (rad/s), `accel_bias` (m/s²), `gyro_noise_density` (rad/s/√Hz), `accel_noise_density` (m/s²/√Hz), `gyro_random_walk` (rad/s²/√Hz), `accel_random_walk` (m/s³/√Hz)。与 IMU 驱动、robot_localization 滤波器的输入格式对齐。
 2. **相机-IMU 外参的 Phase 1 边界**：Kalibr 标定依赖完整 ROS 环境，无法在纯 CI 中运行。Phase 1 仅完成 `calibrate-cam-imu-extrinsic.py` 的接口定义与输出 YAML 格式规范，实际标定待实机数据采集后执行。
-3. **升级冒烟测试维度**：`smoke-test-phase1.sh` 在文件存在检查之外，增加一级「接口冒烟」：Python 语法检查 (`python3 -m py_compile`)、模块导入测试 (`python3 -c "import scripts.*"`)、YAML 格式校验 (`yamllint`)。
+3. **升级冒烟测试维度**：`smoke_test_phase1.sh` 在文件存在检查之外，增加一级「接口冒烟」：Python 语法检查 (`python3 -m py_compile`)、模块导入测试 (`python3 -c "import scripts.*"`)、YAML 格式校验 (`yamllint`)。
 4. **标定报告模板**：`generate-calib-report.py` 输出的 Markdown 报告应包含以下固定章节：标定时间、硬件序列号、K Matrix、畸变系数、重投影误差 RMS、重投影误差分布图 (ASCII art)、Allan 方差曲线数据 (IMU)、质量评估结论 (PASS/FAIL/NEED_RECALIBRATE)。
 
 ---
@@ -800,7 +800,7 @@ LiDAR 降采样与 `angle_increment` 同步放大、无效距离写 −1.0、
 - CI job `build-docker-edge` → 仓库里叫 `build-edge-image`。
 
 两处都会产生**永远红的检查**，而看久了就没人看了。现在按实际路径/名字查，
-并把 `validate-deployment` / `lint-scripts` / `smoke-test-phase1` 三个 job
+并把 `validate-deployment` / `lint-scripts` / `smoke_test_phase1` 三个 job
 一并纳入检查。
 
 冒烟脚本放在仓库根的 `scripts/`（本文的 `WS="$(dirname $0)/.."` 隐含了这个位置），

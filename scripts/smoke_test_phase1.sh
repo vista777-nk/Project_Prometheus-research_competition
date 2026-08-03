@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # =============================================================================
-# smoke-test-phase1.sh — Phase 1 的毕业证书
+# smoke_test_phase1.sh — Phase 1 的毕业证书
 #
-#   bash scripts/smoke-test-phase1.sh
+#   bash scripts/smoke_test_phase1.sh
 #
 # 退出码: 0 全部通过 (SKIP 不计失败) / 1 有失败项
 #
@@ -284,7 +284,7 @@ ci_has "MSPM0 固件 job"                 "build-mspm0-firmware:"
 ci_has "边缘镜像构建 job (build-edge-image)" "build-edge-image:"
 ci_has "部署静态校验 job"               "validate-deployment:"
 ci_has "全仓 lint job"                  "lint-scripts:"
-ci_has "Phase 1 冒烟 job"               "smoke-test-phase1:"
+ci_has "Phase 1 冒烟 job"               "smoke_test_phase1:"
 ci_push_covers_all_branches
 
 # =============================================================================

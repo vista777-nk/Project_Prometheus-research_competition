@@ -34,7 +34,7 @@
 
 - 移除 `push.branches` 白名单，改为任意分支 push 都触发；
 - 保留 `pull_request.branches: [main]`，合并门禁不变；
-- 在 `scripts/smoke-test-phase1.sh` 增加契约守卫：必须存在 push 事件，且该事件下
+- 在 `scripts/smoke_test_phase1.sh` 增加契约守卫：必须存在 push 事件，且该事件下
   不得再出现 `branches` 或 `branches-ignore`；
 - 没有只追加 `task-new`，因为那会在下一次分支改名时复发，而且旧白名单本就漏掉
   `CONVENTIONS.md` 允许的 `docs/*`、`exp/*`。

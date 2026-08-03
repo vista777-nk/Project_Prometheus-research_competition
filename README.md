@@ -133,7 +133,7 @@ project-prometheus/
 ├── scripts/                            ← 运行环境 setup + Phase 1 冒烟脚本
 ├── docs/
 │   ├── architecture/                   ← 能力矩阵 (capability_matrix.md)
-│   ├── decisions/                      ← ADR (架构决策记录, ADR-0001~0018)
+│   ├── decisions/                      ← ADR (架构决策记录, ADR-0001~0019)
 │   └── experiments/                    ← 实验记录 + AI_HANDOFF.md (交接必读)
 ├── project-prometheus-tasks/           ← 核心项目文档
 │   ├── 00-OVERVIEW.md                  ← 总索引 + 任务清单
@@ -142,6 +142,12 @@ project-prometheus/
 │   ├── ICD.md                          ← 接口控制文档
 │   ├── ROADMAP.md                      ← 研究路线
 │   └── task-01~15-*.md                 ← 实施任务
+├── imu-icm42688/                       ← 硬件参考：ICM42688 IMU
+├── mspm0g3507/                         ← 硬件参考：MSPM0G3507 MCU
+├── openmv-visual-module/               ← 硬件参考：OpenMV 视觉模块
+├── r5-general-chassis-panel-specifications/  ← 硬件参考：R5 底盘底板
+├── stm32f407vet6/                      ← 硬件参考：STM32F407VET6 MCU
+├── two-axis-gimbal/                    ← 硬件参考：二轴云台
 ├── src/                                ← 源代码
 │   ├── air_ground_interfaces/          ← 自定义消息/服务
 │   ├── air_ground_drone_bringup/       ← 无人机仿真
