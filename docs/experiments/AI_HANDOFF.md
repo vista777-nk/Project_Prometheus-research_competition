@@ -64,7 +64,8 @@ bash src/deployment/validate.sh
 ## 3. 两台 Pi 的角色与固定基线
 
 两台均以 Raspberry Pi 5 Model B 8 GB、AArch64、Debian 13 Trixie、**标称 64 GB
-microSD**、UID 1000 用户 `airground` 为验收基线。ROS Noetic 不裸装在 Trixie；
+microSD**、UID 1000 运行账户为验收基线；新镜像推荐用户名 `airground`，但已有镜像
+可以保留其他用户名。容器与 bind mount 的权威契约是数字 UID 1000。ROS Noetic 不裸装在 Trixie；
 继续运行于 Focal ARM64 容器。
 
 | Pi | 角色 | 必需连接 | 不属于它的连接 |
@@ -85,7 +86,8 @@ microSD**、UID 1000 用户 `airground` 为验收基线。ROS Noetic 不裸装�
 
 ### 4.1 烧录和恢复能力
 
-1. 使用 64 位 Debian 13 Trixie，创建 UID 1000 的 `airground` 用户并预置 SSH 公钥。
+1. 使用 64 位 Debian 13 Trixie，创建 UID 1000 的运行用户并预置 SSH 公钥；新镜像推荐
+   用户名 `airground`，已有 UID 1000 用户无需改名。
 2. 为两台 Pi 记录镜像来源、烧录时间和卡的实际容量；不要把卡序列号、MAC、校园网
    临时 IP 提交进仓库。
 3. 完成一次关机、拔卡、重启验证；随后制作可恢复的镜像或克隆卡，并至少做一次

@@ -36,6 +36,8 @@ class PiFacts:
     docker_available: bool
     compose_available: bool
     devices: frozenset[str]
+    registered_devices: frozenset[str]
+    serial_console_args: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -43,6 +45,14 @@ class CheckResult:
     name: str
     ok: bool
     detail: str
+
+
+def facts_for_json(facts: PiFacts) -> dict[str, object]:
+    """将包含不可序列化集合的主机事实转换为稳定 JSON 结构。"""
+    values: dict[str, object] = asdict(facts)
+    values["devices"] = sorted(facts.devices)
+    values["registered_devices"] = sorted(facts.registered_devices)
+    return values
 
 
 def parse_key_values(text: str) -> dict[str, str]:
@@ -78,6 +88,18 @@ def command_succeeds(command: list[str]) -> bool:
         return False
 
 
+def find_serial_console_args(cmdline: str) -> tuple[str, ...]:
+    """返回会让 systemd 启动 serial-getty 的内核控制台参数。"""
+    matches = []
+    for token in cmdline.split():
+        if not token.startswith("console="):
+            continue
+        device = token.partition("=")[2].partition(",")[0]
+        if device.startswith(("serial", "ttyAMA", "ttyS")):
+            matches.append(token)
+    return tuple(matches)
+
+
 def collect_facts() -> PiFacts:
     os_release = parse_key_values(
         Path("/etc/os-release").read_text(encoding="utf-8", errors="replace")
@@ -92,6 +114,12 @@ def collect_facts() -> PiFacts:
     compose_available = docker_available and command_succeeds(
         ["docker", "compose", "version"]
     )
+    cmdline_path = Path("/proc/cmdline")
+    cmdline = (
+        cmdline_path.read_text(encoding="utf-8", errors="replace")
+        if cmdline_path.exists()
+        else ""
+    )
     known_devices = (
         "/dev/i2c-1",
         "/dev/serial0",
@@ -103,6 +131,10 @@ def collect_facts() -> PiFacts:
         "/dev/rplidar",
         "/dev/openmv",
     )
+    registered_device_paths = {
+        "/dev/i2c-1": Path("/sys/class/i2c-dev/i2c-1"),
+        "/dev/ttyAMA0": Path("/sys/class/tty/ttyAMA0"),
+    }
     return PiFacts(
         arch=platform.machine(),
         model=model,
@@ -114,7 +146,25 @@ def collect_facts() -> PiFacts:
         docker_available=docker_available,
         compose_available=compose_available,
         devices=frozenset(path for path in known_devices if Path(path).exists()),
+        registered_devices=frozenset(
+            device
+            for device, sysfs_path in registered_device_paths.items()
+            if sysfs_path.exists()
+        ),
+        serial_console_args=find_serial_console_args(cmdline),
     )
+
+
+def device_detail(facts: PiFacts, device: str, setup_hint: str) -> str:
+    """区分 overlay 未生效与 ``/dev`` 被 udev/沙箱隐藏。"""
+    if device in facts.devices:
+        return f"检测到 {device}"
+    if device in facts.registered_devices:
+        return (
+            f"内核已注册 {device}，但设备节点不可见；"
+            "检查 udev 或当前 /dev mount namespace"
+        )
+    return setup_hint
 
 
 def evaluate(facts: PiFacts, stage: str, role: str) -> list[CheckResult]:
@@ -171,15 +221,35 @@ def evaluate(facts: PiFacts, stage: str, role: str) -> list[CheckResult]:
                 CheckResult(
                     "车机 I²C",
                     "/dev/i2c-1" in facts.devices,
-                    "要求 /dev/i2c-1；启用 dtparam=i2c_arm=on 后重启",
+                    device_detail(
+                        facts,
+                        "/dev/i2c-1",
+                        "要求 /dev/i2c-1；启用 dtparam=i2c_arm=on 后重启",
+                    ),
                 )
             )
         results.append(
             CheckResult(
                 "40 针排针 UART",
                 "/dev/ttyAMA0" in facts.devices,
-                "要求 /dev/ttyAMA0；Pi 5 启用 dtoverlay=uart0-pi5 后重启。"
-                " /dev/ttyAMA10 只是 3 针调试口",
+                device_detail(
+                    facts,
+                    "/dev/ttyAMA0",
+                    "要求 /dev/ttyAMA0；Pi 5 启用 dtoverlay=uart0-pi5 后重启。"
+                    " /dev/ttyAMA10 只是 3 针调试口",
+                ),
+            )
+        )
+        results.append(
+            CheckResult(
+                "串口登录控制台",
+                not facts.serial_console_args,
+                "禁止 serial*/ttyAMA*/ttyS* 的 console= 参数；"
+                + (
+                    "检测到 " + ", ".join(facts.serial_console_args)
+                    if facts.serial_console_args
+                    else "当前未启用串口控制台"
+                ),
             )
         )
 
@@ -201,14 +271,13 @@ def main(argv: list[str] | None = None) -> int:
     ok = all(result.ok for result in results)
 
     if args.json:
-        serializable_facts = {**asdict(facts), "devices": sorted(facts.devices)}
         print(
             json.dumps(
                 {
                     "ok": ok,
                     "stage": args.stage,
                     "role": args.role,
-                    "facts": serializable_facts,
+                    "facts": facts_for_json(facts),
                     "checks": [asdict(result) for result in results],
                 },
                 ensure_ascii=False,

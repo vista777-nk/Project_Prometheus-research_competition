@@ -284,18 +284,26 @@ if command -v systemd-analyze >/dev/null 2>&1; then
     unit_path="${REPO_ROOT}/src/deployment/systemd:/lib/systemd/system:/usr/lib/systemd/system"
     out="$(SYSTEMD_UNIT_PATH="${unit_path}" systemd-analyze verify "${units[@]}" 2>&1 || true)"
     # CI 上 /opt/air-ground 并不存在, "路径找不到"是预期告警, 只看真正的语法错误
-    # 受限容器里 systemd 245 还会尝试建立 Varlink/socket 连接；这是分析器环境
-    # 的限制，不是 unit 语法。过滤条件保留具体前缀，不能吞掉通用 parse 错误。
+    # 受限容器里 systemd 还会尝试建立 Varlink/socket 或 SO_PASSCRED；这是分析器环境
+    # 的限制，不是 unit 语法。SO_PASSCRED 被拒时分析器可能在读 unit 前就退出，必须
+    # 报 SKIP，不能过滤后写成 PASS。过滤条件保留具体前缀，不能吞掉通用 parse 错误。
+    analyzer_blocked=0
+    if echo "${out}" | grep -q '^SO_PASSCRED failed: Operation not permitted$'; then
+        analyzer_blocked=1
+    fi
     real="$(echo "${out}" \
         | grep -vE 'Failed to (open|resolve)|does not exist|not found|No such file' \
         | grep -vE 'Failed to (bind to varlink socket|set up Varlink server)|connect\(\) failed' \
+        | grep -v '^SO_PASSCRED failed: Operation not permitted$' \
         | grep -vE 'Command (/opt/air-ground|/usr/local/lib/air-ground|/home/[^/]+/\.local/lib/air-ground)/.* is not executable' \
         | grep -v '^[[:space:]]*$' || true)"
-    if [[ -z "${real}" ]]; then
-        pass "${#units[@]} 个 systemd 单元语法正确"
-    else
+    if [[ -n "${real}" ]]; then
         fail "systemd 单元有语法问题"
         echo "${real}" | sed 's|^.*/src/deployment/systemd/|      |' | sort -u
+    elif [[ ${analyzer_blocked} -eq 1 ]]; then
+        skip "systemd-analyze 被当前沙箱拒绝 SO_PASSCRED；完整单元语法由 CI 校验"
+    else
+        pass "${#units[@]} 个 systemd 单元语法正确"
     fi
 else
     skip "systemd-analyze 不可用 (非 Linux) —— 完整单元语法由 CI 校验"

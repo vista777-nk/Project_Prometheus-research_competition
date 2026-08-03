@@ -3,9 +3,11 @@
 > **Task-12** · Phase 1 基础设施 · 两台树莓派5（车机 + 无人机）共用一套配置
 >
 > 状态：配置完成并通过静态校验（45 个健康检查 Host 用例 + 10 个入口模式用例 +
-> 9 个服务器常驻部署用例 + 10 个 Pi 主机预检用例；`validate.sh` 55/55）·
-> **尚未在真实树莓派上执行过**，
-> 服务器常驻服务已实机安装；已知限制见 §9；
+> 9 个服务器常驻部署用例 + 17 个 Pi 主机预检用例；`validate.sh` 53 通过、0 失败、
+> 2 跳过）· 当前独立台架 Pi 5 / Debian 13 主机基线与 Docker/Compose 已实机验证，
+> I²C/UART 已在配置后重启，实际 `/dev` 节点可打开，`car` deploy 预检 10/10；
+> 边缘镜像、`/opt` 安装、角色服务与真实传感器仍未验证，服务器常驻服务已实机安装；
+> 已知限制见 §9；
 > `EDGE_MODE` 的失败关闭语义见 §5.4 与 ADR-0015
 >
 > 明天在 Pi 上接手时先读
@@ -168,7 +170,8 @@ src/deployment/
 1. Raspberry Pi Imager 烧 **64 位 Debian 13（Trixie）树莓派系统**，目标卡按
    **标称 64 GB** 验收（代表机当前的 32 GB 卡只用于采样，将被替换）
 2. 烧录前在 Imager 的高级选项里设好：主机名（`car-pi` / `drone-pi`）、
-   用户名 `airground`、**勾选启用 SSH 并粘贴公钥**
+   推荐用户名 `airground`、**勾选启用 SSH 并粘贴公钥**。已有镜像可以保留其他
+   用户名，但该账户的数字 UID 必须是 1000；安装器以 UID 为准解析真实账户。
 3. 首次开机后：
 
 ```bash
@@ -185,6 +188,11 @@ python3 src/deployment/healthcheck/check_pi_host.py --stage deploy --role car
 # 无人机使用 --role drone
 ```
 
+deploy 预检同时区分三种状态：设备节点存在才通过；sysfs 已注册但 `/dev` 不可见时，
+提示检查 udev 或当前 mount namespace；两者都没有时，才提示重新检查 boot overlay。
+它还拒绝 `console=serial*`、`console=ttyAMA*` 或 `console=ttyS*`，避免设备节点存在但
+仍被登录控制台占用的假绿灯。
+
 确认的 Pi 5 / Debian 13 / 8 GB / 64 GB 基线、实测状态和待定项见
 [`../../docs/experiments/phase-1.5-hardware-baseline.md`](../../docs/experiments/phase-1.5-hardware-baseline.md)。
 
@@ -197,9 +205,36 @@ python3 src/deployment/healthcheck/check_pi_host.py --stage deploy --role car
 
 ### 4.2 装 Docker
 
+在项目冻结的 Debian 13 (Trixie) ARM64 基线上，优先使用发行版包。`docker.io`
+只提供 daemon；在 `--no-install-recommends` 或最小化安装中必须显式安装 CLI，Compose
+由 Debian 的 `docker-compose` 包提供（命令仍是现代的 `docker compose`）：
+
+```bash
+sudo apt update
+sudo apt install -y docker.io docker-cli docker-compose
+sudo systemctl enable --now docker
+AIR_GROUND_HOST_USER="$(getent passwd 1000 | cut -d: -f1)"
+sudo usermod -aG docker "${AIR_GROUND_HOST_USER}"
+newgrp docker           # 或重新登录
+docker version
+docker compose version
+```
+
+2026-08-03 在 Raspberry Pi 5 / Debian 13 上实测版本为 Docker 26.1.5、Compose 2.26.1。
+不要在这台基线上把 Ubuntu/Docker CE 专用的 `docker-compose-plugin` 包名照抄过来；它
+不在 Debian Trixie 的默认仓库中。若现场采用别的发行版，仍必须以
+`docker compose version` 成功作为验收条件。
+
+只有 Docker daemon/CLI 验证通过后才继续镜像步骤。Phase 1 使用离线镜像，不要用
+`docker run hello-world` 或 `docker compose pull` 把联网成功误当作部署就绪；实际边缘
+镜像必须由 `update-image.sh` 校验 SHA-256、架构和剩余空间后加载。
+
+旧版/非 Debian 主机如确实需要 Docker 官方安装脚本，可使用：
+
 ```bash
 curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker airground
+AIR_GROUND_HOST_USER="$(getent passwd 1000 | cut -d: -f1)"
+sudo usermod -aG docker "${AIR_GROUND_HOST_USER}"
 newgrp docker           # 或重新登录
 docker run --rm hello-world
 ```
@@ -255,7 +290,7 @@ docker build -f src/deployment/docker/Dockerfile.edge -t air-ground-edge:v1 .
 sudo bash src/deployment/install.sh --role car        # 无人机用 --role drone
 ```
 
-`install.sh` 做了什么：建目录与 `airground` 用户 → 拷配置到 `/opt/air-ground`
+`install.sh` 做了什么：解析/创建 UID 1000 运行账户 → 拷配置到 `/opt/air-ground`
 → 装 udev 规则 → 按角色装 chrony → 装 logrotate 与 journald 持久化 → 装 systemd 单元。
 
 **不做**的事：不自动 enable 服务、不装 SSH 加固、不覆盖已存在的 `.env`。
@@ -305,7 +340,7 @@ sudo systemctl enable --now air-ground-healthcheck.timer
 ### 4.8 SSH 加固（**最后一步，顺序不能反**）
 
 ```bash
-ssh airground@192.168.1.10 'echo ok'          # 先确认密钥能登录
+ssh "$(getent passwd 1000 | cut -d: -f1)"@192.168.1.10 'echo ok'  # 先确认密钥能登录
 sudo install -m 0644 src/deployment/ssh/sshd_hardening.conf \
     /etc/ssh/sshd_config.d/10-air-ground.conf
 sudo sshd -t                                   # 语法检查，这一步不能跳
@@ -569,18 +604,14 @@ bash src/deployment/validate.sh
 
 ## 9. 已知限制
 
-- **整套配置尚未在真实树莓派上执行过。** Phase 1 手上没有硬件，
-  本任务的目标是"静态可校验 + CI 可构建"。首次上机必须按 §4 逐步走，
-  不要跳步。
-- **`docker build` 未在本地执行过**（开发机是 Windows，无 Docker）。
-  由 CI 的 `build-edge-image` job 首次验证。ARM64 构建更是只能在 CI 上做
-  （需要 buildx + qemu）。首次运行即失败于 `pip3 install pymavlink`，
-  修复见 `Dockerfile.edge` §Python 依赖的注释——**该修复同样未能在本地验证**，
-  是照着"pip 20.0.2 不认 PEP 600 轮子标签"这条推断做的，
-  并同时堵住了另外两条可能的失败路径（apt 预装 lxml/future、pip 升级）。
-- **`systemd-analyze verify` 已在 Ubuntu 20.04 实验室服务器执行**。校验器会隔离
-  `/etc/systemd/system` 的宿主机单元，并过滤受限环境的 Varlink 连接噪声；项目
-  10 个系统/用户单元通过。
+- **真实 Pi 已完成宿主机入口验收。** 当前 Pi 尚未连接底盘或项目外设；Pi 5 /
+  Debian 13、Docker/Compose、boot overlay、串口控制台释放和实际 I²C/UART 节点打开
+  已实测，`car` deploy 预检 10/10。`/opt` 安装、角色服务和真实传感器仍未验收。
+- **ARM64 边缘镜像尚未在本机加载或构建。** CI 的 `build-edge-image` job 已验证构建；
+  现场仍应优先取得带 SHA-256 的离线镜像包，再由 `update-image.sh` 检查架构、空间和
+  哈希。本机 Docker Hub 访问曾超时，不能依赖现场在线构建作为恢复方案。
+- **`systemd-analyze verify` 已在当前 Pi 直接执行。** 未安装到 `/opt` 时，分析器只报告
+  预期的命令路径不存在；`validate.sh` 过滤该项后确认项目 10 个系统/用户单元语法通过。
 - **udev 规则里的 VID/PID 与序列号需上机核对。** 915 MHz 地面电台和 RPLIDAR
   可能使用相同 USB-UART 芯片，必须靠序列号区分。规则里留的是
   `REPLACE_WITH_*_SERIAL` 占位符 —— 不填的话那两条规则不匹配任何设备，
@@ -590,8 +621,9 @@ bash src/deployment/validate.sh
   未确认；默认只读，确认 SiK 和参数备份前禁止 `--apply`。
 - **UART / I²C real 后端已实现但尚未接真实传感器验证**；HC-SR04 已按
   ADR-0013 归底盘 MCU，最终 pinmux 未定时不会发布首帧，Pi 入口会失败关闭。
-- **Pi 5 当前仅看到 `/dev/ttyAMA10` 不足以部署。** 它是 3 针调试口；40 针
-  GPIO14/15 需 `dtoverlay=uart0-pi5` 并验收 `/dev/ttyAMA0`。
+- **Pi 5 的 `/dev/ttyAMA0` 已在宿主终端打开，但尚未做电气通信验收。** 3 针
+  `ttyAMA10` 不是生产接口，当前 `/dev/serial0` 仍指向它；生产配置必须显式使用
+  GPIO14/15 对应的 `/dev/ttyAMA0`。连接 MCU 后仍需验证波特率、收发和看门狗。
 - **双 Raspberry Pi Camera 模式暂时失败关闭。** 电子组给出具体型号、CSI 端口和
   libcamera profile 后再补驱动；D435i 路径已进入真实 launch。
 - **降级状态目前只覆盖 `car_edge_real.launch` 这一种情况。** 传感器掉线、

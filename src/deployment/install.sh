@@ -21,6 +21,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DEPLOY_DIR="${REPO_ROOT}/src/deployment"
 TARGET="/opt/air-ground"
 LOG_DIR="/var/log/air-ground"
+HOST_UID=1000
+HOST_USER=""
+HOST_GID=""
 
 ROLE=""
 DRY_RUN=0
@@ -62,42 +65,66 @@ note() { printf '\033[1m%s\033[0m\n' "$*"; }
 # =============================================================================
 note "[1/8] 建立目录与用户"
 # =============================================================================
-if ! id airground >/dev/null 2>&1; then
-    run useradd --system --create-home --home-dir /home/airground \
-        --shell /bin/bash --uid 1000 airground || true
+passwd_entry="$(getent passwd "${HOST_UID}" || true)"
+if [[ -z "${passwd_entry}" ]]; then
+    if [[ ${DRY_RUN} -eq 1 ]]; then
+        HOST_USER="airground"
+        HOST_GID=1000
+        run useradd --system --create-home --home-dir /home/airground \
+            --shell /bin/bash --uid "${HOST_UID}" airground
+    else
+        useradd --system --create-home --home-dir /home/airground \
+            --shell /bin/bash --uid "${HOST_UID}" airground
+        passwd_entry="$(getent passwd "${HOST_UID}")"
+    fi
 fi
-# uid 1000 要与镜像内的 airground 一致, 否则挂进容器的日志目录属主对不上,
-# 容器里写不进去 (症状: ROS 日志目录是空的, 但节点没报错)。
-run usermod -aG docker,dialout,i2c,plugdev,video airground || true
 
-run install -d -m 0755 -o airground -g airground "${TARGET}"
-run install -d -m 0755 -o airground -g airground "${LOG_DIR}"
+if [[ -n "${passwd_entry}" ]]; then
+    IFS=: read -r HOST_USER _ resolved_uid HOST_GID _ <<< "${passwd_entry}"
+    if [[ "${resolved_uid}" != "${HOST_UID}" || -z "${HOST_USER}" \
+          || -z "${HOST_GID}" ]]; then
+        echo "无法解析 UID ${HOST_UID} 的宿主机账户" >&2
+        exit 1
+    fi
+fi
+
+# 数字 uid 1000 要与镜像内的 airground 一致，宿主机用户名可以不同。否则挂进容器
+# 的日志目录属主对不上，容器里写不进去（症状: ROS 日志目录是空的，但节点没报错）。
+note "    宿主机运行账户: ${HOST_USER} (uid=${HOST_UID}, gid=${HOST_GID})"
+run usermod -aG docker,dialout,i2c,plugdev,video "${HOST_USER}"
+
+# 所有落盘文件使用数字 uid/gid；不能把镜像内用户名误当成宿主机账户名。
+run install -d -m 0755 -o "${HOST_UID}" -g "${HOST_GID}" "${TARGET}"
+run install -d -m 0755 -o "${HOST_UID}" -g "${HOST_GID}" "${LOG_DIR}"
 
 # =============================================================================
 note "[2/8] 部署配置文件到 ${TARGET}"
 # =============================================================================
 for sub in docker systemd scripts healthcheck network chrony ssh logging; do
-    run install -d -m 0755 -o airground -g airground "${TARGET}/${sub}"
+    run install -d -m 0755 -o "${HOST_UID}" -g "${HOST_GID}" "${TARGET}/${sub}"
 done
 
 # compose / entrypoint / .env.example
 for f in "${DEPLOY_DIR}"/docker/*.yml "${DEPLOY_DIR}"/docker/.env.example; do
-    run install -m 0644 -o airground -g airground "${f}" "${TARGET}/docker/"
+    run install -m 0644 -o "${HOST_UID}" -g "${HOST_GID}" \
+        "${f}" "${TARGET}/docker/"
 done
 
 # 可执行脚本
 for f in "${DEPLOY_DIR}"/scripts/*.sh; do
-    run install -m 0755 -o airground -g airground "${f}" "${TARGET}/scripts/"
+    run install -m 0755 -o "${HOST_UID}" -g "${HOST_GID}" \
+        "${f}" "${TARGET}/scripts/"
 done
 for f in "${DEPLOY_DIR}"/healthcheck/*.py "${DEPLOY_DIR}"/healthcheck/*.sh; do
-    run install -m 0755 -o airground -g airground "${f}" "${TARGET}/healthcheck/"
+    run install -m 0755 -o "${HOST_UID}" -g "${HOST_GID}" \
+        "${f}" "${TARGET}/healthcheck/"
 done
 
 run install -m 0644 "${DEPLOY_DIR}/README.md" "${TARGET}/README.md"
 
 # .env 只在不存在时创建, 绝不覆盖 —— 里面是各机独有的地址与 GID
 if [[ ! -f "${TARGET}/.env" ]]; then
-    run install -m 0640 -o airground -g airground \
+    run install -m 0640 -o "${HOST_UID}" -g "${HOST_GID}" \
         "${DEPLOY_DIR}/docker/.env.example" "${TARGET}/.env"
     note "    已从样例创建 ${TARGET}/.env —— **装完必须编辑它**"
 else
