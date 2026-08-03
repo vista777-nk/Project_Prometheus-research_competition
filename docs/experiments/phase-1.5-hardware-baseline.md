@@ -148,8 +148,9 @@ Pi 5 官方推荐插头处 5V/5A；A2M12 官方系统电流为 450–600mA。现
 4. `vcgencmd get_camera` 返回 “Command not registered” 不能证明相机不可用。
    D435i 走 USB3、OpenMV 走 USB 串口；双 Raspberry Pi Camera 模式需等待两枚
    相机的具体型号与 CSI/libcamera profile 后再验收。
-5. 64 GB 新卡烧录时应创建 UID 1000 的 `airground` 用户。现有 systemd 单元和
-   容器 bind mount 以这个身份为权限边界，换用别的 UID 会导致日志与设备权限错配。
+5. 64 GB 新卡烧录时应创建 UID 1000 的运行用户，推荐用户名为 `airground`；已有镜像
+   可以保留其他用户名。systemd 单元和容器 bind mount 的权限边界是数字 UID 1000，
+   换用其他 UID 会导致日志与设备权限错配。
 
 ## 8. 换卡后的两阶段预检
 

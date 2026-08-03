@@ -47,8 +47,9 @@ StartLimitBurst=5
 
 [Service]
 Type=simple
-User=airground
-Group=airground
+# 镜像与宿主 bind mount 的永久契约是数字 UID 1000，不是用户名。
+# install.sh 会解析宿主机 UID 1000 对应的实际账户并补齐设备组。
+User=1000
 WorkingDirectory=/opt/air-ground
 
 EnvironmentFile=/opt/air-ground/.env

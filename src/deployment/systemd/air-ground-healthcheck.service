@@ -23,8 +23,8 @@ After=air-ground-car-edge.service air-ground-drone-edge.service
 
 [Service]
 Type=oneshot
-User=airground
-Group=airground
+# 与 edge unit 使用同一数字 UID；宿主机用户名不参与部署契约。
+User=1000
 WorkingDirectory=/opt/air-ground
 EnvironmentFile=/opt/air-ground/.env
 

@@ -1195,6 +1195,36 @@
           Host 80/80，ARM 目标语法检查和 Clang 静态分析均通过；Ubuntu 24.04 / Cppcheck
           2.13.0 按 CI 原命令扫描 25 个固件 C 文件，零发现。
 
+###### 2026/8/3（Phase 1.5 车机 Pi 接手 · 宿主入口与失败边界）
+
+    1.实机确认当前独立台架 Pi 满足拟用车机宿主基线：Pi 5 Rev 1.1、Debian 13.6、
+          aarch64、7.9 GiB、56.8 GiB 根分区，base 预检 5/5；负责人随后澄清它尚未连接
+          任一底盘或项目外设。安装 Debian arm64 原生 Docker 26.1.5 与 Compose 2.26.1；
+          车/无人机 compose 均可解析。Docker Hub 超时，按离线镜像边界处理，没有把网络
+          拉取当部署验收。
+
+    2.启用 `dtparam=i2c_arm=on` 与 `dtoverlay=uart0-pi5`，移除串口 console 并保留
+          boot 备份。配置后重启证明 i2c-1 与 PL011 ttyAMA0 已被内核/udev 注册，活动
+          cmdline 与进程表均无 serial getty。受限执行环境起初隐藏宿主 `/dev`，恢复
+          宿主权限后两个节点均实际打开，car deploy 预检 10/10；I²C 扫描为空与当前未接
+          外设一致。USB 只有键鼠，没有项目传感器。
+
+    3.预检原来只查设备节点，overlay 已生效但 `/dev` 不可见时会错误提示再次重启。
+          现区分“内核未注册 / 内核已注册但节点隐藏 / 节点实际存在”，并阻止任何
+          serial/ttyAMA/ttyS `console=`。期间真实 JSON 运行抓到 frozenset 未序列化，
+          补回归后 Pi 主机测试 17/17。
+
+    4.安装器另有真实假设冲突：本机 UID 1000 账户是 `vista2`，硬编码 `airground`
+          会先静默创建失败，再在 `install -o airground` 中止。现在以数字 UID 1000 为
+          永久契约，解析宿主实际用户名；三个 systemd unit 同步改为 `User=1000`。
+          car dry-run 正确选择 vista2，不创建冲突账户。
+
+    5.失败尝试保留：受限沙箱的 `systemd-analyze` 首次以 SO_PASSCRED 拒绝造成
+          validate 52/1/2。分析器可能尚未读 unit，不能过滤成 PASS，现精确报 SKIP；
+          宿主权限恢复后 unit 语法实际执行通过，最终 validate 53/0/2、Phase 1 冒烟
+          62/0/3。剩余跳过项由 CI 或依赖环境覆盖；`/opt` 安装、离线镜像、角色服务和
+          真实传感器仍未关闭。
+
 ---
 
 ## 历史名称脚注
