@@ -1,0 +1,43 @@
+# Phase 1.5 同一实验室隔离网配置。
+#
+# 这份配置只适用于服务器和边缘设备位于同一受控网段的情况。跨校区部署不得把
+# 无认证的 TCP :9090 直接暴露到校园网；服务器常驻服务改用 network_server.yaml
+# 回环监听，再由后续确定的 VPN / SSH 隧道承载（ADR-0017）。
+
+drone_car_mavlink:
+  protocol: udp
+  drone_ip: 192.168.1.20
+  drone_port: 14550
+  car_ip: 192.168.1.10
+  car_port: 14551
+  heartbeat_interval: 1.0
+  target_system: 1
+  target_component: 1
+  source_system: 255
+  source_component: 190
+
+simulation_adapter:
+  enable: false
+  px4_ip: 127.0.0.1
+  px4_port: 18570
+
+edge_server_tcp:
+  protocol: tcp
+  # 同一隔离网内边缘节点的目标地址。
+  server_ip: 192.168.1.100
+  # 仅在受控隔离网内允许监听全部接口。
+  server_bind_ip: 0.0.0.0
+  server_port: 9090
+  reconnect_interval: 3.0
+  connect_timeout: 2.0
+  socket_timeout: 1.0
+  heartbeat_interval: 2.0
+  publish_rate: 10.0
+  max_payload_bytes: 10485760
+
+throttle:
+  enable: true
+  max_bandwidth_bytes_per_sec: 24000
+  image_quality: 50
+  max_image_freq: 2.0
+  lidar_downsample: 4

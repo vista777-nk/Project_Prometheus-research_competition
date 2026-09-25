@@ -1,0 +1,36 @@
+# =============================================================================
+# air-ground-healthcheck.timer — 每 30 秒触发一次健康检查
+#
+# 安装:
+#   sudo systemctl enable --now air-ground-healthcheck.timer
+# 注意 enable 的是 **.timer** 而不是 .service ——
+# enable .service 会让它开机跑一次就结束, 这是很常见的误操作。
+# =============================================================================
+
+[Unit]
+Description=Run Air-Ground edge health check every 30 seconds
+Documentation=file:///opt/air-ground/README.md
+
+# 边缘节点被主动停掉时, 连这个定时器一起停 —— 否则它会每 30 秒刷一条
+# "Master 不可达", 把一次**有意为之**的停机变成一串告警。
+# 两个角色互为 Conflicts, 只会有一个真在跑, 都列上即可 (PartOf 只对
+# 正在运行的单元生效, 没起来的那个不产生任何影响)。
+#
+# 注意这里是 PartOf 而不是 BindsTo: 边缘节点**崩了**时定时器要继续跑,
+# 那时的"Master 不可达"告警恰恰是要的。PartOf 只传播主动 stop/restart。
+PartOf=air-ground-car-edge.service air-ground-drone-edge.service
+
+[Timer]
+# 开机后 60 秒才开始: 给 docker 拉起容器 + ROS 节点注册留出时间,
+# 否则开机头几次必然报"Master 不可达", 属于噪声告警。
+OnBootSec=60
+OnUnitActiveSec=30
+AccuracySec=5
+
+# 两台 Pi 的定时器不要卡在同一毫秒去敲同一个 Master
+RandomizedDelaySec=3
+
+Unit=air-ground-healthcheck.service
+
+[Install]
+WantedBy=timers.target

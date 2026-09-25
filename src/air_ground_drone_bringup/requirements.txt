@@ -1,0 +1,11 @@
+# air_ground_drone_bringup — Python dependencies
+# 无人机边缘预处理器 + GPS 坐标转换
+
+# 图像处理
+opencv-python-headless>=4.8.0,<5.0.0
+Pillow>=9.0.0,<11.0.0
+numpy>=1.22.0,<2.0.0
+
+# ROS 桥接 (由系统 apt 提供，此处仅作记录)
+# cv-bridge (ros-noetic-cv-bridge)
+# PyYAML (python3-yaml)

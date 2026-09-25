@@ -1,0 +1,40 @@
+# mavros_signing.yaml — MAVROS 侧 MAVLink 2 签名配置 (task-14)
+#
+# -----------------------------------------------------------------------------
+# ⚠ 本文件目前**不被任何 launch 加载**, 参数名也**尚未核实**。
+#
+# task-14 §14B.4 原文给出的是 `mavros/signing/{enabled,signing_key,
+# allow_unsigned,accept_unsigned_cmd}`。落地时无法确认这几个参数在
+# ros-noetic-mavros 上真实存在:
+#   · MAVROS 的签名能力在 mavconn 库里 (MAVConnInterface::set_secret_key),
+#     但它是否有对应的 rosparam 入口, 本地没有 ROS 环境可以核实;
+#   · 直接把这份 yaml 挂进 launch 的后果是: rosparam 会老老实实把这些键
+#     塞进参数服务器, MAVROS 从头到尾不读它, **一切正常, 签名没开**。
+#     ——一个"配置文件存在即代表功能启用"的假象, 与 ADR-0008 反复记录的
+#     那类假绿灯是同一件事。
+#
+# 因此本文件当前的定位是"实机核实清单", 不是生效配置。
+#
+# 上机后 (task-15 联调) 的核实步骤:
+#   1. roslaunch mavros px4.launch    # 起 MAVROS
+#   2. rosparam list | grep -i sign   # 看真实参数名
+#   3. rosnode info /mavros           # 确认加载的插件
+#   4. 核实到名字 → 改写下面的键名, 挂进 drone launch, 删掉本段警告,
+#      并在 ADR-0010 记录结论
+#   5. 核实不到 → MAVROS 1.x 没有这个入口, 按 ADR-0010 §方案-B 处理
+# -----------------------------------------------------------------------------
+
+# 密钥**不写在这里**。这份 yaml 会进仓库, 密钥不会。
+# 实机上密钥放 /etc/air-ground/mavlink_secret.key (0600, root:root),
+# 由 src/deployment/mavlink/generate-mavlink-key.sh 生成并 scp 过去。
+mavlink_signing:
+  # 期望语义 (参数名待核实):
+  #   enabled              是否启用签名
+  #   secret_key_file      密钥文件路径 (不是密钥本身)
+  #   allow_unsigned       是否接受未签名消息。实机必须 false ——
+  #                        允许未签名等于攻击者直接绕过签名 (自测第 5 项)
+  #   accept_unsigned_cmd  是否接受未签名的命令类消息。实机必须 false
+  enabled: true
+  secret_key_file: /etc/air-ground/mavlink_secret.key
+  allow_unsigned: false
+  accept_unsigned_cmd: false

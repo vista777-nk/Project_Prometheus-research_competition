@@ -76,7 +76,7 @@ feat(task-04): 实现麦轮底盘逆运动学控制器
 
 - 新增 mecanum_controller.py
 - 支持 /car/cmd_vel → 四轮转速解算
-- 添加底盘类型动态切换服务 /car/switch_chassis
+- 添加底盘类型动态切换服务 /car/swap_chassis
 - 通过 task-04 冒烟测试
 
 Ref: task-04-mecanum-chassis.md
@@ -97,32 +97,42 @@ Ref: task-04-mecanum-chassis.md
 ### 2.1 仓库目录约定
 
 ```
-research_compitition/                   # 仓库根目录 (Git root)
+project-prometheus/                     # 仓库根目录 (Git root)
 ├── README.md                           # 项目简介与导航
 ├── CONVENTIONS.md                      # 本文档
 ├── .gitignore                          # Git 忽略规则
 │
 ├── Research_Diary.md                   # 科研日记 (持续更新)
-├── Memo_on_Division_of_Labor_Suggestions.md  # 备忘录类文档
+├── Makefile                            # 构建/测试/启动统一入口
+├── setup_all.sh                        # Ubuntu 环境一键搭建
+├── scripts/                            # 运行环境 setup + Phase 1 冒烟脚本
 │
-├── Project_Prometheus_Tasks/           # 📁 核心项目文档
+├── project-prometheus-tasks/           # 📁 核心项目文档
 │   ├── 00-OVERVIEW.md                  #   总索引
 │   ├── RESEARCH_PHILOSOPHY.md          #   设计哲学 (宪法)
 │   ├── PLATFORM.md                     #   平台架构
 │   ├── ICD.md                          #   接口控制文档
 │   ├── ROADMAP.md                      #   研究路线
-│   └── task-01~09-*.md                 #   实施任务
+│   └── task-01~15-*.md                 #   实施任务
 │
 ├── docs/                               # 📁 长期文档
+│   ├── architecture/                   #   能力矩阵 (capability_matrix.md)
 │   ├── decisions/                      #   ADR (架构决策记录)
 │   │   ├── ADR-0001.md                 #
 │   │   └── ...
-│   └── experiments/                    #   实验记录 (未来)
-│       └── ...
+│   └── experiments/                    #   实验记录 + AI 交接文档
+│       └── AI_HANDOFF.md               #
 │
-├── Obsolete_or_Outdated_Documentation/ # 📁 归档 (历史文档，只读)
+├── obsolete-documentation/             # 📁 归档 (历史文档，只读)
 │
-└── src/                                # 📁 源代码 (未来，ROS workspace 映射)
+├── imu-icm42688/                       # 📁 硬件参考：ICM42688 IMU 资料
+├── mspm0g3507/                         # 📁 硬件参考：MSPM0G3507 开发资料
+├── openmv-visual-module/               # 📁 硬件参考：OpenMV 视觉模块资料
+├── r5-general-chassis-panel-specifications/  # 📁 硬件参考：R5 底盘底板规格
+├── stm32f407vet6/                      # 📁 硬件参考：STM32F407VET6 资料
+├── two-axis-gimbal/                    # 📁 硬件参考：二轴云台资料
+│
+└── src/                                # 📁 源代码 (ROS 包 + firmware/ + deployment/)
     └── ...
 ```
 
@@ -135,20 +145,24 @@ research_compitition/                   # 仓库根目录 (Git root)
 | **不以数字开头** | ❌ `1-docs/` → ✅ `docs/` | |
 | **不嵌套过深** | 最大深度 3 层 | `docs/decisions/ADR-0001.md` ✅ |
 
-> **注意**：当前仓库中 `Project_Prometheus_Tasks/` 和 `Obsolete_or_Outdated_Documentation/` 使用了混合命名风格。这是历史遗留，将在合适时机（例如 v1.0.0 发布前）统一重命名。**在新创建的目录中，严格遵守 kebab-case。**
+> **注意**：当前仓库中 `Project_Prometheus_Tasks/` 和 `Obsolete_or_Outdated_Documentation/` 使用了混合命名风格。已于 2026-07-28 统一重命名为 `project-prometheus-tasks/` 和 `obsolete-documentation/`（`obsolete-documentation/` 内部的个别历史文件保留原文件名，归档只读）。
+>
+> 2026-08-03：六个硬件参考目录（`IMU_ICM42688/`、`MSPM0G3507/`、`OpenMV_Visual_Module/`、`R5_General_Chassis_Panel_Specifications/`、`STM32F407VET6/`、`Two-axis_gimbal/`）统一重命名为 kebab-case。**这些目录内部的子目录结构（含中文名称、数字前缀等）系厂商原始资料组织方式，保留原样不动**——仅顶层目录名遵循本规范。
+>
+> **在新创建的目录中，严格遵守 kebab-case。**
 
 ### 2.3 ROS 工作空间映射
 
-仿真代码的 ROS 工作空间位于 `~/air_ground_sim_ws/`（Ubuntu 端），其 `src/` 目录通过 Git submodule 或符号链接与仓库的 `src/` 关联：
+仿真代码的 ROS 工作空间位于 `~/air_ground_sim_ws/`（Ubuntu 端），其 `src/` 目录与仓库的 `src/` 关联（仓库 `src/` 即真实源码，可通过符号链接挂入工作空间；本仓库不使用 Git submodule）：
 
 ```
 ~/air_ground_sim_ws/          # ROS 工作空间 (在 Ubuntu 上)
 ├── src/
 │   ├── air_ground_interfaces/   # 自定义消息包
-│   ├── drone_sitl/              # 无人机仿真
-│   ├── car_sim/                 # 车机仿真
-│   ├── com_bridge/              # 通信桥
-│   ├── edge_server/             # 边缘预处理 + 服务端
+│   ├── air_ground_drone_bringup/              # 无人机仿真
+│   ├── air_ground_car_bringup/                 # 车机仿真
+│   ├── air_ground_com_bridge/              # 通信桥
+│   ├── air_ground_lab_server/             # 边缘预处理 + 服务端
 │   └── ...
 ├── build/
 ├── devel/
@@ -172,7 +186,7 @@ research_compitition/                   # 仓库根目录 (Git root)
 | YAML 配置 | `snake_case.yaml` | `sensor_config.yaml`, `robot_params.yaml` |
 | Shell 脚本 | `snake_case.sh` | `setup_all.sh`, `test_bridge.sh` |
 | URDF/Xacro | `snake_case.urdf.xacro` | `diff_chassis.urdf.xacro` |
-| ADR 文档 | `ADR-NNNN-kebab-case.md` | `ADR-0001-adopt-conventional-commits.md` |
+| ADR 文档 | `ADR-NNNN.md` | `ADR-0001.md`, `ADR-0012.md` |
 
 ### 3.2 ROS 命名
 
@@ -185,10 +199,10 @@ air_ground_<功能>
 | Package | 层级 | 功能 |
 |---------|:---:|------|
 | `air_ground_interfaces` | Layer 3 | 自定义消息/服务定义 |
-| `drone_sitl` | Layer 1 | 无人机仿真 |
-| `car_sim` | Layer 1 | 车机仿真 |
-| `com_bridge` | Layer 2 | 空地/车服通信桥 |
-| `edge_server` | Layer 2~3 | 边缘预处理 + 服务端 |
+| `air_ground_drone_bringup` | Layer 1 | 无人机仿真 |
+| `air_ground_car_bringup` | Layer 1 | 车机仿真 |
+| `air_ground_com_bridge` | Layer 2 | 空地/车服通信桥 |
+| `air_ground_lab_server` | Layer 2~3 | 边缘预处理 + 服务端 |
 | `air_ground_vlm` | Layer 4 | VLM 研究模块 |
 | `air_ground_slam` | Layer 4 | SLAM 研究模块 |
 | `air_ground_planner` | Layer 4 | Planner 研究模块 |
@@ -241,7 +255,7 @@ air_ground_<功能>
 
 | 模式 | 示例 |
 |------|------|
-| 切换底盘 | `/car/switch_chassis` |
+| 切换底盘 | `/car/swap_chassis` |
 | 起飞/降落 | `/drone/takeoff`, `/drone/land` |
 | 查询能力 | `/car/get_capability` |
 
@@ -355,8 +369,8 @@ class ObservationAggregator:
 
 ### 4.5 文档规范
 
-- **ADR 不可变**：已采纳的 ADR 永远不修改，只由新 ADR 替代。详见 [RESEARCH_PHILOSOPHY.md §二](./Project_Prometheus_Tasks/RESEARCH_PHILOSOPHY.md#二architecture-decision-records-adr)。
-- **Obsolete 不删除**：过时的文档移入 `Obsolete_or_Outdated_Documentation/`，保留历史。
+- **ADR 不可变**：已采纳的 ADR 永远不修改，只由新 ADR 替代。详见 [RESEARCH_PHILOSOPHY.md §二](./project-prometheus-tasks/RESEARCH_PHILOSOPHY.md#二architecture-decision-records-adr)。
+- **Obsolete 不删除**：过时的文档移入 `obsolete-documentation/`，保留历史。
 - **日记持续更新**：`Research_Diary.md` 记录关键决策、遇到的问题、解决思路。格式自由，但**必须写日期**。
 
 ### 4.6 代码审查清单
@@ -396,4 +410,4 @@ class ObservationAggregator:
 
 ---
 
-*版本: v1.0 · 日期: 2026-07-25 · 起草者: DeepSeek（依据 ChatGPT 终审意见整理）*
+*版本: v1.2 · 日期: 2026-08-03 · 起草者: DeepSeek（依据 ChatGPT 终审意见整理）；v1.2：仓库根目录名同步为 project-prometheus*

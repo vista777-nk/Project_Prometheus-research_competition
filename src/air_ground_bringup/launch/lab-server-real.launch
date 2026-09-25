@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<!--
+  Phase 1.5 实验室服务器裸机入口。
+
+  与 server_only.launch 不同：后者是 Phase 0 单机仿真入口，会同时启动
+  edge_server_bridge 客户端并连回自己；本文件只启动真正属于服务器的 TCP
+  接收端、World Model 与研究占位节点。边缘客户端必须运行在车机侧。
+-->
+<launch>
+  <arg name="network_config"
+       default="$(find air_ground_com_bridge)/config/network_server.yaml"/>
+  <arg name="server_config"
+       default="$(find air_ground_lab_server)/config/server_params.yaml"/>
+  <arg name="start_research_placeholders" default="true"/>
+
+  <include file="$(find air_ground_lab_server)/launch/server.launch">
+    <arg name="network_config" value="$(arg network_config)"/>
+    <arg name="server_config" value="$(arg server_config)"/>
+    <arg name="start_tcp" value="true"/>
+    <arg name="start_world_model" value="true"/>
+    <arg name="start_research_placeholders"
+         value="$(arg start_research_placeholders)"/>
+    <arg name="required_nodes" value="true"/>
+  </include>
+</launch>

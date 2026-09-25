@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>air_ground_car_bringup</name>
+  <version>0.1.0</version>
+  <description>Gazebo and ros_control bringup for interchangeable ground chassis.</description>
+
+  <maintainer email="1687305011@qq.com">Project Prometheus Maintainers</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>air_ground_interfaces</depend>
+  <depend>controller_manager</depend>
+  <depend>controller_manager_msgs</depend>
+  <depend>cv_bridge</depend>
+  <depend>gazebo_msgs</depend>
+  <depend>gazebo_dev</depend>
+  <depend>gazebo_ros</depend>
+  <depend>gazebo_ros_control</depend>
+  <depend>geometry_msgs</depend>
+  <depend>hardware_interface</depend>
+  <depend>nav_msgs</depend>
+  <depend>roscpp</depend>
+  <depend>rospy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>topic_tools</depend>
+
+  <exec_depend>diff_drive_controller</exec_depend>
+  <exec_depend>gazebo_plugins</exec_depend>
+  <exec_depend>joint_state_controller</exec_depend>
+  <exec_depend>position_controllers</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>python3-serial</exec_depend>
+  <exec_depend>python3-smbus</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>roslaunch</exec_depend>
+  <exec_depend>rosnode</exec_depend>
+  <exec_depend>rosparam</exec_depend>
+  <exec_depend>rosservice</exec_depend>
+  <exec_depend>rostopic</exec_depend>
+  <exec_depend>velocity_controllers</exec_depend>
+  <exec_depend>xacro</exec_depend>
+
+  <test_depend>python3-nose</test_depend>
+
+  <export/>
+</package>

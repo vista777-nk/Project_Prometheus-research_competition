@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- D435i 是可换载荷；飞行姿态仍以 Pixhawk IMU 为准，避免两套 IMU 混用。 -->
+  <arg name="serial_no" default=""/>
+
+  <include file="$(find realsense2_camera)/launch/rs_camera.launch">
+    <arg name="serial_no" value="$(arg serial_no)"/>
+    <arg name="device_type" value="d435i"/>
+    <arg name="depth_width" value="640"/>
+    <arg name="depth_height" value="480"/>
+    <arg name="depth_fps" value="15"/>
+    <arg name="color_width" value="640"/>
+    <arg name="color_height" value="480"/>
+    <arg name="color_fps" value="15"/>
+    <arg name="enable_depth" value="true"/>
+    <arg name="enable_color" value="true"/>
+    <arg name="enable_gyro" value="false"/>
+    <arg name="enable_accel" value="false"/>
+    <arg name="enable_pointcloud" value="true"/>
+    <arg name="enable_sync" value="true"/>
+    <arg name="align_depth" value="true"/>
+    <arg name="initial_reset" value="true"/>
+  </include>
+</launch>

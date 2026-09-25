@@ -1,0 +1,45 @@
+# .dockerignore — 构建上下文裁剪
+#
+# 上下文从仓库根发送到 docker daemon。不裁剪的话每次构建都要传
+# .git (几十 MB) 和固件源码, 在树莓派上本地构建时这个代价很直接。
+
+.git
+.github
+.gitignore
+.gitattributes
+
+# 固件是交叉编译产物, 与边缘节点镜像无关
+src/firmware/
+
+# 文档与归档
+docs/
+project-prometheus-tasks/
+obsolete-documentation/
+*.md
+!src/deployment/README.md
+
+# 仿真专用资产 (实机边缘节点不需要 Gazebo 世界与模型)
+**/worlds/
+**/models/
+
+# 构建产物与缓存
+**/build/
+**/devel/
+**/install/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+
+# 本地环境与密钥 —— 绝不能进镜像层
+.env
+.env.*
+!.env.example
+**/*.pem
+**/*_rsa
+**/*_ed25519
+**/id_*
+**/authorized_keys
+**/*.nmconnection
+
+# 离线镜像包 (自己不能装进自己)
+**/*.tar

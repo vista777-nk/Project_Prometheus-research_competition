@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="network_config"
+       default="$(find air_ground_com_bridge)/config/network.yaml"/>
+  <arg name="server_config"
+       default="$(find air_ground_lab_server)/config/server_params.yaml"/>
+  <arg name="start_drone_bridge" default="true"/>
+  <arg name="start_edge_bridge" default="true"/>
+
+  <include file="$(find air_ground_lab_server)/launch/server.launch">
+    <arg name="network_config" value="$(arg network_config)"/>
+    <arg name="server_config" value="$(arg server_config)"/>
+  </include>
+  <include file="$(find air_ground_com_bridge)/launch/air_ground_com_bridge.launch">
+    <arg name="config_file" value="$(arg network_config)"/>
+    <arg name="start_drone_bridge" value="$(arg start_drone_bridge)"/>
+    <arg name="start_edge_bridge" value="$(arg start_edge_bridge)"/>
+  </include>
+</launch>

@@ -22,8 +22,9 @@
 
 | 阶段 | 状态 | 安全策略 |
 |------|:---:|---------|
-| **Phase 0: 仿真搭建** (当前) | 🟢 活跃 | 本地 localhost 通信，无外部暴露。重点关注代码仓库安全。 |
-| **Phase 1: 实机调试** (2026.08+) | 🔴 计划中 | 启用 MAVLink 签名、SSH 密钥认证、内网 VLAN 隔离 |
+| **Phase 0: 仿真搭建** | 🟢 9/9 tasks 已完成 | 本地 localhost 通信，无外部暴露。MAVLink UDP (18570) + TCP JSON (长度帧) 已实现，仅绑定 127.0.0.1。 |
+| **Phase 1: 固件+部署** | 🟢 6/6 tasks 已完成 | MAVLink 签名脚本、SSH 加固、部署配置已就位（待实机联调） |
+| **Phase 1.5: 实机调试** (2026.08+) | 🟡 进行中 | 服务器本地 ROS + 回环 TCP；跨校区须受控隧道；MAVLink 签名待真机核实 |
 | **Phase 2: 竞赛/论文** (2027+) | 🔴 计划中 | 完整安全加固 + 实验数据完整性校验 |
 
 ---
@@ -33,12 +34,15 @@
 ### 1. 最小网络暴露
 - 仿真阶段所有通信绑定 `127.0.0.1`
 - 实机阶段使用内网隔离，实验室服务器不直接暴露于公网
-- 3DR 数传使用点对点模式，不广播
+- 915 MHz/500 mW 数传只作为 Pixhawk TELEM1 ↔ 地面站点对点 MAVLink 链路；
+  型号/固件未确认前不运行 SiK 参数写入脚本
 
 ### 2. 通信链路防护
 - **MAVLink**: 实机阶段启用 MAVLink 2 消息签名 (`MSG_SIGNATURE`)
-- **TCP JSON 桥**: 仅在内网使用；未来若需远程访问，须加 TLS
+- **TCP JSON 桥**: 当前无 TLS/对端认证；同一隔离网外只允许经批准的 VPN/SSH
+  隧道访问回环监听，禁止直接暴露 9090
 - **ROS**: 仿真阶段使用默认 `ROS_MASTER_URI=http://localhost:11311`
+- **跨校区 ROS**: ROS 1 Master/TCPROS 不跨 WAN；服务器 ROS 图固定在本机
 
 ### 3. 固件与硬件安全
 - Pixhawk 飞控参数 (`*.params`) 在每次飞行前校验，禁止不明来源的参数文件
@@ -68,8 +72,7 @@
 
 请通过以下方式联系：
 
-> **Email**: [项目维护者邮箱]  
-> **议题**: 在仓库中创建私有安全通告（如平台支持）  
+> **议题**: 在 [GitHub 仓库](https://github.com/vista777-nk/Project_Prometheus-research_competition) 创建私有安全通告（Security Advisories）
 > **响应时间**: 通常在 7 天内确认，30 天内给出修复方案
 
 **注意**：请勿在公开 Issue 中披露安全漏洞细节。
@@ -82,7 +85,7 @@
 
 ```
 PX4-Autopilot v1.14 → MAVLink v2 → MAVROS
-ROS Noetic → Gazebo 9
+ROS Noetic → Gazebo 11
 Python 3.8+ → PyTorch / Transformers (推理)
 ```
 
@@ -92,5 +95,5 @@ Python 3.8+ → PyTorch / Transformers (推理)
 
 ---
 
-*最后更新：2026-07-25*  
-*下一审查日期：实机调试启动前 (2026.08)*
+*最后更新：2026-08-01（Phase 1.5 跨校区边界，见 ADR-0017）*
+*下一审查日期：VPN/SSH 隧道方案确定前*

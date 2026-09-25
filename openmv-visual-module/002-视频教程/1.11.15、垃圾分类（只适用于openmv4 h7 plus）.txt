@@ -1,0 +1,5 @@
+官方教程地址：
+文档地址：https://book.openmv.cc/project/rubbish.html
+可参考口罩识别的神经网络训练方式，只是将戴口罩和不戴口罩换成了各种垃圾物品：
+OpenMV4 Plus训练神经网络进行口罩识别：https://singtown.com/learn/50872/
+程序使用我们源码例程文件夹中对应的程序即可。

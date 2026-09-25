@@ -1,0 +1,28 @@
+# Task-07 drone edge-preprocessor configuration.
+publish_rate: 10.0
+sensor_timeout: 2.0
+battery_voltage: 11.1
+frame_id: drone/base_link
+state_frame_id: map
+jpeg_quality: 40
+max_rgb_width: 320
+
+topics:
+  rgb: /drone/camera/rgb/image_raw
+  depth: /drone/camera/depth/image_raw
+  imu: /mavros/imu/data
+  pose: /drone/gps/local_pose
+  mavros_state: /mavros/state
+  observation: /drone/observation
+  state: /drone/state
+  capability: /drone/capability
+
+capability:
+  locomotion_type: aerial
+  max_speed: 5.0
+  max_endurance: 900.0
+  sensor_modalities: [rgb, depth, imu, gps]
+  sensor_range: 8.0
+  compute_tier: edge_high
+  max_payload_kg: 0.5
+  has_gripper: false

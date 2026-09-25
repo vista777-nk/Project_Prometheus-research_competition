@@ -84,7 +84,14 @@ CMakeFiles/
 cmake_install.cmake
 CTestTestfile.cmake
 Makefile
+!/Makefile
 !tasks/**/Makefile
+# 固件项目的 Makefile 是手写源码，不是 CMake 生成物，必须入库
+!src/firmware/**/Makefile
+
+# 固件构建产物 (build/ 已被上面的 ROS 规则覆盖，这里补上散落的镜像文件)
+*.elf
+*.map
 
 # === IDE / Editor ===
 .vscode/
@@ -106,6 +113,12 @@ $RECYCLE.BIN/
 # === Environment & Secrets ===
 .env
 .env.*
+# 例外: 带注释的样例必须入库 —— install.sh 拿它生成各机的 .env,
+# README §4.5 也引用它。规则本身是对的 (真实 .env 含各机地址与将来的口令),
+# 但"按文件名"的忽略规则每次新增子项目都要复查一遍例外 ——
+# 与 2026-07-28 固件 Makefile 被裸 `Makefile` 规则吞掉是同一类问题。
+!.env.example
+!**/.env.example
 *.secret
 config/secrets.yaml
 config/local.yaml
@@ -123,3 +136,42 @@ temp/
 *.rar
 *.7z
 !models/**/*.zip
+
+# ── 部署密钥与本地覆盖 (task-12) ──
+# 私钥绝不入库。generate-ssh-keys.sh 只在本地 ~/.ssh 下生成，
+# 但有人可能手滑把密钥拷进部署目录, 这里做第二道拦截。
+*.pem
+*_rsa
+*_ed25519
+id_*
+!id_*.pub.example
+src/deployment/**/*.key
+src/deployment/**/authorized_keys
+# 各机实际的网络配置由模板生成, 含 WiFi 口令, 不入库
+src/deployment/network/*.nmconnection
+!src/deployment/network/*.nmconnection.template
+# 离线镜像包 (*.tar.gz 上面的 Archives 段已覆盖)
+src/deployment/**/*.tar
+
+# ── MAVLink 签名密钥 (task-14) ──
+# 这把钥匙一旦泄露, 数传链路的签名就完全失效 —— 攻击者可以伪造任意
+# MAVLink 消息, 包括解锁与航点。它比 SSH 私钥更值得多拦几道:
+#   第一道 generate-mavlink-key.sh 默认写到 ~/.config/air-ground/, 且拒绝往工作区写
+#   第二道 就是下面这几条
+#   第三道 validate.sh §5 扫 src/deployment/ 下的 *.key
+# 刻意**不**写裸的 `*.key`: 上面 Makefile 那条注释记着教训 ——
+# 按文件名的宽泛规则迟早会吞掉一个该入库的文件, 而且是静默吞掉。
+# 这里只拦真正的密钥命名, 兜底交给上面那条 src/deployment/**/*.key。
+mavlink_secret.key
+*_secret.key
+
+# ── 标定原始数据 (task-15) ──
+# 标定结果 (*.yaml / REPORT.md) **要入库** —— 它们是文本、体积小、
+# 是实验记录的一部分, 见 src/deployment/calibration/calibration_db/README.md。
+# 不入库的只有原始采集: 一次相机标定的 bag 是几百 MB, 抽出来的帧同量级。
+# 与上面密钥段同样的取舍: 不写裸的 `*.bag` / `*.png`, 只按目录拦 ——
+# 宽泛的按扩展名规则迟早会静默吞掉一个该入库的文件。
+src/deployment/calibration/**/*.bag
+src/deployment/calibration/calibration_db/**/images/
+src/deployment/calibration/calibration_db/**/*.csv
+calib_data/
