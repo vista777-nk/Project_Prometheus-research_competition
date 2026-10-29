@@ -4,6 +4,9 @@
 >
 > 这是一份新的实机交接，不是已归档旧交接的续写。服务器侧在 2026-08-03 已完成
 > 最终审计，详见 [服务器收口报告](./phase-1.5-server-readiness-2026-08-03.md)。
+>
+> **项目级状态、证据分级、安全红线与双 AI 协作协议见
+> [`../AI_OWNERSHIP_HANDOFF.md`](../AI_OWNERSHIP_HANDOFF.md)。本文只负责现场执行顺序。**
 > 硬件事实以 [滚动硬件基线](./phase-1.5-hardware-baseline.md)、
 > [ADR-0018](../decisions/ADR-0018.md) 和 [ADR-0019](../decisions/ADR-0019.md) 为准；
 > 本文只把下一步执行顺序、停止条件和缺失信息集中到一处。

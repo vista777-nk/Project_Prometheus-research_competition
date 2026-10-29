@@ -51,6 +51,7 @@
 
 | 你想…… | 去看 |
 |---------|------|
+| **由 AI 全权接手这个项目** | **[docs/AI_OWNERSHIP_HANDOFF.md](./docs/AI_OWNERSHIP_HANDOFF.md)** — 项目状态、证据分级、安全红线、双 AI 协作协议与已知坑 |
 | **在 Raspberry Pi 接手 Phase 1.5** | **[docs/experiments/AI_HANDOFF.md](./docs/experiments/AI_HANDOFF.md)** — Pi 上机顺序、安全边界、未完成工作和硬件未知项 |
 | 查看服务器离场前状态 | [Phase 1.5 服务器收口报告](./docs/experiments/phase-1.5-server-readiness-2026-08-03.md) |
 | 理解这个项目的"为什么" | [RESEARCH_PHILOSOPHY.md](./project-prometheus-tasks/RESEARCH_PHILOSOPHY.md) |
@@ -132,9 +133,10 @@ project-prometheus/
 ├── Research_Diary.md                   ← 科研日记
 ├── scripts/                            ← 运行环境 setup + Phase 1 冒烟脚本
 ├── docs/
+│   ├── AI_OWNERSHIP_HANDOFF.md         ← AI 全权负责交接书（项目级）
 │   ├── architecture/                   ← 能力矩阵 (capability_matrix.md)
 │   ├── decisions/                      ← ADR (架构决策记录, ADR-0001~0019)
-│   └── experiments/                    ← 实验记录 + AI_HANDOFF.md (交接必读)
+│   └── experiments/                    ← 实验记录 + AI_HANDOFF.md (Pi 现场手册)
 ├── project-prometheus-tasks/           ← 核心项目文档
 │   ├── 00-OVERVIEW.md                  ← 总索引 + 任务清单
 │   ├── RESEARCH_PHILOSOPHY.md          ← 设计哲学与宪法
