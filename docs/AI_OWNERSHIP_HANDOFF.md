@@ -75,6 +75,8 @@ Project Prometheus 是一套**空地联合具身智能研究平台**：PX4 无�
 **规则**：写"完成"只能引用 A 级；B/C 级必须写明"未在实机验证"；D 级必须写"未知"。
 **SKIP ≠ PASS。** 这条在 2026-08 被反复强调，是仓库里最容易犯的错。
 
+**2026-11-06 本机复测（Windows，Git Bash，commit 50751f7）**：`make smoke-phase1` 通过 64 / 失败 0 / 跳过 1（缺 pymavlink）；STM32 Host 80/80；MSPM0 Host 71/71。`validate.sh` 为通过 51 / 失败 2 / 跳过 2，失败集中在 `test_entrypoint_modes.py` 与 `test_server_deployment.py`，已登记为 CLAIMS T-007，疑为 Windows 路径传给 bash 导致，尚未修复。**因此本机的部署校验结果不能作为通过证据**，以 Linux / CI 为准。
+
 ### 2.3 时间线偏差（必须让负责人知道）
 
 `ROADMAP.md` 原计划：
@@ -83,16 +85,17 @@ Project Prometheus 是一套**空地联合具身智能研究平台**：PX4 无�
 - 2026.09：Phase 2 EQA 系统初步实现；
 - 2026.10~12：EQA 迭代 + 论文初稿。
 
-**现实**：仓库自 2026-08-03 后无新提交，Phase 1.5 的硬件阻塞项（无人机未到货、MSPM0 SysConfig 未接入、IA6B 第二 UART 未接、供电未测）均未关闭。
+**现实**：2026-08-03 之后代码没有新提交；2026-10-30 与 2026-11-06 只新增了接手、协作与仓库卫生文档。Phase 1.5 的硬件阻塞项（无人机未到货、MSPM0 SysConfig 未接入、IA6B 第二 UART 未接、供电未测）均未关闭。
 
 **因此**：Phase 2 不应按原日历"自动开始"。要么由负责人重排时间线，要么**先用仿真推进 Phase 2 的可离线部分**（VLM 接口、SLAM 占位、World Model 数据通路），但不得把仿真结果写成实机结论。这条判断应在第一次正式开工时向负责人确认。
 
-### 2.4 分支事实 vs 规范文本（已知偏差）
+### 2.4 分支现状（2026-11-06 已整理）
 
-- `CONVENTIONS.md` 写的是：`main` 稳定、`feat/<desc>` 开发、合并后删除。
-- **仓库实际**：默认分支与当前分支都是 **`dev`**，最近的 PR 从 `task-new` 合入 `dev`。
-
-这是一个**未记录的偏差**。接手后第一件事之一是：向负责人确认分支模型，然后用一个新的 ADR（编号从 **ADR-0020** 起）固化"以 `dev` 为集成分支"或"改回 `main`"。**不要在没有 ADR 的情况下擅自改分支策略。**
+- **集成分支**：`dev`（`origin/HEAD` 指向它，比 `main` 多 103 个提交）。
+- **`main`**：已快进到与 `dev` 一致，作为稳定线保留；后续发版仍从 `main` 打 tag。
+- **已合并并删除的临时分支**：`task-new`、`docs/ai-takeover-protocol`、`chore/repo-hygiene`。
+- **`task-old`**：仅存在于远端，含 5 个未合入 `dev` 的提交（一次 revert 与三份旧文档）。2026-11-06 保留不动；如负责人决定删除，先记录 SHA `b0fb48e`。
+- **待固化**：`CONVENTIONS.md` 仍写 `main` 为稳定主线、`feat/*` 为开发分支。分支模型（集成分支、PR 目标、谁能点合并）由 **ADR-0020** 固化，编号已在 CLAIMS T-001 登记。
 
 ---
 
@@ -247,8 +250,11 @@ python3 src/deployment/server/check_lab_server.py --json
 | MSPM0 固件 Host | 71/71 | 2026-08-03 |
 | 传感器 Host | 81/81 | 2026-08-03 |
 | CI job 数 | 7 | `.github/workflows/ci.yml` |
+| Windows 本机冒烟 | 64 通过 / 0 失败 / 1 跳过（缺 pymavlink） | 2026-11-06，CLAIMS 基线记录 |
+| Windows 本机部署校验 | 51 通过 / 2 失败 / 2 跳过（路径问题，T-007） | 2026-11-06，**不可作为通过证据** |
 
 > 2026-08-03 在受限沙箱里，部署校验曾出现 53/0/2、冒烟 62/0/3——**这是环境缺依赖导致的 SKIP，不是回归**。复跑时先确认依赖齐全（`pymavlink`、`numpy`、`OpenCV`、`systemd-analyze` 可用）。
+> 2026-11-06 的 Windows 结果只证明这些用例**在本机没有检查到任何东西**，不证明代码退化；部署校验以 Linux / CI 为准。
 
 ---
 
@@ -323,6 +329,9 @@ python3 src/deployment/server/check_lab_server.py --json
 ---
 
 ## 8. 双 AI 协作协议（DeepSeek + Claude）
+
+> 正式细则见 [`ai-collaboration/PROTOCOL.md`](./ai-collaboration/PROTOCOL.md) 与认领表 [`ai-collaboration/CLAIMS.md`](./ai-collaboration/CLAIMS.md)。
+> 本节是摘要；冲突时以 PROTOCOL 与 ADR 为准。
 
 ### 8.1 基本原则
 
