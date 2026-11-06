@@ -1330,6 +1330,54 @@
           一小时左右（NRestarts=0）；机器重启后是否自动恢复；ADR-0020 里补充的各条；
           GitHub 上实际生效的保护规则。
 
+###### 2026/11/6（续 · DeepSeek 接手 PX4 SITL 与部署预检）
+
+    1.分工。团队要求「和 Claude 分工合作，她的 token 更贵」，把 T-013、T-011 收尾、
+          T-010 长期观察与 T-015 一并交给 DeepSeek；Claude 保留 ADR-0020、T-009 交接、
+          T-012/T-017 的决策和交叉审查。分支 `fix/deployment-readonly-check` 由负责人批准，
+          从 `fix/ci` 头 b3f4f3c 切出（CLAIMS 的 T-013~T-017 只存在于该分支，从 dev 切会
+          与未合并的登记行冲突）。
+
+    2.子模块。Claude 的克隆本身成功（HEAD b8c541dd…，tag v1.14.0），但 `--depth 1` 让
+          子模块停在各自默认分支尖端，后来一次失败尝试把工作树清空：
+          `git submodule status --recursive` 报 `fatal: 不是 git 仓库`、退出码 128。
+          此时「`+` 行数为 0」是假象——目录已空，看起来反而干净。用不带 `--depth` 的
+          `git submodule update --init --recursive --jobs 4` 重拉：3 分 5 秒、退出码 0、
+          `+`/`-` 各 0 条、26 条干净，HEAD 未变。
+
+    3.构建。依赖按 task-02 配方 2.2 装进 `/data2/px4-sitl/.venv-px4-v1.14`。两个坑：
+          `Tools/setup/requirements.txt` 第 11 行 `matplotlib>=3.0.*` 被 pip 25 拒绝（用
+          临时文件改写后安装，没动仓库文件）；`~/.local/bin/cmake` 是 pip 包装脚本，在
+          `PYTHONNOUSERSITE=1` 下直接挂，改用 `/usr/bin/cmake 3.16.3`。
+          `DONT_RUN=1 make px4_sitl_default gazebo-classic` 903 步全过，75 秒，
+          `bin/px4` 52 MB，总体积 2.9 GB（`/data2` 剩 63 GB，下限是 20 GB）。
+
+    4.三项测试第一次全红，根因是同一个：PX4 以 255 退出且一行输出都没有。
+          `main.cpp` 里 `default: PX4_ERR("unrecognized flag"); return -1` 说明 255 是
+          参数解析分支，但用完全相同的参数单跑能跑满 10 秒（rc=124）。二分法定位到
+          `~/.ros/test_data`：8 月遗留的悬空软链，指向已不存在的 `~/PX4-Autopilot/test_data`。
+          roslaunch 以 `~/.ros` 作为节点 cwd，PX4 解析这个死链后直接返回 -1。
+          空目录、仅 dataman、仅 parameters*.bson、仅 eeprom 四种情况都是 rc=124，只有
+          加上死链才变成 255，所以这是单因子复现。改指
+          `/data2/px4-sitl/PX4-Autopilot/test_data` 后恢复正常。
+
+    5.重跑实测（窗口 18:51:17–18:53:30，三个目标分别跑、分别读日志，不看外层退出码）：
+          test-drone 9/9、quick-smoke 5/5、test-e2e 34/34，失败 0、跳过 0。8 月记录的
+          5/5 与 33/33 现在可以引用；e2e 比 8 月多 1 条（34 对 33），没有逐条比对原因，
+          所以不写成「测试变多了」。窗口用 EXIT trap 保证恢复：结束后
+          `is-active=active`，11311 与 9090 只在 127.0.0.1、无对外监听，健康检查 [OK]
+          （5 个服务节点，9090 可接受连接）。窗口期间没改 `server.env` 和 unit。
+
+    6.T-015 部署预检：`check_pi_host.py` 的 deploy 阶段新增用户组、chrony 服务、chrony
+          时间源三项，未改 `install.sh`；`test_pi_preflight.py` 从 17 条增至 24 条，
+          含 4 条负向。`validate.sh` 用 `/usr/bin/python3` 改动前后都是 55/0/0（conda
+          Python 下两次都是 54/0/1，缺 pymavlink）。负向实测：本机跑 `--stage deploy`
+          三项都变红。README 原来写「9 条」，实际改动前就有 17 条，已按实测改正。
+
+    7.没验证：Pi 5 / Debian 13 真机上的预检行为（本机 x86_64）；PX4 构建与三项测试只在
+          这台 x86_64 服务器上跑过，没上真机；实验室服务长期稳定性；`~/.ros` 里其他残留
+          （dataman、parameters*.bson、eeprom）经二分测试都不影响启动，但没有清理。
+
 ---
 
 ## 历史名称脚注
