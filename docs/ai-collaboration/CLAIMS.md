@@ -14,7 +14,7 @@
 | T-005 | OpenMV `/car/openmv/image_raw` 契约 ADR | — | — | — | 阻塞 | 要上机确认是否有真实发布者；没有就不伪造话题 |
 | T-006 | Phase 2 离线骨架 | — | — | — | 待负责人 | PROTOCOL §10 #5 |
 | T-007 | 修复 Windows 上 `validate.sh` 的 10 个失败用例（test_entrypoint_modes.py 9 个、test_server_deployment.py 1 个） | — | — | 50751f7 | 未认领 | 干净检出 50751f7 同样失败，不是新改动引起。两个测试都是 `subprocess.run(["bash", str(路径)])`，报错里反斜杠被吞、返回码 127，疑为 Windows 路径传给 bash；尚未改代码验证。是否修、怎么修（如 `as_posix()`，或这两组在 Windows 上显式 SKIP）待定。修复前不要把本机 validate 当通过证据 |
-| T-008 | 仓库卫生整理：开源常规文件、PR/issue 模板、分支清理 | DeepSeek | `chore/repo-hygiene` | fd51611 | 待审查 | 新增 CHANGELOG / CODE_OF_CONDUCT / CONTRIBUTING / THIRD_PARTY_NOTICES 与 `.github/` 模板；已把 `docs/ai-takeover-protocol` 合入 `dev` 并把 `main` 快进到 `dev`；远端推送与远端分支删除因 GitHub 不可达未执行 |
+| T-008 | 仓库卫生整理：开源常规文件、PR/issue 模板、分支清理 | DeepSeek | `chore/repo-hygiene` | fd51611 | 完成 | 新增 CHANGELOG / CODE_OF_CONDUCT / CONTRIBUTING / THIRD_PARTY_NOTICES、`.github/` 模板、`.editorconfig`，补强 SECURITY 报告流程；已把 `docs/ai-takeover-protocol` 合入 `dev` 并把 `main` 快进到 `dev`；远端推送与远端分支删除因 GitHub 不可达未执行 |
 
 ## 基线记录
 

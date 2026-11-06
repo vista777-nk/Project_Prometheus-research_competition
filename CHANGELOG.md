@@ -13,6 +13,7 @@
 - `docs/ai-collaboration/PROTOCOL.md` 与 `CLAIMS.md`：DeepSeek × Claude 双 AI 协作协议与事项认领表。
 - `AGENTS.md` / `CLAUDE.md`：AI 协作者入口。
 - 开源项目常规文件：`CHANGELOG.md`、`CODE_OF_CONDUCT.md`、`CONTRIBUTING.md`、`THIRD_PARTY_NOTICES.md`、PR 与 issue 模板、`CODEOWNERS`。
+- `.editorconfig`：统一 UTF-8/LF 与缩进规则；`SECURITY.md` 补充私密漏洞报告流程。
 
 ### Changed
 
