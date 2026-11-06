@@ -1225,6 +1225,63 @@
           62/0/3。剩余跳过项由 CI 或依赖环境覆盖；`/opt` 安装、离线镜像、角色服务和
           真实传感器仍未关闭。
 
+###### 2026/11/6（接手复盘 · Ubuntu 服务器基线复测 · 实验室服务路径失效）
+
+    1.接手后先查事实。`dev` 工作区干净并与 `origin/dev` 同步（1240643）；`git ls-remote`
+          只列出 `dev` 与 `main`，`main` 仍在 a0b7243，落后 `dev` 112 个提交，与 T-008、
+          交接书 §2.4 写的“main 已快进到 dev”不一致（CLAIMS T-012）。本地 `origin/task-old`
+          （b0fb48e，5 个不在 `dev` 的提交）等引用已过期，但可能是这些提交唯一的副本，
+          所以没有 `fetch --prune`，也没动任何已有分支。
+
+    2.服务器环境：Ubuntu 20.04.6、ROS Noetic、系统 Python 3.8.10。PATH 里 Anaconda 的
+          Python 3.11 排在前面时没有 pymavlink，MAVLink 签名自测会 SKIP，所以后面的命令
+          都把 `/usr/bin` 放在前面。旧 `build/ devel/ logs/` 缓存的是已不存在的
+          `/data2/project/` 路径（devel 里 121 行引用），移到
+          `/tmp/prometheus-takeover/old-catkin-spaces` 后干净重建，31 秒完成，新 `devel/`
+          里该路径为 0 处；只有 gazebo_msgs、gazebo_ros、gazebo_ros_control 的弃用警告。
+
+    3.实测（commit 1240643，各项分开跑、分开看日志；原始日志在 `/tmp/prometheus-takeover/`，
+          重启会丢）：catkin 单元测试 82/82；运行时测试 test-diff 7、test-mecanum 17、
+          test-sensors 28、test-bridge 11、test-server 15，共 78 项 0 失败，日志里没有
+          SKIP / FAIL 行；`make smoke-phase1` 65/0/0；`bash src/deployment/validate.sh`
+          55/0/0。T-007 的 10 个失败因此只出现在 Windows，但“Windows 路径传给 bash”这个
+          原因本身没有复现，也没有验证。
+
+    4.没有跑成的：`test-drone`、`quick-smoke`、`test-e2e`。本机没有 `~/PX4-Autopilot`
+          （PX4 v1.14 SITL），三者在 PX4 检查处直接返回 2，没有执行任何测试。这不是 SKIP，
+          也不是通过；`make test-all` 因此停在 test-drone，没有整体跑完，不能称绿。8 月的
+          5/5 与 33/33 未复现。重装要克隆 GitHub 并长时间编译，`/data2` 只剩约 67 GB
+          （8 月日记写的 1.1 TiB 已不成立），已登记 T-011，等负责人定。
+
+    5.实验室服务器 user service 发现时已在崩溃循环：`server.env` 的 `AIR_GROUND_REPO`
+          仍指向 `/data2/project/...`，仓库现在在 `/data2/projectDir/...`，启动脚本报“仓库
+          运行环境脚本不存在”，健康检查 Connection refused，11311 与 9090 没有监听；
+          `/data2/air-ground-server/ros-log` 也不存在。测试脚本各自起 roscore，
+          test_server.sh 还会绑 9090，为避免抢端口，先跑完 ROS 测试再动服务。修复前把
+          `server.env`、三个 unit 与脚本备份到 `~/.config/air-ground/backup-20261106-takeover`，
+          重建 ros-log，只改 `AIR_GROUND_REPO` 一行，`reset-failed` 后重启。结果：active，
+          ExecStartPost 与单独运行的健康检查都 OK（5 个服务节点），服务进程的 13 个监听口
+          全在 127.0.0.1，NRestarts=0。没验证：长期稳定，以及机器重启后是否自动恢复。
+          故障何时开始不知道；`install_server.sh` 重复安装不覆盖已有 `server.env`，仓库
+          搬家后必须手改，安装器没有这项检查（T-010）。
+
+    6.GitHub CI（经公开 API，没有登录，读不到 job 日志）：`dev` 头 1240643 的 3 次运行都红，
+          只有 Phase 1 Smoke job 的 Install Python dependencies 失败，用时 135 秒（上次全绿的
+          50751f7 为 13 秒），其余 6 个 job 通过；两个提交之间只改了 .github 模板与
+          CODEOWNERS，`requirements.txt` 和 workflow 没变。第一个猜测是 `ubuntu-latest`
+          换到 Ubuntu 26（默认 Python 3.14.4），`numpy<2` 在 CPython 3.13/3.14 没有 wheel；
+          但同样带 `<2` 约束的 validate-deployment 在红的那次也变慢（216 秒）却通过了，
+          这个猜测被削弱，没有被推翻。本分支只把该 job 固定为 `ubuntu-24.04`，没有 CI
+          验证，未推送（T-009）。
+
+    7.走过的弯路：先说构建了 7 个包，又撤回——构建汇总写 7 个，测试日志和项目包都是 6 个，
+          多出的 1 个疑为 catkin 预构建步骤，未核实。后台测试脚本末尾的 exit code 0 只是最后
+          一条 echo，不代表测试结果，后来逐个目标读日志才得到上面的数字。
+
+    8.待负责人：是否推送 `fix/ci-python-pin-and-baseline` 来验证 CI；是否安装 PX4 v1.14
+          SITL；其余 5 个 `ubuntu-latest` job 是否一并固定；ADR-0020 的方向；下一个代码任务
+          做 T-003 还是 T-004。本次改动已提交在本地分支 `fix/ci-python-pin-and-baseline`，未推送、未合并。
+
 ---
 
 ## 历史名称脚注

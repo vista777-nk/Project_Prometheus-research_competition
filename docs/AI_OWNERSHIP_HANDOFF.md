@@ -252,6 +252,11 @@ python3 src/deployment/server/check_lab_server.py --json
 | CI job 数 | 7 | `.github/workflows/ci.yml` |
 | Windows 本机冒烟 | 64 通过 / 0 失败 / 1 跳过（缺 pymavlink） | 2026-11-06，CLAIMS 基线记录 |
 | Windows 本机部署校验 | 51 通过 / 2 失败 / 2 跳过（路径问题，T-007） | 2026-11-06，**不可作为通过证据** |
+| Ubuntu 服务器 catkin 单元测试 | 82/82 | 2026-11-06，commit 1240643，干净重建 `devel/` |
+| Ubuntu 服务器运行时测试 | test-diff 7、test-mecanum 17、test-sensors 28、test-bridge 11、test-server 15，共 78 项，0 失败 | 同上，各目标单独运行 |
+| Ubuntu 服务器 Phase 1 冒烟 / 部署校验 | 65/0/0；55/0/0 | 同上；PATH 需 `/usr/bin` 在前，否则缺 pymavlink，签名自测会 SKIP |
+| test-drone / quick-smoke / test-e2e | **未运行**（缺 PX4 v1.14 SITL，T-011）；8 月的 5/5、33/33 未复现 | 2026-11-06；`make test-all` 整体没跑完，不能称绿 |
+| GitHub CI（`dev` 头 1240643） | 3 次运行均红：只有 Phase 1 Smoke job 的依赖安装步骤失败，其余 6 个 job 通过；根因未确认（T-009） | 2026-11-06，经公开 API 读取，没有 job 日志 |
 
 > 2026-08-03 在受限沙箱里，部署校验曾出现 53/0/2、冒烟 62/0/3——**这是环境缺依赖导致的 SKIP，不是回归**。复跑时先确认依赖齐全（`pymavlink`、`numpy`、`OpenCV`、`systemd-analyze` 可用）。
 > 2026-11-06 的 Windows 结果只证明这些用例**在本机没有检查到任何东西**，不证明代码退化；部署校验以 Linux / CI 为准。
@@ -391,7 +396,7 @@ git log --oneline -5
 10. **多故障位的优先级**：`FAULT_STALL` 在急停/过流期间语义失效，位与位的互斥关系也是协议的一部分。注释不等于验证，要有 Host 用例。
 11. **MSPM0 默认产物不可烧录**：`ci-link` 剖面是故意的残缺，用 `#error` 和文件名后缀阻止误烧。不要"顺手补全寄存器地址"。
 12. **ROS 1 不能跨 WAN**：除了 11311，每个节点还有随机 XML-RPC/TCPROS 端口。跨校区只跨一个带重连的 TCP 会话。
-13. **服务器根分区 97%**：bag、镜像、模型、ROS 日志只写 `/data2`。
+13. **服务器根分区 97%**：bag、镜像、模型、ROS 日志只写 `/data2`。2026-11-06 实测 `/data2` 也已 97%（约剩 67 GB），8 月日记记的「还有约 1.1 TiB」已不成立；在上面装大东西（如 PX4 SITL）前先确认空间。
 14. **供电与地线**：HC-SR04 Echo 5 V 必须分压到 3.3 V；云台舵机必须独立 BEC；共地问题会表现为"随机重启"而不是"传感器坏了"。
 15. **"参数能启动"不等于"参数正确"**：PX4/MAVROS 签名参数名、双 CSI profile、OpenMV 图像话题，全部要等实物核对。
 
