@@ -1282,6 +1282,54 @@
           SITL；其余 5 个 `ubuntu-latest` job 是否一并固定；ADR-0020 的方向；下一个代码任务
           做 T-003 还是 T-004。本次改动已提交在本地分支 `fix/ci-python-pin-and-baseline`，未推送、未合并。
 
+###### 2026/11/6（续 · 团队答复后的推进）
+
+    1.团队对上一轮的五个问题做了答复：已自行推送 `fix/ci-python-pin-and-baseline`；
+          同意重建 PX4 v1.14 SITL；其余 5 个 `ubuntu-latest` job 一并固定（Fix all
+          tasks）；分支方向是 `dev` 为主线、`main` 为备份与发布线；T-003、T-004 暂缓，
+          之后转树莓派。上一小节末尾写的「未推送」因此已不成立，旧文不改，以本节为准。
+
+    2.推送后的 CI（公开 API，读不到 job 日志）：1240643 在工作分支上同样只有 Phase 1
+          冒烟 job 红；36b9fe7（只固定冒烟）7/7 全绿；9edddad（6 个 job 固定到
+          ubuntu-24.04）在最后一次读取（04:38:57Z）时 6 个 job 成功，Build Edge Image
+          ARM64 还在运行，所以这次运行不能称绿，最终结果待补进 T-009。同一份冒烟代码在
+          ubuntu-latest 红、在 ubuntu-24.04 绿，支持「runner 镜像变化」的解释，但只有
+          一次样本，说不出是哪个包或哪个 Python 版本。
+
+    3.PX4 重建还没有开始编译。依赖已核对齐全（Gazebo 11、ROS 的 Gazebo 与 MAVROS 包、
+          gcc、cmake、ninja、Xvfb、GeographicLib 数据）；github.com 先是 TCP 443 连不上，
+          后来能建连但很慢：PX4 的 info/refs 20 秒只收到约 0.5 到 1.1 MB，三次都超时。
+          已起一个后台任务：每 5 分钟用 protocol v2 探测一次，最多 6 次，连上后浅克隆
+          v1.14.0 到 `/data2/px4-sitl/PX4-Autopilot`，再浅克隆子模块；不用代理或镜像，
+          也没有用 codeload 的压缩包（没有 git 元数据和子模块）。写本节时结果未知。
+          克隆完成后还要核对 HEAD 是不是 b8c541dd 以及子模块状态，才进入构建；三项 PX4
+          测试要停实验室服务，团队已同意「停、跑、重启并复验」，目前一次也没停。
+
+    4.只存在于 origin/task-old 与 origin/feat/task-XX 本地引用上的提交已备份成 git
+          bundle：`~/prometheus-ref-backups/20261106/stale-refs.bundle`（143124357 字节，
+          SHA-256 d40a523b…，另附 REFS.txt 和校验和文件）。`git bundle verify` 通过，在
+          /tmp 的临时仓库里还原得到 5 个和 3 个不在 dev 的提交。更正：上一轮我说「8 个」，
+          实际是 5 个，因为 feat/task-XX 的 3 个就是 task-old 那 5 个里最老的 3 个；只有
+          b0fb48e（树莓派基线的 revert）和 964b007（合并提交）没有出现在任何本地分支上，
+          现在只有 bundle 保护它们。第一次验证时输出被我截断，没看到结论，重新完整验证后
+          才记下。bundle 在仓库之外，只存在这台服务器上。没有删除任何分支或引用，也没有
+          `fetch --prune`。
+
+    5.ADR-0020 已按团队答复起草，状态「提议」，不是已采纳（提交 b65fdf4）。决定部分只
+          转述团队的四点，起草时补的六条单独列为「未经确认」；CLAIMS T-001 已登记，
+          AGENTS.md 的下一个 ADR 编号改为 0021。公开 API 显示 GitHub 默认分支是 `dev`，
+          `dev` 与 `main` 的 protected 标志都是 false，但这个标志不一定反映 ruleset，
+          实际保护规则没验证。CONVENTIONS.md、ci.yml 和任何分支都没改。
+
+    6.树莓派方面：被 b0fb48e revert 掉的主机基线文件（check_pi_host.py、
+          test_pi_preflight.py、phase-1.5-hardware-baseline.md、AI_HANDOFF.md）在 dev 上
+          都还在，可以接着做。这台服务器能不能访问 Pi 我没有试过，具体怎么接入、能做哪些
+          检查，要等团队说明。
+
+    7.没验证：9edddad 的 CI 最终结果；PX4 能不能克隆、编不编得过；实验室服务只观察了
+          一小时左右（NRestarts=0）；机器重启后是否自动恢复；ADR-0020 里补充的各条；
+          GitHub 上实际生效的保护规则。
+
 ---
 
 ## 历史名称脚注
