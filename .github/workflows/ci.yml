@@ -510,7 +510,9 @@ jobs:
   # ---------------------------------------------------------------------------
   smoke_test_phase1:
     name: Phase 1 Smoke Test (task-15)
-    runs-on: ubuntu-latest
+    # 固定 ubuntu-24.04（默认 Python 3.12.3）。2026-11-06 该 job 在 ubuntu-latest 上红灯，当时标签正向 Ubuntu 26（Python 3.14.4）迁移，
+    # 而 requirements.txt 的 numpy<2 在 CPython 3.13/3.14 无 wheel。这只是假设，须由真实 CI 运行验证。
+    runs-on: ubuntu-24.04
 
     defaults:
       run:
