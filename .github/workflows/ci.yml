@@ -8,6 +8,7 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# 所有 job 固定具体 runner 镜像，不用 ubuntu-latest：2026-11-06 该标签迁移期间 Phase 1 冒烟 job 红灯，见 CLAIMS T-009。
 jobs:
   build-and-test:
     name: Build & Test (ROS Noetic, Ubuntu 20.04 container)
@@ -109,7 +110,7 @@ jobs:
   # ---------------------------------------------------------------------------
   build-stm32-firmware:
     name: Build STM32F407 Mecanum Firmware (task-10)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     defaults:
       run:
@@ -169,7 +170,7 @@ jobs:
   # ---------------------------------------------------------------------------
   build-mspm0-firmware:
     name: Build MSPM0G3507 Differential Firmware (task-11)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     defaults:
       run:
@@ -229,7 +230,7 @@ jobs:
   # ---------------------------------------------------------------------------
   validate-deployment:
     name: Validate Deployment Config (task-12)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
@@ -291,7 +292,7 @@ jobs:
 
   build-edge-image:
     name: Build Edge Image ARM64 (task-12)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # 静态校验没过就没必要花十几分钟构建镜像
     needs: validate-deployment
 
@@ -361,7 +362,7 @@ jobs:
   # ---------------------------------------------------------------------------
   lint-scripts:
     name: Lint Scripts & Configs (task-13)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     env:
       SHELLCHECK_VERSION: v0.10.0
