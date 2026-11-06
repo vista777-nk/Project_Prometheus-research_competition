@@ -1,0 +1,38 @@
+# .editorconfig — 统一编辑器行为
+#
+# 本项目的编码与行尾由 .gitattributes 强制；本文件负责编辑器侧的缩进与字符集，
+# 两者配合，避免再次出现 2026-07-25 那类"提交时被过滤器改写"的事故。
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Python / C / C++：4 空格
+[*.{py,c,h,cpp,hpp}]
+indent_size = 4
+
+# Shell：2 空格
+[*.{sh,bash}]
+indent_size = 2
+
+# Makefile 的缩进必须是 Tab，不是空格
+[Makefile]
+indent_style = tab
+
+# Markdown：保留行尾空格（用于强制换行），不自动裁剪
+[*.md]
+trim_trailing_whitespace = false
+
+# YAML / JSON / TOML
+[*.{yaml,yml,json,toml}]
+indent_size = 2
+
+# 固件汇编与链接脚本
+[*.{s,S,ld}]
+indent_size = 4
