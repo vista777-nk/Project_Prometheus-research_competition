@@ -1,0 +1,87 @@
+<?xml version="1.0"?>
+<!--
+  car_edge_real.launch — Task-14 实机模式车机边缘节点
+
+  与 car_edge.launch 的区别: 那份只起 car_preprocessor (数据来自 Gazebo 插件),
+  这份额外起共享载荷的 3 个实机传感器驱动与 1 个底盘串口桥，
+  由它们发布 Layer 1 原始话题。
+
+  backend:=real (默认) — UART/I2C 访问真设备；MCU 身份或四路超声波缺失时失败。
+  backend:=mock        — 假数据后端。只验证节点/参数/话题与重连路径；
+                         **必须显式指定，不产生任何真实读数**。
+                          这是刻意的: 一个"能跑但读不到硬件"的空实现,
+                          会让实机上安静地发布全零数据 (ADR-0008 那类假绿灯)。
+
+  用法:
+    roslaunch air_ground_car_bringup car_edge_real.launch
+    roslaunch air_ground_car_bringup car_edge_real.launch backend:=mock
+    # 单传感器台架联调（整车默认仍全部启用）
+    roslaunch air_ground_car_bringup car_edge_real.launch \
+      enable_icm42688:=false enable_chassis_bridge:=false enable_openmv:=false
+-->
+<launch>
+  <arg name="backend" default="real"/>
+  <arg name="default_chassis" default="diff"/>
+  <arg name="enable_rplidar" default="true"/>
+  <arg name="enable_icm42688" default="true"/>
+  <arg name="enable_chassis_bridge" default="true"/>
+  <arg name="enable_openmv" default="true"/>
+  <arg name="enable_preprocessor" default="true"/>
+  <arg name="sensor_config"
+       default="$(find air_ground_car_bringup)/config/real_sensors.yaml"/>
+  <arg name="edge_config"
+       default="$(find air_ground_car_bringup)/config/car_edge.yaml"/>
+
+  <node name="rplidar_driver"
+        pkg="air_ground_car_bringup"
+        type="rplidar_driver.py"
+        if="$(arg enable_rplidar)"
+        required="true"
+        output="screen">
+    <rosparam command="load" file="$(arg sensor_config)"/>
+    <param name="backend" value="$(arg backend)"/>
+  </node>
+
+  <node name="icm42688_driver"
+        pkg="air_ground_car_bringup"
+        type="icm42688_driver.py"
+        if="$(arg enable_icm42688)"
+        required="true"
+        output="screen">
+    <rosparam command="load" file="$(arg sensor_config)"/>
+    <param name="backend" value="$(arg backend)"/>
+  </node>
+
+  <node name="chassis_bridge"
+        pkg="air_ground_car_bringup"
+        type="chassis_bridge.py"
+        if="$(arg enable_chassis_bridge)"
+        required="true"
+        output="screen">
+    <rosparam command="load" file="$(arg sensor_config)"/>
+    <param name="backend" value="$(arg backend)"/>
+    <param name="chassis" value="$(arg default_chassis)"/>
+  </node>
+
+  <node name="openmv_bridge"
+        pkg="air_ground_car_bringup"
+        type="openmv_bridge.py"
+        if="$(arg enable_openmv)"
+        required="true"
+        output="screen">
+    <rosparam command="load" file="$(arg sensor_config)"/>
+    <param name="backend" value="$(arg backend)"/>
+  </node>
+
+  <!-- 边缘预处理器与仿真模式用的是同一个节点、同一份配置:
+       换成实机传感器时它一行不改, 这是 HardwareInterface 分层的目的。 -->
+  <node name="car_preprocessor"
+        pkg="air_ground_car_bringup"
+        type="car_preprocessor.py"
+        if="$(arg enable_preprocessor)"
+        required="true"
+        output="screen">
+    <rosparam command="load" file="$(arg edge_config)"/>
+    <param name="default_chassis" value="$(arg default_chassis)"/>
+  </node>
+</launch>

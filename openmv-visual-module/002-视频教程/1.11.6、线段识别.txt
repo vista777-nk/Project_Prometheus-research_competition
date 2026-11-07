@@ -1,0 +1,4 @@
+官方视频教程地址：
+形状识别：https://singtown.com/learn/50009/
+文档地址：https://book.openmv.cc/example/09-Feature-Detection/find-line-segments.html
+程序使用我们源码例程文件夹中对应的程序即可。

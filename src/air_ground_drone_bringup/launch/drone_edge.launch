@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="config_file"
+       default="$(find air_ground_drone_bringup)/config/drone_edge.yaml"/>
+
+  <node name="drone_preprocessor"
+        pkg="air_ground_drone_bringup"
+        type="drone_preprocessor.py"
+        output="screen">
+    <rosparam command="load" file="$(arg config_file)"/>
+  </node>
+</launch>

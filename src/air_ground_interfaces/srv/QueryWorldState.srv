@@ -1,0 +1,6 @@
+# ASK WorldModel: synchronous query (ICD 4.2)
+string query_type
+string[] args
+---
+WorldState result
+bool found

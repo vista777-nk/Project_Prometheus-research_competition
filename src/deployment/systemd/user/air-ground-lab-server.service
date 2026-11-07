@@ -1,0 +1,28 @@
+[Unit]
+Description=Air-Ground Laboratory Server (user service)
+Documentation=file://%h/.config/air-ground/server.env
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/air-ground/server.env
+ExecStart=%h/.local/lib/air-ground/launch_lab_server.sh
+ExecStartPost=%h/.local/lib/air-ground/check_lab_server.py --wait 30
+
+Restart=always
+RestartSec=10
+TimeoutStartSec=60
+TimeoutStopSec=45
+KillSignal=SIGINT
+KillMode=control-group
+NoNewPrivileges=yes
+PrivateTmp=yes
+UMask=0027
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=air-ground-lab-server
+
+[Install]
+WantedBy=default.target

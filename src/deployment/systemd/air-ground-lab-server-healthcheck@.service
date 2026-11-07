@@ -1,0 +1,22 @@
+[Unit]
+Description=Air-Ground Laboratory Server Health Check (user %i)
+After=air-ground-lab-server@%i.service
+Wants=air-ground-lab-server@%i.service
+
+[Service]
+Type=oneshot
+User=%i
+EnvironmentFile=/etc/air-ground/server.env
+ExecStart=/usr/local/lib/air-ground/check_lab_server.py
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=air-ground-lab-server-health

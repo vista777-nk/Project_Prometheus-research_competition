@@ -1,0 +1,25 @@
+# =============================================================================
+# docker-compose.car.yml — 车机角色覆盖
+#
+# 用法:
+#   docker compose -f docker-compose.edge.yml -f docker-compose.car.yml up
+#
+# 只放**车机必然存在**的设备。可插拔的传感器见 docker-compose.car-sensors.yml。
+# =============================================================================
+
+services:
+  edge-node:
+    environment:
+      AIR_GROUND_ROLE: car
+      AIR_GROUND_CHASSIS: ${CHASSIS:-diff}
+
+    devices:
+      # 下位机串口 (STM32F407 麦轮 / MSPM0G3507 差速)。Pi 5 的 40 针排针
+      # 需要 dtoverlay=uart0-pi5，随后为 /dev/ttyAMA0；现有 /dev/ttyAMA10 是
+      # 独立调试口，不能把旧计划中的 ttyAMA1 直接套用。台架用 USB-UART 时只
+      # 改 CAR_MCU_DEVICE，容器内契约始终是 /dev/mcu。
+      - ${CAR_MCU_DEVICE:-/dev/ttyAMA0}:/dev/mcu
+
+      # I2C 总线 (ICM42688 IMU)。只要 config.txt 里 dtparam=i2c_arm=on,
+      # 这个节点就常在, 与是否真接了 IMU 无关, 所以可以放在必需项里。
+      - /dev/i2c-1:/dev/i2c-1

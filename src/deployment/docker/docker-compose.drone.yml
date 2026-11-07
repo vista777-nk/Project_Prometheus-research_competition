@@ -1,0 +1,35 @@
+# =============================================================================
+# docker-compose.drone.yml — 无人机角色覆盖
+#
+# 用法:
+#   docker compose -f docker-compose.edge.yml -f docker-compose.drone.yml up
+# =============================================================================
+
+services:
+  edge-node:
+    environment:
+      AIR_GROUND_ROLE: drone
+      DRONE_VISION: ${DRONE_VISION:-d435i}
+
+    devices:
+      # 生产连接：Pi 5 GPIO14/15 (/dev/ttyAMA0) ↔ Pixhawk TELEM2；TELEM1 留给
+      # 915 MHz 数传。台架可把 DRONE_FCU_DEVICE 改为 udev 的 /dev/pixhawk
+      # (Pixhawk USB)，容器内 MAVROS 契约仍是 /dev/pixhawk。
+      - ${DRONE_FCU_DEVICE:-/dev/ttyAMA0}:/dev/pixhawk
+
+    volumes:
+      # RealSense D435i。
+      #
+      # ⚠ 只挂 /dev/video* 是不够的。librealsense 除了 UVC 视频节点, 还要通过
+      #   libusb 直接访问 USB 设备做 IMU 读取、固件查询和硬件复位, 走的是
+      #   /dev/bus/usb 下的节点。只给 video0/video2 的话现象是:
+      #   彩色图能出、深度图和 IMU 出不来, 且报 "failed to set power state"。
+      #
+      #   这里用 bind mount 整个 /dev/bus/usb 而不是 devices:, 因为 USB 设备
+      #   重新枚举后 major/minor 会变, devices: 挂进去的节点会失效 (要重启容器),
+      #   bind mount 则跟随宿主机。代价是容器能看到**所有** USB 设备,
+      #   比逐个 devices 宽松 —— 这是 RealSense 强加的取舍, 记录在 ADR-0005 §决策-3。
+      - /dev/bus/usb:/dev/bus/usb
+
+    # 深度相机点云在共享内存里传递, 默认 64MB 不够
+    shm_size: "512m"

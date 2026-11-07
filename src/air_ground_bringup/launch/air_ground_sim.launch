@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="chassis" default="diff" doc="Chassis type: diff or mecanum"/>
+  <arg name="gui" default="false" doc="Show the Gazebo client"/>
+  <arg name="headless" default="true" doc="Run without the Gazebo client"/>
+  <arg name="interactive" default="false" doc="Open the PX4 console"/>
+
+  <arg name="drone_x" default="0.0"/>
+  <arg name="drone_y" default="0.0"/>
+  <arg name="drone_z" default="0.0"/>
+  <arg name="car_x" default="2.0"/>
+  <arg name="car_y" default="0.0"/>
+  <arg name="car_z" default="0.0"/>
+
+  <arg name="network_config"
+       default="$(find air_ground_com_bridge)/config/network.yaml"/>
+  <arg name="server_config"
+       default="$(find air_ground_lab_server)/config/server_params.yaml"/>
+
+  <!-- PX4 owns the single Gazebo instance used by both vehicles. -->
+  <include file="$(find air_ground_drone_bringup)/launch/drone_sitl.launch">
+    <arg name="gui" value="$(arg gui)"/>
+    <arg name="headless" value="$(arg headless)"/>
+    <arg name="interactive" value="$(arg interactive)"/>
+    <arg name="x" value="$(arg drone_x)"/>
+    <arg name="y" value="$(arg drone_y)"/>
+    <arg name="z" value="$(arg drone_z)"/>
+  </include>
+  <include file="$(find air_ground_drone_bringup)/launch/drone_edge.launch"/>
+
+  <include file="$(find air_ground_car_bringup)/launch/car_$(arg chassis).launch">
+    <arg name="start_gazebo" value="false"/>
+    <arg name="gui" value="$(arg gui)"/>
+    <arg name="headless" value="$(arg headless)"/>
+    <arg name="x" value="$(arg car_x)"/>
+    <arg name="y" value="$(arg car_y)"/>
+    <arg name="z" value="$(arg car_z)"/>
+  </include>
+  <include file="$(find air_ground_car_bringup)/launch/car_edge.launch">
+    <arg name="default_chassis" value="$(arg chassis)"/>
+  </include>
+
+  <include file="$(find air_ground_lab_server)/launch/server.launch">
+    <arg name="network_config" value="$(arg network_config)"/>
+    <arg name="server_config" value="$(arg server_config)"/>
+  </include>
+  <include file="$(find air_ground_com_bridge)/launch/air_ground_com_bridge.launch">
+    <arg name="config_file" value="$(arg network_config)"/>
+  </include>
+</launch>

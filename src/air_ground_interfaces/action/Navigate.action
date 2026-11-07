@@ -1,0 +1,8 @@
+# Long-running navigation goal.
+geometry_msgs/Pose target_pose
+float32 target_speed
+---
+float32 progress
+geometry_msgs/Pose current_pose
+---
+# Empty feedback section retained for compatibility with the approved Task-01 contract.

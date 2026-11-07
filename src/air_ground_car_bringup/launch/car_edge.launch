@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="config_file"
+       default="$(find air_ground_car_bringup)/config/car_edge.yaml"/>
+  <arg name="default_chassis" default="diff"/>
+
+  <node name="car_preprocessor"
+        pkg="air_ground_car_bringup"
+        type="car_preprocessor.py"
+        output="screen">
+    <rosparam command="load" file="$(arg config_file)"/>
+    <param name="default_chassis" value="$(arg default_chassis)"/>
+  </node>
+</launch>

@@ -1,0 +1,4 @@
+# air_ground_interfaces — Python dependencies
+# 纯接口定义包（msg/srv/action），无运行时 Python 依赖。
+# 以下仅列出构建时所需的基础包。
+numpy>=1.22.0,<2.0.0

@@ -1,0 +1,31 @@
+# Task-07 car edge-preprocessor configuration.
+publish_rate: 10.0
+sensor_timeout: 2.0
+battery_voltage: 11.1
+frame_id: car/base_link
+state_frame_id: map
+default_chassis: diff
+lidar_downsample: 4
+ultrasonic_min_range: 0.02
+ultrasonic_max_range: 4.0
+jpeg_quality: 50
+
+topics:
+  image: /car/openmv/image_raw
+  scan: /car/scan
+  imu: /car/imu/data
+  odometry: /car/odom
+  ultrasonic_prefix: /car/ultrasonic
+  observation: /car/observation
+  state: /car/state
+  capability: /car/capability
+
+capability:
+  locomotion_type: ground_wheeled
+  max_speed: 1.0
+  max_endurance: 3600.0
+  sensor_modalities: [rgb, lidar_2d, ultrasonic, imu]
+  sensor_range: 12.0
+  compute_tier: edge_high
+  max_payload_kg: 2.0
+  has_gripper: false

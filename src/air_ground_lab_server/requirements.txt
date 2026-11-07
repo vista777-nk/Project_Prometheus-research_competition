@@ -1,0 +1,9 @@
+# air_ground_lab_server — Python dependencies
+# 实验室服务器：TCP 接收器 + World Model + SLAM/EQA/Coordinator
+
+# 数值计算 + 图像处理
+numpy>=1.22.0,<2.0.0
+Pillow>=9.0.0,<11.0.0
+
+# YAML 配置解析（server_params.yaml）
+PyYAML>=6.0,<7.0

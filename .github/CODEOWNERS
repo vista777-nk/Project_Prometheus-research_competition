@@ -1,0 +1,7 @@
+# 默认审查人：人类负责人
+* @vista777-nk
+
+# 架构决策与协作规则变更需要负责人审查
+/docs/decisions/ @vista777-nk
+/docs/ai-collaboration/ @vista777-nk
+/.github/ @vista777-nk
