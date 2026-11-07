@@ -24,7 +24,7 @@
 3. 新增校验必须做一次负向测试，确认它会变红。
 4. 失败记录（CI 红、硬件异常、失败尝试）不得删除。
 5. 分层铁律：Layer 4 不得 import mavros、gazebo_msgs、sensor_msgs/LaserScan 等硬件相关包。
-6. ADR 只增不改；旧 ADR 只能被新 ADR 取代或补充。当前最大编号 ADR-0019，下一个是 ADR-0020。
+6. ADR 只增不改；旧 ADR 只能被新 ADR 取代或补充。当前最大编号 ADR-0020（提议中，待负责人采纳），下一个是 ADR-0021。
 7. 安全红线：不替负责人决定上电、拆装桨、飞行；EDGE_MODE=real 缺设备时失败关闭，不回退 mock；ROS Master 11311 与 TCP 9090 只监听 127.0.0.1；不提交密钥、.env、序列号、MAC、校园网 IP。
 8. 提交信息用 Conventional Commits + 简体中文，正文写实测数字和仍未验证项。标识符与分支名用英文。
 9. obsolete-documentation/ 与六个厂商硬件资料目录只读。

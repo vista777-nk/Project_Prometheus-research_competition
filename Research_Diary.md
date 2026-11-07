@@ -1225,6 +1225,111 @@
           62/0/3。剩余跳过项由 CI 或依赖环境覆盖；`/opt` 安装、离线镜像、角色服务和
           真实传感器仍未关闭。
 
+###### 2026/11/6（接手复盘 · Ubuntu 服务器基线复测 · 实验室服务路径失效）
+
+    1.接手后先查事实。`dev` 工作区干净并与 `origin/dev` 同步（1240643）；`git ls-remote`
+          只列出 `dev` 与 `main`，`main` 仍在 a0b7243，落后 `dev` 112 个提交，与 T-008、
+          交接书 §2.4 写的“main 已快进到 dev”不一致（CLAIMS T-012）。本地 `origin/task-old`
+          （b0fb48e，5 个不在 `dev` 的提交）等引用已过期，但可能是这些提交唯一的副本，
+          所以没有 `fetch --prune`，也没动任何已有分支。
+
+    2.服务器环境：Ubuntu 20.04.6、ROS Noetic、系统 Python 3.8.10。PATH 里 Anaconda 的
+          Python 3.11 排在前面时没有 pymavlink，MAVLink 签名自测会 SKIP，所以后面的命令
+          都把 `/usr/bin` 放在前面。旧 `build/ devel/ logs/` 缓存的是已不存在的
+          `/data2/project/` 路径（devel 里 121 行引用），移到
+          `/tmp/prometheus-takeover/old-catkin-spaces` 后干净重建，31 秒完成，新 `devel/`
+          里该路径为 0 处；只有 gazebo_msgs、gazebo_ros、gazebo_ros_control 的弃用警告。
+
+    3.实测（commit 1240643，各项分开跑、分开看日志；原始日志在 `/tmp/prometheus-takeover/`，
+          重启会丢）：catkin 单元测试 82/82；运行时测试 test-diff 7、test-mecanum 17、
+          test-sensors 28、test-bridge 11、test-server 15，共 78 项 0 失败，日志里没有
+          SKIP / FAIL 行；`make smoke-phase1` 65/0/0；`bash src/deployment/validate.sh`
+          55/0/0。T-007 的 10 个失败因此只出现在 Windows，但“Windows 路径传给 bash”这个
+          原因本身没有复现，也没有验证。
+
+    4.没有跑成的：`test-drone`、`quick-smoke`、`test-e2e`。本机没有 `~/PX4-Autopilot`
+          （PX4 v1.14 SITL），三者在 PX4 检查处直接返回 2，没有执行任何测试。这不是 SKIP，
+          也不是通过；`make test-all` 因此停在 test-drone，没有整体跑完，不能称绿。8 月的
+          5/5 与 33/33 未复现。重装要克隆 GitHub 并长时间编译，`/data2` 只剩约 67 GB
+          （8 月日记写的 1.1 TiB 已不成立），已登记 T-011，等负责人定。
+
+    5.实验室服务器 user service 发现时已在崩溃循环：`server.env` 的 `AIR_GROUND_REPO`
+          仍指向 `/data2/project/...`，仓库现在在 `/data2/projectDir/...`，启动脚本报“仓库
+          运行环境脚本不存在”，健康检查 Connection refused，11311 与 9090 没有监听；
+          `/data2/air-ground-server/ros-log` 也不存在。测试脚本各自起 roscore，
+          test_server.sh 还会绑 9090，为避免抢端口，先跑完 ROS 测试再动服务。修复前把
+          `server.env`、三个 unit 与脚本备份到 `~/.config/air-ground/backup-20261106-takeover`，
+          重建 ros-log，只改 `AIR_GROUND_REPO` 一行，`reset-failed` 后重启。结果：active，
+          ExecStartPost 与单独运行的健康检查都 OK（5 个服务节点），服务进程的 13 个监听口
+          全在 127.0.0.1，NRestarts=0。没验证：长期稳定，以及机器重启后是否自动恢复。
+          故障何时开始不知道；`install_server.sh` 重复安装不覆盖已有 `server.env`，仓库
+          搬家后必须手改，安装器没有这项检查（T-010）。
+
+    6.GitHub CI（经公开 API，没有登录，读不到 job 日志）：`dev` 头 1240643 的 3 次运行都红，
+          只有 Phase 1 Smoke job 的 Install Python dependencies 失败，用时 135 秒（上次全绿的
+          50751f7 为 13 秒），其余 6 个 job 通过；两个提交之间只改了 .github 模板与
+          CODEOWNERS，`requirements.txt` 和 workflow 没变。第一个猜测是 `ubuntu-latest`
+          换到 Ubuntu 26（默认 Python 3.14.4），`numpy<2` 在 CPython 3.13/3.14 没有 wheel；
+          但同样带 `<2` 约束的 validate-deployment 在红的那次也变慢（216 秒）却通过了，
+          这个猜测被削弱，没有被推翻。本分支只把该 job 固定为 `ubuntu-24.04`，没有 CI
+          验证，未推送（T-009）。
+
+    7.走过的弯路：先说构建了 7 个包，又撤回——构建汇总写 7 个，测试日志和项目包都是 6 个，
+          多出的 1 个疑为 catkin 预构建步骤，未核实。后台测试脚本末尾的 exit code 0 只是最后
+          一条 echo，不代表测试结果，后来逐个目标读日志才得到上面的数字。
+
+    8.待负责人：是否推送 `fix/ci-python-pin-and-baseline` 来验证 CI；是否安装 PX4 v1.14
+          SITL；其余 5 个 `ubuntu-latest` job 是否一并固定；ADR-0020 的方向；下一个代码任务
+          做 T-003 还是 T-004。本次改动已提交在本地分支 `fix/ci-python-pin-and-baseline`，未推送、未合并。
+
+###### 2026/11/6（续 · 团队答复后的推进）
+
+    1.团队对上一轮的五个问题做了答复：已自行推送 `fix/ci-python-pin-and-baseline`；
+          同意重建 PX4 v1.14 SITL；其余 5 个 `ubuntu-latest` job 一并固定（Fix all
+          tasks）；分支方向是 `dev` 为主线、`main` 为备份与发布线；T-003、T-004 暂缓，
+          之后转树莓派。上一小节末尾写的「未推送」因此已不成立，旧文不改，以本节为准。
+
+    2.推送后的 CI（公开 API，读不到 job 日志）：1240643 在工作分支上同样只有 Phase 1
+          冒烟 job 红；36b9fe7（只固定冒烟）7/7 全绿；9edddad（6 个 job 固定到
+          ubuntu-24.04）在最后一次读取（04:38:57Z）时 6 个 job 成功，Build Edge Image
+          ARM64 还在运行，所以这次运行不能称绿，最终结果待补进 T-009。同一份冒烟代码在
+          ubuntu-latest 红、在 ubuntu-24.04 绿，支持「runner 镜像变化」的解释，但只有
+          一次样本，说不出是哪个包或哪个 Python 版本。
+
+    3.PX4 重建还没有开始编译。依赖已核对齐全（Gazebo 11、ROS 的 Gazebo 与 MAVROS 包、
+          gcc、cmake、ninja、Xvfb、GeographicLib 数据）；github.com 先是 TCP 443 连不上，
+          后来能建连但很慢：PX4 的 info/refs 20 秒只收到约 0.5 到 1.1 MB，三次都超时。
+          已起一个后台任务：每 5 分钟用 protocol v2 探测一次，最多 6 次，连上后浅克隆
+          v1.14.0 到 `/data2/px4-sitl/PX4-Autopilot`，再浅克隆子模块；不用代理或镜像，
+          也没有用 codeload 的压缩包（没有 git 元数据和子模块）。写本节时结果未知。
+          克隆完成后还要核对 HEAD 是不是 b8c541dd 以及子模块状态，才进入构建；三项 PX4
+          测试要停实验室服务，团队已同意「停、跑、重启并复验」，目前一次也没停。
+
+    4.只存在于 origin/task-old 与 origin/feat/task-XX 本地引用上的提交已备份成 git
+          bundle：`~/prometheus-ref-backups/20261106/stale-refs.bundle`（143124357 字节，
+          SHA-256 d40a523b…，另附 REFS.txt 和校验和文件）。`git bundle verify` 通过，在
+          /tmp 的临时仓库里还原得到 5 个和 3 个不在 dev 的提交。更正：上一轮我说「8 个」，
+          实际是 5 个，因为 feat/task-XX 的 3 个就是 task-old 那 5 个里最老的 3 个；只有
+          b0fb48e（树莓派基线的 revert）和 964b007（合并提交）没有出现在任何本地分支上，
+          现在只有 bundle 保护它们。第一次验证时输出被我截断，没看到结论，重新完整验证后
+          才记下。bundle 在仓库之外，只存在这台服务器上。没有删除任何分支或引用，也没有
+          `fetch --prune`。
+
+    5.ADR-0020 已按团队答复起草，状态「提议」，不是已采纳（提交 b65fdf4）。决定部分只
+          转述团队的四点，起草时补的六条单独列为「未经确认」；CLAIMS T-001 已登记，
+          AGENTS.md 的下一个 ADR 编号改为 0021。公开 API 显示 GitHub 默认分支是 `dev`，
+          `dev` 与 `main` 的 protected 标志都是 false，但这个标志不一定反映 ruleset，
+          实际保护规则没验证。CONVENTIONS.md、ci.yml 和任何分支都没改。
+
+    6.树莓派方面：被 b0fb48e revert 掉的主机基线文件（check_pi_host.py、
+          test_pi_preflight.py、phase-1.5-hardware-baseline.md、AI_HANDOFF.md）在 dev 上
+          都还在，可以接着做。这台服务器能不能访问 Pi 我没有试过，具体怎么接入、能做哪些
+          检查，要等团队说明。
+
+    7.没验证：9edddad 的 CI 最终结果；PX4 能不能克隆、编不编得过；实验室服务只观察了
+          一小时左右（NRestarts=0）；机器重启后是否自动恢复；ADR-0020 里补充的各条；
+          GitHub 上实际生效的保护规则。
+
 ---
 
 ## 历史名称脚注
