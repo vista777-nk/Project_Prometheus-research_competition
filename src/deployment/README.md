@@ -149,7 +149,7 @@ src/deployment/
 │   ├── test-serial-loopback.sh       入口，转发给 .py
 │   ├── test-serial-loopback.py     ★ 帧协议第三份实现 + 10 条自测
 │   ├── test_entrypoint_modes.py    ★ real/mock/sim 路由 + 负向验证 8 条
-│   ├── test_pi_preflight.py        ★ Pi 主机基线与负向验证 24 条
+│   ├── test_pi_preflight.py        ★ Pi 主机基线与负向验证 28 条
 │   ├── test_server_deployment.py   ★ 服务器常驻/恢复/安全默认值 9 条
 │   └── test-observation-pipeline.py  真预处理器 + 真 World Model，10 条
 │
@@ -193,16 +193,24 @@ deploy 预检同时区分三种状态：设备节点存在才通过；sysfs 已�
 它还拒绝 `console=serial*`、`console=ttyAMA*` 或 `console=ttyS*`，避免设备节点存在但
 仍被登录控制台占用的假绿灯。
 
-deploy 预检还会补查 install.sh 不再报告的两件事（只读，不改安装行为）：
+安装之后跑第三个阶段，它查的是**安装器的产物**（只读，不改安装行为）：
+
+```bash
+python3 src/deployment/healthcheck/check_pi_host.py --stage installed --role car
+```
 
 - **部署用户组**：`docker` / `dialout` / `i2c` / `plugdev` / `video` 必须全部存在。
   install.sh 第 1 步用一条 `usermod -aG` 同时引用这五个组，少任何一个都会让
-  `set -e` 中止安装——所以要先查出来，而不是等安装跑到一半才失败。
+  `set -e` 中止安装。
 - **chrony 服务与时间源**：`systemctl is-active chrony` 必须是 `active`，
-  且 `chronyc tracking` 要能输出参考时钟。install.sh 里 `systemctl restart chrony`
-  后面接了 `|| true`，失败会被吞掉，脚本照常打印完成；这两项是对它的补查。
+  且 `chronyc tracking` 的 `Stratum` 要大于 0。install.sh 里
+  `systemctl restart chrony` 后面接了 `|| true`，失败会被吞掉，脚本照常打印完成；
+  这两项是对它的补查。
+  只看有没有 `Reference ID` 行不够：chronyd 未同步时也会打这一行（全零），
+  真正的判据是 `Stratum > 0`。
 
-`--stage base` 刻意不查这三项：那时 Docker 还没装，`docker` 组本来就可能不存在。
+这三项刻意**不**放在 `--stage deploy`：AI_HANDOFF 里 deploy 排在 `install.sh`
+之前，那时组和 chrony 都不可能满足；`--stage base` 也不查，因为那时 Docker 还没装。
 
 确认的 Pi 5 / Debian 13 / 8 GB / 64 GB 基线、实测状态和待定项见
 [`../../docs/experiments/phase-1.5-hardware-baseline.md`](../../docs/experiments/phase-1.5-hardware-baseline.md)。

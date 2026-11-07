@@ -291,10 +291,20 @@ if command -v systemd-analyze >/dev/null 2>&1; then
     if echo "${out}" | grep -q '^SO_PASSCRED failed: Operation not permitted$'; then
         analyzer_blocked=1
     fi
+    # 分析器自身的容量问题不是 unit 语法错误。inotify watch 用尽
+    # (fs.inotify.max_user_watches，本机曾达 65536 上限) 时，systemd-analyze
+    # 会在加载单元时返回 ENOSPC，旧版过滤器没排除它，于是被报成「语法问题」——
+    # 一个容量错误被写成代码错误，会把人带去改 unit。
+    # 只认带 inotify/ENOSPC/Too many open files 的具体字样，不吞通用 parse 错误。
+    analyzer_enospc=0
+    if echo "${out}" | grep -qiE 'inotify|No space left on device|ENOSPC|Too many open files'; then
+        analyzer_enospc=1
+    fi
     real="$(echo "${out}" \
         | grep -vE 'Failed to (open|resolve)|does not exist|not found|No such file' \
         | grep -vE 'Failed to (bind to varlink socket|set up Varlink server)|connect\(\) failed' \
         | grep -v '^SO_PASSCRED failed: Operation not permitted$' \
+        | grep -viE 'inotify|No space left on device|ENOSPC|Too many open files' \
         | grep -vE 'Command (/opt/air-ground|/usr/local/lib/air-ground|/home/[^/]+/\.local/lib/air-ground)/.* is not executable' \
         | grep -v '^[[:space:]]*$' || true)"
     if [[ -n "${real}" ]]; then
@@ -302,6 +312,8 @@ if command -v systemd-analyze >/dev/null 2>&1; then
         echo "${real}" | sed 's|^.*/src/deployment/systemd/|      |' | sort -u
     elif [[ ${analyzer_blocked} -eq 1 ]]; then
         skip "systemd-analyze 被当前沙箱拒绝 SO_PASSCRED；完整单元语法由 CI 校验"
+    elif [[ ${analyzer_enospc} -eq 1 ]]; then
+        skip "systemd-analyze 因 inotify watch 用尽未能完成校验（fs.inotify.max_user_watches=$(cat /proc/sys/fs/inotify/max_user_watches 2>/dev/null || echo '?'))；需 sudo 调大限额或关闭多余编辑器窗口，完整单元语法由 CI 校验"
     else
         pass "${#units[@]} 个 systemd 单元语法正确"
     fi
