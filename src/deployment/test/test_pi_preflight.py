@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -35,6 +36,9 @@ def baseline(**overrides):
         "devices": frozenset({"/dev/i2c-1", "/dev/ttyAMA0"}),
         "registered_devices": frozenset({"/dev/i2c-1", "/dev/ttyAMA0"}),
         "serial_console_args": (),
+        "present_groups": frozenset(MODULE.REQUIRED_GROUPS),
+        "chrony_state": "active",
+        "chronyc_tracking": "Reference ID    : 0A1B2C3D (time.example.net)",
     }
     values.update(overrides)
     return PiFacts(**values)
@@ -167,6 +171,60 @@ class TestHostUserContract(unittest.TestCase):
                 )
                 self.assertIn("User=1000", text)
                 self.assertNotIn("User=airground", text)
+
+
+class TestDeployHostContract(unittest.TestCase):
+    def test_missing_group_is_rejected_before_installer_aborts(self):
+        facts = baseline(
+            present_groups=frozenset({"docker", "dialout", "plugdev", "video"})
+        )
+        results = evaluate(facts, "deploy", "drone")
+        check = next(item for item in results if item.name == "部署用户组")
+        self.assertFalse(check.ok)
+        self.assertIn("i2c", check.detail)
+
+    def test_inactive_chrony_is_rejected(self):
+        results = evaluate(baseline(chrony_state="inactive"), "deploy", "drone")
+        check = next(item for item in results if item.name == "chrony 服务")
+        self.assertFalse(check.ok)
+        self.assertIn("inactive", check.detail)
+
+    def test_daemon_error_is_not_mistaken_for_chronyc_output(self):
+        facts = baseline(chronyc_tracking="506 Cannot talk to daemon")
+        results = evaluate(facts, "deploy", "drone")
+        check = next(item for item in results if item.name == "chrony 时间源")
+        self.assertFalse(check.ok)
+        self.assertIn("506 Cannot talk to daemon", check.detail)
+
+    def test_empty_chronyc_output_is_rejected(self):
+        results = evaluate(baseline(chronyc_tracking=""), "deploy", "drone")
+        check = next(item for item in results if item.name == "chrony 时间源")
+        self.assertFalse(check.ok)
+        self.assertIn("无输出", check.detail)
+
+    def test_base_stage_does_not_require_docker_group_yet(self):
+        facts = baseline(present_groups=frozenset({"dialout", "i2c"}))
+        self.assertTrue(all(item.ok for item in evaluate(facts, "base", "car")))
+
+
+class TestGroupParsing(unittest.TestCase):
+    def test_group_names_are_read_from_etc_group_format(self):
+        with tempfile.NamedTemporaryFile(
+            "w", encoding="utf-8", suffix=".group", delete=False
+        ) as handle:
+            handle.write("# 注释\ndocker:x:999:\n\ni2c:x:998:airground\n")
+            path = Path(handle.name)
+        try:
+            self.assertEqual(
+                MODULE.read_present_groups(path), frozenset({"docker", "i2c"})
+            )
+        finally:
+            path.unlink()
+
+    def test_missing_group_file_is_empty_instead_of_raising(self):
+        self.assertEqual(
+            MODULE.read_present_groups(Path("/nonexistent/etc/group")), frozenset()
+        )
 
 
 if __name__ == "__main__":

@@ -23,6 +23,10 @@ MIN_MEMORY_KIB = 7 * 1024 ** 2
 # 同时为分区表、厂商容量换算和文件系统保留合理余量。
 MIN_ROOT_BYTES = 54 * GIB
 
+# install.sh 步骤 1 用一条 usermod -aG 同时引用这五个组。少任何一个，
+# usermod 会返回非零，set -e 让整个安装中止 —— 所以在 deploy 预检里先查。
+REQUIRED_GROUPS = ("docker", "dialout", "i2c", "plugdev", "video")
+
 
 @dataclass(frozen=True)
 class PiFacts:
@@ -38,6 +42,9 @@ class PiFacts:
     devices: frozenset[str]
     registered_devices: frozenset[str]
     serial_console_args: tuple[str, ...]
+    present_groups: frozenset[str]
+    chrony_state: str
+    chronyc_tracking: str
 
 
 @dataclass(frozen=True)
@@ -52,6 +59,7 @@ def facts_for_json(facts: PiFacts) -> dict[str, object]:
     values: dict[str, object] = asdict(facts)
     values["devices"] = sorted(facts.devices)
     values["registered_devices"] = sorted(facts.registered_devices)
+    values["present_groups"] = sorted(facts.present_groups)
     return values
 
 
@@ -86,6 +94,42 @@ def command_succeeds(command: list[str]) -> bool:
         ).returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         return False
+
+
+def command_output(command: list[str]) -> str:
+    """执行只读命令并返回去掉首尾空白的标准输出；命令缺失或超时返回空串。"""
+    try:
+        completed = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=10,
+            text=True,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return completed.stdout.strip()
+
+
+def read_present_groups(path: Path = Path("/etc/group")) -> frozenset[str]:
+    """读取 ``/etc/group`` 里的组名。
+
+    不用 ``grp`` 模块：Windows 上没有它，而 validate.sh 在 Windows 上也会导入
+    本模块。文件不存在时返回空集合；deploy 阶段会把缺失的组报成失败项，
+    而不是静默通过。
+    """
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return frozenset()
+    names = set()
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or ":" not in line:
+            continue
+        names.add(line.split(":", 1)[0])
+    return frozenset(names)
 
 
 def find_serial_console_args(cmdline: str) -> tuple[str, ...]:
@@ -152,6 +196,9 @@ def collect_facts() -> PiFacts:
             if sysfs_path.exists()
         ),
         serial_console_args=find_serial_console_args(cmdline),
+        present_groups=read_present_groups(),
+        chrony_state=command_output(["systemctl", "is-active", "chrony"]),
+        chronyc_tracking=command_output(["chronyc", "tracking"]),
     )
 
 
@@ -250,6 +297,48 @@ def evaluate(facts: PiFacts, stage: str, role: str) -> list[CheckResult]:
                     if facts.serial_console_args
                     else "当前未启用串口控制台"
                 ),
+            )
+        )
+        missing_groups = tuple(
+            name for name in REQUIRED_GROUPS if name not in facts.present_groups
+        )
+        results.append(
+            CheckResult(
+                "部署用户组",
+                not missing_groups,
+                "install.sh 的 usermod -aG 要求 "
+                + ", ".join(REQUIRED_GROUPS)
+                + " 全部存在；"
+                + (
+                    "缺少 " + ", ".join(missing_groups)
+                    if missing_groups
+                    else "五个组均存在"
+                ),
+            )
+        )
+        results.append(
+            CheckResult(
+                "chrony 服务",
+                facts.chrony_state == "active",
+                "systemctl is-active chrony = "
+                f"{facts.chrony_state or '(无输出)'}；"
+                "install.sh 用 || true 吞掉了 restart 失败，只能在这里补查",
+            )
+        )
+        tracking_line = (
+            facts.chronyc_tracking.splitlines()[0] if facts.chronyc_tracking else ""
+        )
+        if "Reference ID" in facts.chronyc_tracking:
+            tracking_detail = f"检测到参考时钟：{tracking_line}"
+        elif tracking_line:
+            tracking_detail = f"chronyc tracking 输出异常：{tracking_line}"
+        else:
+            tracking_detail = "chronyc tracking 无输出（未安装或 daemon 未运行）"
+        results.append(
+            CheckResult(
+                "chrony 时间源",
+                "Reference ID" in facts.chronyc_tracking,
+                tracking_detail,
             )
         )
 
