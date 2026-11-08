@@ -2,8 +2,13 @@
 """树莓派边缘主机预检（不依赖 ROS 或第三方 Python 包）。
 
 换卡后先跑 ``--stage base``；Docker 与硬件接口配置完成后，再按角色跑
-``--stage deploy``。脚本只检查已经确认的主机基线，不猜测尚未定稿的传感器
-型号、VID/PID 或 UART 映射。
+``--stage deploy``；跑完 ``install.sh`` 之后再跑 ``--stage installed``。
+
+三个阶段的边界必须分清：**deploy 是安装前的接口检查**（AI_HANDOFF 里它排在
+install.sh 之前），**installed 才查安装器的产物**（用户组、chrony）。把安装后的
+检查放进 deploy，会让一台按手册操作的 Pi 在安装前变红，而那些项在安装前本来就
+不可能满足。脚本只检查已经确认的主机基线，不猜测尚未定稿的传感器型号、VID/PID
+或 UART 映射。
 """
 
 from __future__ import annotations
@@ -130,6 +135,43 @@ def read_present_groups(path: Path = Path("/etc/group")) -> frozenset[str]:
             continue
         names.add(line.split(":", 1)[0])
     return frozenset(names)
+
+
+def chrony_synced(tracking_text: str) -> tuple[bool, str]:
+    """判断 ``chronyc tracking`` 是否表示**已同步**。
+
+    不能只看有没有 ``Reference ID``：chronyd 未同步时也会打这一行（值为全零或
+    ``00000000 (.)``），同时 ``Stratum`` 为 0。真正的判据是 Stratum > 0。
+    """
+    if not tracking_text.strip():
+        return False, "chronyc tracking 无输出（未安装或 daemon 未运行）"
+    if "Cannot talk to daemon" in tracking_text:
+        first = tracking_text.splitlines()[0]
+        return False, f"chronyc 无法连接 chronyd：{first}"
+
+    reference = ""
+    stratum: int | None = None
+    for line in tracking_text.splitlines():
+        key, _, value = line.partition(":")
+        name = key.strip()
+        if name == "Reference ID":
+            reference = value.strip()
+        elif name == "Stratum":
+            try:
+                stratum = int(value.strip())
+            except ValueError:
+                stratum = None
+
+    if stratum is None:
+        first = tracking_text.splitlines()[0]
+        return False, f"chronyc tracking 输出里没有可解析的 Stratum：{first}"
+    if stratum <= 0:
+        return (
+            False,
+            f"chronyd 未同步（Stratum={stratum}，"
+            f"Reference ID={reference or '(空)'}）",
+        )
+    return True, f"已同步：Stratum={stratum}，Reference ID={reference or '(空)'}"
 
 
 def find_serial_console_args(cmdline: str) -> tuple[str, ...]:
@@ -299,6 +341,8 @@ def evaluate(facts: PiFacts, stage: str, role: str) -> list[CheckResult]:
                 ),
             )
         )
+
+    if stage == "installed":
         missing_groups = tuple(
             name for name in REQUIRED_GROUPS if name not in facts.present_groups
         )
@@ -325,29 +369,15 @@ def evaluate(facts: PiFacts, stage: str, role: str) -> list[CheckResult]:
                 "install.sh 用 || true 吞掉了 restart 失败，只能在这里补查",
             )
         )
-        tracking_line = (
-            facts.chronyc_tracking.splitlines()[0] if facts.chronyc_tracking else ""
-        )
-        if "Reference ID" in facts.chronyc_tracking:
-            tracking_detail = f"检测到参考时钟：{tracking_line}"
-        elif tracking_line:
-            tracking_detail = f"chronyc tracking 输出异常：{tracking_line}"
-        else:
-            tracking_detail = "chronyc tracking 无输出（未安装或 daemon 未运行）"
-        results.append(
-            CheckResult(
-                "chrony 时间源",
-                "Reference ID" in facts.chronyc_tracking,
-                tracking_detail,
-            )
-        )
+        synced, tracking_detail = chrony_synced(facts.chronyc_tracking)
+        results.append(CheckResult("chrony 时间源", synced, tracking_detail))
 
     return results
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Raspberry Pi 5 边缘主机基线预检")
-    parser.add_argument("--stage", choices=("base", "deploy"), default="base")
+    parser.add_argument("--stage", choices=("base", "deploy", "installed"), default="base")
     parser.add_argument("--role", choices=("car", "drone"), default="car")
     parser.add_argument("--json", action="store_true", help="输出机器可读 JSON")
     return parser

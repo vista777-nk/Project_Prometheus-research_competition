@@ -135,7 +135,16 @@ sudo bash src/deployment/install.sh --role car
 # 另一台改为 --role drone
 ```
 
-安装器不会自动启用服务，也不会覆盖已有 `/opt/air-ground/.env`。逐项核对：
+安装器不会自动启用服务，也不会覆盖已有 `/opt/air-ground/.env`。装完先跑安装后预检，
+它查的是安装器的产物（五个用户组、chrony 服务是否 active、chronyc 是否已同步）——
+这些项在安装前不可能满足，所以不要挪到 `--stage deploy` 里：
+
+```bash
+python3 src/deployment/healthcheck/check_pi_host.py --stage installed --role car
+# 无人机 Pi 使用 --role drone
+```
+
+逐项核对：
 
 ```bash
 getent group dialout i2c

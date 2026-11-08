@@ -1378,6 +1378,45 @@
           这台 x86_64 服务器上跑过，没上真机；实验室服务长期稳定性；`~/.ros` 里其他残留
           （dataman、parameters*.bson、eeprom）经二分测试都不影响启动，但没有清理。
 
+###### 2026/11/7（DeepSeek：make test-all 全绿与 T-014 结案）
+
+    1.make test-all 首次完整跑通。七个目标逐个跑、各自读日志：catkin 单元 82 tests / 0
+          failures；test-drone 9/9；test-diff 7/7；test-mecanum 17/17；test-sensors 28/28；
+          test-bridge 11/11；test-server 15/15。加上前一天的 quick-smoke 5/5 与
+          test-e2e 34/34，T-002 里「test-all 整体没跑完」的阻塞已消除。服务恢复后 active，
+          11311/9090 只在 127.0.0.1，健康检查 [OK]。
+
+    2.第一次跑时 test-bridge 与 test-server 报端口被占。查 journal：服务 10:51:13 被我
+          停掉，10:52:23 又被拉起。原因是 `air-ground-lab-server-healthcheck.service` 的
+          `[Unit]` 里有 `Wants=air-ground-lab-server.service`，timer 每 5 分钟触发一次就
+          顺带把服务拉起来。所以测试窗口必须先停 timer 再停服务；只停服务最多安静 5 分钟。
+          这不是新缺陷，是把服务当共享资源时必须知道的行为，已写进窗口流程。
+
+    3.第一次跑 test-diff 还有一条 FAIL：「Angular command turns car」，实测
+          yaw_delta≈0.3452，判据是 >0.35，只差 0.0048 rad（约 1.4%）；第二次同样代码
+          7/7 全绿。说明车确实转了，是判定余量太窄加采样时机的抖动，已登记 T-018，
+          没有动阈值。
+
+    4.T-014 结案（推翻原假设）。服务器上 `gh` 无法登录，公开 API 配额为 0（共享 IP，要
+          到当晚才重置），VS Code 内置浏览器起初也连不上 GitHub；团队在本机挂梯子后，用
+          浏览器按 run → job → step 读到日志：run 42151241289 / job 127674722810 /
+          步骤「Install Python dependencies」。真实原因：运行器是 CPython 3.14（构建目录
+          `build/lib.linux-x86_64-cpython-314`），Pillow 没有 cp314 的 wheel，pip 退化为
+          源码编译，报 `could not be found for jpeg, a required dependency when compiling
+          Pillow from source`，随后 `ERROR: Failed building wheel for Pillow`，进程退出
+          码 1，该步骤耗时 3 分 33 秒。「Python 3.14 下 numpy<2 没有 wheel」这个猜测不
+          成立——numpy 不是这次的失败点。
+
+    5.观察与卫生。按团队许可挂了每 15 分钟一次的低频观察，只往
+          `/data2/air-ground-server/lab-watch.log` 追加一行（state / restarts / ports /
+          external），不碰服务。首行 11:03:48 state=active restarts=0
+          ports=[127.0.0.1:11311,127.0.0.1:9090] external=0。另外：`create_file` 在
+          `/data2` 下建的两个辅助脚本（run-test-all.sh、lab-watch.sh）事后被系统清理，
+          run-test-window.sh 却还在，原因没查；最终观察进程改成不落盘的 `bash -c` 循环。
+
+    6.没验证：低频观察能否活过重启（进程随会话存在，重启即失）；实验室服务长期稳定性；
+          T-018 只观察到一次失败一次通过，没有做多次重复统计。
+
 ---
 
 ## 历史名称脚注
